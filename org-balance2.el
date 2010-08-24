@@ -227,16 +227,49 @@ when building regexps. Parse and produce code from FORM, which is `(org-balance-
 (unless (assoc 'org-balance-numbered-group rx-constituents)
   (push '(org-balance-numbered-group . (org-balance-rx-numbered-group 1 nil)) rx-constituents))
 
-(defun org-balance-re-make-shy (re)
+(defun org-balance-re-make-shy-aux-1 (re)
   "Make all groups in regexp RE shy"
   (save-match-data
-    (replace-regexp-in-string (concat (regexp-quote "\\(?") "[[:digit:]]+:") (concat (regexp-quote "\\") "(?:") re)))
+    (replace-regexp-in-string
+     (rx
+      (seq "\\(" (not (any "?")) (not (any ":"))))
+     (lambda (match)
+       (concat  "\\(?:"
+		(substring match
+			   (- (length match) 2))))
+     re
+     'fixedcase 'literal)))
+
+(defun org-balance-re-make-shy-aux-2 (re)
+  "Make all groups in regexp RE shy"
+  (save-match-data
+     (replace-regexp-in-string
+      (rx
+       (seq "\\(?" (one-or-more (any digit)) ":"))
+      "\\(?" re 'fixedcase 'literal)))
+
+(defun org-balance-re-make-shy (re)
+  "Make all groups in regexp RE shy"
+   (org-balance-re-make-shy-aux-2 re))
 
 (defun org-balance-full-match (re s)
   "Do a string match, but fail unless the regexp matches the full string"
   (and (string-match re s)
        (= (match-beginning 0) 0)
        (= (match-end 0) (length s))))
+
+(defconst org-balance-re-next-group-num 50)
+(defun org-balance-re-get-group-num ()
+  (incf org-balance-re-next-group-num))
+
+(defmacro org-balance-re-make-group-names (&rest names)
+  (cons
+   'progn
+   (mapcar
+    (lambda (name)
+      (let* ((name-str (symbol-name name)))
+	`(defconst ,name (org-balance-re-get-group-num))))
+    names)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1002,7 +1035,32 @@ by whitespace, it throws an error rather than silently returning zero.
 
 (defalias 'org-balance-parse-number 'org-balance-string-to-number)
 
-  
+(org-balance-re-make-group-names
+ org-balance-number-range-start org-balance-number-range-end)
+
+(defconst org-balance-number-range-regexp
+  (rx-to-string
+   `(seq
+     (org-balance-numbered-group
+      ,org-balance-number-range-start
+      (regexp ,org-balance-number-regexp))
+     (optional
+      "-"
+      (org-balance-numbered-group
+       ,org-balance-number-range-end
+       (regexp ,org-balance-number-regexp))))))
+
+(defun org-balance-parse-number-range (s)
+  "Parse a range of numbers, such as 1-2.  A single number N is parsed as the range
+N-N."
+  (save-match-data
+    (if (org-balance-full-match org-balance-number-range-regexp s)
+	(cons (org-balance-parse-number (match-string org-balance-number-range-start s))
+	      (org-balance-parse-number
+	       (or (match-string org-balance-number-range-end s)
+		   (match-string org-balance-number-range-start s))))
+      (error "Could not parse %s as number range" s))))
+
 (defvar org-balance-parse-valu-hooks nil
   "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
 such as $5 into the canonical form `5 dollars'.  Each hook must take a string as an argument and return either an
@@ -1029,7 +1087,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 	       2 (group (regexp ,(org-balance-re-make-shy org-balance-unit-regexp)))))))))
 
   
-(defun org-balance-parse-valu2 (valu-str)
+(defun org-balance-parse-valu (valu-str)
   "Given a string representing a value with units, parse it into an org-balance-valu structure."
   (or
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
@@ -1044,19 +1102,43 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
        (error "Could not parse %s as a value with a unit" valu-str)))))
 
 
-
-(defconst org-balance-number-range-regexp
+(defconst
+  org-balance-valu-range-regexp
   (rx-to-string
-   `(seq
-     (group (regexp ,(org-balance-re-make-shy org-balance-number-regexp)))
-     "-"
-     (group (regexp ,(org-balance-re-make-shy org-balance-number-regexp))))))
+   ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
+   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+   ;; But either a number or a unit must be given.
+   `(or (seq (optional
+	      (seq
+	       (org-balance-numbered-group
+		1 (regexp ,(org-balance-re-make-shy org-balance-number-range-regexp)))
+	       (one-or-more whitespace)))
+	     (org-balance-numbered-group
+	      2 (regexp ,(org-balance-re-make-shy org-balance-unit-regexp))))
+	(seq (org-balance-numbered-group
+	      1 (regexp ,(org-balance-re-make-shy org-balance-number-range-regexp)))
+	     (optional
+	      (seq
+	       (one-or-more whitespace)
+	       (org-balance-numbered-group
+		2 (group (regexp ,(org-balance-re-make-shy org-balance-unit-regexp))))))))))
 
-(defun org-balance-parse-number-range (s)
-  (save-match-data
-    (if (org-balance-full-match org-balance-number-range-regexp s)
-	(cons (org-balance-parse-number (match-string 1 s))
-	      (org-balance-parse-number (match-string 2 s))))))
+(defun org-balance-parse-valu-range (valu-str)
+  "Given a string representing a value range with units, parse it into an org-balance-valu structure."
+  (or
+   (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
+
+   (save-match-data
+     (if (and
+	  (org-balance-full-match org-balance-valu-range-regexp valu-str)
+	  (or (match-string 1 valu-str) (match-string 2 valu-str)))
+	 (let ((number-range (org-balance-parse-number-range
+			      (or (match-string 1 valu-str) "1")))
+	       (unit (or (match-string 2 valu-str) "item")))
+	   (cons (org-balance-make-valu (car number-range) unit)
+		 (org-balance-make-valu (cdr number-range) unit)))
+       (error "Could not parse %s as a value range with a unit" valu-str)))))
+
 
 
 (defconst org-balance-valu-ratio-regexp
@@ -1066,32 +1148,11 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 (defun org-balance-parse-valu-ratio3 (valu-ratio-str)
   (save-match-data
     (when (string-match org-balance-valu-ratio-regexp valu-ratio-str)
-      (cons (org-balance-parse-valu2 (match-string 1 valu-ratio-str))
-	    (org-balance-parse-valu2 (match-string 2 valu-ratio-str))))))
+      (cons (org-balance-parse-valu (match-string 1 valu-ratio-str))
+	    (org-balance-parse-valu (match-string 2 valu-ratio-str))))))
 
 
-(defun org-balance-parse-valu (valu-str)
-  "Given a string representing a value with units, parse it into an org-balance-valu structure."
-  (or
-   (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
-   
-   ;; todo: if the string looks like time (e.g. 03:04), parse it into time, with units of minutes.
-   ;; also, parse currency.
-   
-   (let* ((parts (split-string valu-str)))
-     (cond
-      ((= (length parts) 2)
-       (org-balance-make-valu (org-balance-string-to-number (first parts)) (second parts)))
-      ((= (length parts) 1)
-       (if (org-balance-is-unit (first parts))
-	   (org-balance-make-valu 1 (first parts))
-	 (condition-case err
-	     (org-balance-make-valu (org-balance-string-to-number (first parts)) 'item)
-	   (error
-	    (error "Could not parse as unit name or number: %s" (first parts))))))
-      (t (error "org-balance: could not parse - %s" valu-str))))))
-
-(defconst org-balance-ratio-words (regexp-opt (list " per " " every " " each " " / " " a " " in a ")))
+(defconst org-balance-ratio-words (regexp-opt (list "per" "every" "each" "/" "a" "in a")))
 
 ;; Struct: org-balance-valu-ratio - a ratio of two valu's.
 (defstruct org-balance-valu-ratio num denom
@@ -1124,25 +1185,41 @@ changing only the numerator."
 
 ;; Struct: org-balance-valu-ratio-goal - the user-specified goal you have for a ratio.
 (defstruct org-balance-valu-ratio-goal
-  ratio-min
-  ratio-max
+  num-min
+  num-max
+  denom
   polarity
   margin
   text)
 
-(defconst org-balance-valu-ratio-regexp
+(defconst org-balance-valu-ratio-goal-regexp
   (rx-to-string
    `(seq
-     (group (optional (or "at most" "at least")))
-     space
-     (regexp ,org-balance-number-regexp)
-     (optional (seq "-" (group ,org-balance-number-regexp)))
-     space
-     (group (optional (regexp ,org-balance-unit-regexp)))
-     space
+     (optional
+      (org-balance-numbered-group 1
+       (seq
+	(seq (or "at most" "at least"))
+	(one-or-more whitespace))))
+      
+     (org-balance-numbered-group
+      2 (regexp ,(org-balance-re-make-shy org-balance-valu-range-regexp)))
+     (one-or-more whitespace)
      (regexp ,org-balance-ratio-words)
-     space
-     )))
+     (one-or-more whitespace)
+     (org-balance-numbered-group
+      3 (regexp ,(org-balance-re-make-shy org-balance-valu-regexp)))
+     (optional
+      (seq
+       (one-or-more whitespace)
+       "+-"
+       (zero-or-more whitespace)
+       (or
+	 (seq (org-balance-numbered-group 4
+					  (regexp ,(org-balance-re-make-shy org-balance-number-regexp)))
+	      (zero-or-more whitespace)
+	      "%")
+	 (org-balance-numbered-group
+	  5 (regexp ,(org-balance-re-make-shy org-balance-valu-regexp)))))))))
 
 (defun org-balance-parse-valu-ratio-goal (goal-str)
   "Parse a string representing a valu-ratio goal.
@@ -1150,7 +1227,18 @@ changing only the numerator."
 The syntax is: [at most]
 
 "
-  )
+  (save-match-data
+    (if (org-balance-full-match org-balance-valu-ratio-goal-regexp goal-str)
+	(let ((valu-range (org-balance-parse-valu-range (match-string 2 goal-str))))
+	  (make-org-balance-valu-ratio-goal 
+	   :num-min (car valu-range)
+	   :num-max (cdr valu-range)
+	   :denom (org-balance-parse-valu (match-string 3 goal-str))
+	   :polarity (match-string 1 goal-str)
+	   :margin (or (and (match-string 4 goal-str) (org-balance-parse-number (match-string 4 goal-str)))
+		       (and (match-string 5 goal-str) (org-balance-parse-valu (match-string 5 goal-str))))
+	   :text goal-str))
+      (error "Could not parse %s as a valu ratio goal" goal-str))))
 
 
 (defun org-balance-parse-duration-into-minutes (duration-str)
