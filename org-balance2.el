@@ -61,6 +61,7 @@
 (require 'org-clock)
 (require 'org-agenda)
 (eval-when-compile (require 'cl))
+(require 'rx)
 
 (defvar org-clock-report-include-clocking-task)
 
@@ -869,7 +870,7 @@ If ERROR-MESSAGE is given, and the key is not in the list, throws an error with 
   (org-balance-assoc-val unit org-balance-unit2dim-alist))
 
 ;; var: org-balance-unit2base-alist - assoc list mapping each unit to how many base units are in it
-(setq org-balance-unit2base-alist (reduce 'append (mapcar 'cdr org-balance-units)))
+(defconst org-balance-unit2base-alist (reduce 'append (mapcar 'cdr org-balance-units)))
 
 (defun org-balance-unit2base (unit)
   "Return the number of base units in the given unit.  For each dimension we have a base unit in terms of which all other
@@ -917,42 +918,30 @@ we convert to the specified multiples of new unit."
 (put 'org-balance-parse-error 'error-conditions '(error org-balance-errors org-balance-parse-error))
 (put 'org-balance-parse-error 'error-message "org-balance: Could not parse")
 
-(setq org-balance-number-names
-      '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
-	(seven . 7) (eight . 8) (nine . 9)
-	(ten . 10)))
+(defconst org-balance-number-names
+  '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
+    (seven . 7) (eight . 8) (nine . 9)
+    (ten . 10)))
 
-(defun org-balance-re-shy-group (&rest args)
-  "Wrap a shy group around the given regexp, and return the result."
-  (concat "\\(?:" (apply 'concat args) "\\)"))
-
-(defun org-balance-re-group (&rest args)
-  "Wrap a group around the given regexp, and return the result."
-  (concat "\\(" (apply 'concat args) "\\)"))
-
-(defun org-balance-re-or (&rest args)
-  "Construct a regular expression for matching any of the given regexps.  Wraps each of them, and the entire
-expression, in a shy group for safety."
-  (org-balance-re-shy-group (mapconcat 'org-balance-re-shy-group args "\\|")))
 
 (defconst org-balance-number-regexp
-  (org-balance-re-shy-group
-   "\\s-*"   ; allow for leading whitespace
-   "[+\\-]?"
-   (org-balance-re-or
-    (concat "[[:digit:]]+" "\\.?[[:digit:]]*")
-    (concat "[[:digit:]]*\\.?" "[[:digit:]]+"))
-   ;; optional exponent
-   (org-balance-re-shy-group
-    (org-balance-re-shy-group
-     "[eE]"
-     "[+\\-]?"
-     "[[:digit:]]+")
-    "?")
-   "\\s-*"   ; allow for trailing whitespace
-   )
-  "Regular expression for an arbitrary floating-point number, possibly surrounded by whitespace."
-  )
+  (rx-to-string
+   `(seq
+     (zero-or-more whitespace)
+     (optional (any "+-"))
+     (or (seq (one-or-more (any digit))
+	      (optional ".")
+	      (optional (one-or-more (any digit))))
+	 (seq (optional (one-or-more (any digit)))
+	      (optional ".")
+	      (one-or-more (any digit))))
+     (optional
+      (seq (any "eE")
+	   (optional (any "+-"))
+	   (one-or-more (any digit))))
+     (zero-or-more whitespace)))
+  "Regular expression for a floating-point number")
+			
 
 (defun org-balance-is-valid-number-p (s)
   "Test if s is a number or a string representing a valid number (ignoring leading or trailing whitespace).
@@ -994,6 +983,21 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (org-balance-re-or
     (concat "\\(?1:" org-balance-number-regexp "\\)" "\\s-*"
 	    "\\(?2:" org-balance-unit-regexp "\\)?"  ))))
+
+(defconst
+  org-balance-valu-regexp
+  (rx-to-string
+   `(or (seq (optional
+	      (org-balance-numbered-group
+	       1 (regexp ,(org-balance-re-make-shy org-balance-number-regexp))))
+	     (org-balance-numbered-group
+	      2 (regexp ,(org-balance-re-make-shy org-balance-unit-regexp))))
+	(seq (org-balance-numbered-group
+	      1 (regexp ,(org-balance-re-make-shy org-balance-number-regexp)))
+	     (optional
+	      (org-balance-numbered-group
+	       2 (group (regexp ,(org-balance-re-make-shy org-balance-unit-regexp)))))))))
+
   
 (defun org-balance-parse-valu2 (valu-str)
   "Given a string representing a value with units, parse it into an org-balance-valu structure."
@@ -1008,6 +1012,26 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 				 (or (match-string 1 valu-str) "1"))
 				(or (match-string 2 valu-str) "item"))
        (error "Could not parse %s as a value with a unit" valu-str)))))
+
+
+(defun org-balance-rx-numbered-group (form)
+  "Parse and produce code from FORM, which is `(org-balance-numbered-group group-number ...)'."
+  (concat "\\(?"
+	  (number-to-string (second form))
+	  ":"
+	  ;; Several sub-forms implicitly concatenated.
+	  (mapconcat (lambda (re) (rx-form re ':)) (cddr form) nil)
+          "\\)"))
+
+(unless (assoc 'org-balance-numbered-group rx-constituents)
+  (push '(org-balance-numbered-group . (org-balance-rx-numbered-group 1 nil)) rx-constituents))
+
+(defconst org-balance-number-range-regexp
+  (rx-to-string
+   `(seq
+     (group (regexp ,(org-balance-re-make-shy org-balance-number-regexp)))
+     "-"
+     (group (regexp ,(org-balance-re-make-shy org-balance-number-regexp))))))
 
 
 (defconst org-balance-valu-ratio-regexp
@@ -1084,7 +1108,21 @@ changing only the numerator."
   margin
   text)
 
-(defun org-balance-parse-valu-goal (goal-str)
+(defconst org-balance-valu-ratio-regexp
+  (rx-to-string
+   `(seq
+     (group (optional (or "at most" "at least")))
+     space
+     (regexp ,org-balance-number-regexp)
+     (optional (seq "-" (group ,org-balance-number-regexp)))
+     space
+     (group (optional (regexp ,org-balance-unit-regexp)))
+     space
+     (regexp ,org-balance-ratio-words)
+     space
+     )))
+
+(defun org-balance-parse-valu-ratio-goal (goal-str)
   "Parse a string representing a valu-ratio goal.
 
 The syntax is: [at most]
