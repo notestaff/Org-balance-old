@@ -206,8 +206,39 @@ is not set (and is removed if it was set before and CLEAR-WHEN_DEFAULT is non-ni
 	(org-delete-property-globally prop)
       (remove-list-of-text-properties (point-min) (point-max) (list prop))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defun org-balance-trim-whitespace (s)
+  "Trim trailing and leading whitespace from string"
+  (save-match-data
+    (replace-regexp-in-string
+     (rx (or (seq string-start (zero-or-more whitespace))
+	     (seq (zero-or-more whitespace) string-end)))
+     "" (if (symbolp s) (symbol-name s) s))))
 
+(defun org-balance-rx-numbered-group (form)
+  "Extend the rx macro and rx-to-string function to support numbered groups
+when building regexps. Parse and produce code from FORM, which is `(org-balance-numbered-group group-number ...)'."
+  (concat "\\(?"
+	  (number-to-string (second form))
+	  ":"
+	  ;; Several sub-forms implicitly concatenated.
+	  (mapconcat (lambda (re) (rx-form re ':)) (cddr form) nil)
+          "\\)"))
+
+(unless (assoc 'org-balance-numbered-group rx-constituents)
+  (push '(org-balance-numbered-group . (org-balance-rx-numbered-group 1 nil)) rx-constituents))
+
+(defun org-balance-re-make-shy (re)
+  "Make all groups in regexp RE shy"
+  (save-match-data
+    (replace-regexp-in-string (concat (regexp-quote "\\(?") "[[:digit:]]+:") (concat (regexp-quote "\\") "(?:") re)))
+
+(defun org-balance-full-match (re s)
+  "Do a string match, but fail unless the regexp matches the full string"
+  (and (string-match re s)
+       (= (match-beginning 0) 0)
+       (= (match-end 0) (length s))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun org-balance-done-in-range ()
   "Sparse tree of items closed in a certain time range.
@@ -785,7 +816,6 @@ When called repeatedly, scroll the window that is displaying the buffer."
       (setq org-agenda-show-window (selected-window))
       (select-window win)))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; Section: Values with units
@@ -811,6 +841,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
 ;; [amount] per [time interval].  Code here parses them and converts them to a uniform representation
 ;; (amount per day).  There is also code to convert from the uniform representation back to the user's original
 ;; unit for display (e.g. from "8.57 minutes per day" to "1 hour a week").
+
 
 (defconst org-balance-unit2minutes
   `((second . 0.0166666666667) (seconds . 0.0166666666667) (minute . 1) (minutes . 1)
@@ -923,13 +954,16 @@ we convert to the specified multiples of new unit."
     (seven . 7) (eight . 8) (nine . 9)
     (ten . 10)))
 
-
 (defconst org-balance-number-regexp
   (rx-to-string
    `(seq
      (zero-or-more whitespace)
+     
      (or
+      ;; either an english number name
       ,(cons 'or (mapcar (lambda (number-info) (symbol-name (car number-info))) org-balance-number-names))
+      
+      ;; or a floating-point number, possibly in scientific notation
       (seq
        (optional (any "+-"))
        (or (seq (one-or-more (any digit))
@@ -940,6 +974,7 @@ we convert to the specified multiples of new unit."
 	(seq (any "eE")
 	     (optional (any "+-"))
 	     (one-or-more (any digit))))))
+     
      (zero-or-more whitespace)))
    "Regular expression for a floating-point number")
 			
@@ -951,17 +986,7 @@ are not allowed.
 "
   (if (numberp s) s
     (save-match-data
-      (and (string-match org-balance-number-regexp s)
-	   (= (match-beginning 0) 0)
-	   (= (match-end 0) (length s))))))
-
-(defun org-balance-trim-whitespace (s)
-  "Trim trailing and leading whitespace from string"
-  (save-match-data
-    (replace-regexp-in-string
-     (rx (or (seq string-start (zero-or-more whitespace))
-	     (seq (zero-or-more whitespace) string-end)))
-     "" (if (symbolp s) (symbol-name s) s))))
+      (org-balance-full-match org-balance-number-regexp s))))
 
 (defun org-balance-string-to-number (s)
   "Convert a string to a number, recognizing some number names for readability.  If s is already a number, just return it.
@@ -975,6 +1000,8 @@ by whitespace, it throws an error rather than silently returning zero.
 	    (string-to-number s))
       (error "Could not parse as number: %s" s))))
 
+(defalias 'org-balance-parse-number 'org-balance-string-to-number)
+
   
 (defvar org-balance-parse-valu-hooks nil
   "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
@@ -983,16 +1010,6 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 
 (defvar org-balance-unit-regexp
   (regexp-opt (mapcar (lambda (unit-info) (symbol-name (car unit-info))) org-balance-unit2dim-alist)))
-
-(defconst
-  org-balance-valu-regexp
-  (org-balance-re-or
-   (org-balance-re-or
-    (concat "\\(?1:" org-balance-number-regexp "\\)?" "\\s-*"
-	    "\\(?2:" org-balance-unit-regexp "\\)"  ))
-   (org-balance-re-or
-    (concat "\\(?1:" org-balance-number-regexp "\\)" "\\s-*"
-	    "\\(?2:" org-balance-unit-regexp "\\)?"  ))))
 
 (defconst
   org-balance-valu-regexp
@@ -1027,17 +1044,6 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
        (error "Could not parse %s as a value with a unit" valu-str)))))
 
 
-(defun org-balance-rx-numbered-group (form)
-  "Parse and produce code from FORM, which is `(org-balance-numbered-group group-number ...)'."
-  (concat "\\(?"
-	  (number-to-string (second form))
-	  ":"
-	  ;; Several sub-forms implicitly concatenated.
-	  (mapconcat (lambda (re) (rx-form re ':)) (cddr form) nil)
-          "\\)"))
-
-(unless (assoc 'org-balance-numbered-group rx-constituents)
-  (push '(org-balance-numbered-group . (org-balance-rx-numbered-group 1 nil)) rx-constituents))
 
 (defconst org-balance-number-range-regexp
   (rx-to-string
@@ -1045,6 +1051,12 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
      (group (regexp ,(org-balance-re-make-shy org-balance-number-regexp)))
      "-"
      (group (regexp ,(org-balance-re-make-shy org-balance-number-regexp))))))
+
+(defun org-balance-parse-number-range (s)
+  (save-match-data
+    (if (org-balance-full-match org-balance-number-range-regexp s)
+	(cons (org-balance-parse-number (match-string 1 s))
+	      (org-balance-parse-number (match-string 2 s))))))
 
 
 (defconst org-balance-valu-ratio-regexp
@@ -1057,9 +1069,6 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
       (cons (org-balance-parse-valu2 (match-string 1 valu-ratio-str))
 	    (org-balance-parse-valu2 (match-string 2 valu-ratio-str))))))
 
-(defun org-balance-re-make-shy (re)
-  "Make all groups in regexp RE shy"
-  (replace-regexp-in-string (concat (regexp-quote "\\(?") "[[:digit:]]+:") (concat (regexp-quote "\\") "(?:") re))
 
 (defun org-balance-parse-valu (valu-str)
   "Given a string representing a value with units, parse it into an org-balance-valu structure."
