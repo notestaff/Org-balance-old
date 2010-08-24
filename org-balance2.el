@@ -928,19 +928,20 @@ we convert to the specified multiples of new unit."
   (rx-to-string
    `(seq
      (zero-or-more whitespace)
-     (optional (any "+-"))
-     (or (seq (one-or-more (any digit))
-	      (optional ".")
-	      (optional (one-or-more (any digit))))
-	 (seq (optional (one-or-more (any digit)))
-	      (optional ".")
-	      (one-or-more (any digit))))
-     (optional
-      (seq (any "eE")
-	   (optional (any "+-"))
-	   (one-or-more (any digit))))
+     (or
+      ,(cons 'or (mapcar (lambda (number-info) (symbol-name (car number-info))) org-balance-number-names))
+      (seq
+       (optional (any "+-"))
+       (or (seq (one-or-more (any digit))
+		(optional ".")
+		(optional (one-or-more (any digit))))
+	   (seq "." (one-or-more (any digit))))
+       (optional
+	(seq (any "eE")
+	     (optional (any "+-"))
+	     (one-or-more (any digit))))))
      (zero-or-more whitespace)))
-  "Regular expression for a floating-point number")
+   "Regular expression for a floating-point number")
 			
 
 (defun org-balance-is-valid-number-p (s)
@@ -953,17 +954,26 @@ are not allowed.
       (and (string-match org-balance-number-regexp s)
 	   (= (match-beginning 0) 0)
 	   (= (match-end 0) (length s))))))
-  
+
+(defun org-balance-trim-whitespace (s)
+  "Trim trailing and leading whitespace from string"
+  (save-match-data
+    (replace-regexp-in-string
+     (rx (or (seq string-start (zero-or-more whitespace))
+	     (seq (zero-or-more whitespace) string-end)))
+     "" (if (symbolp s) (symbol-name s) s))))
+
 (defun org-balance-string-to-number (s)
   "Convert a string to a number, recognizing some number names for readability.  If s is already a number, just return it.
 Unlike the standard `string-to-number', if the string as a whole cannot be interpreted as a valid number possibly surrounded
 by whitespace, it throws an error rather than silently returning zero.
 "
   (if (numberp s) s
-    (or (org-balance-assoc-val s org-balance-number-names 'nil-ok)
-	(if (org-balance-is-valid-number-p s)
-	    (string-to-number s)
-	  (error "Could not parse as number: %s" s)))))
+    (if (org-balance-is-valid-number-p s)
+	(or (org-balance-assoc-val (org-balance-trim-whitespace s)
+				   org-balance-number-names 'nil-ok)
+	    (string-to-number s))
+      (error "Could not parse as number: %s" s))))
 
   
 (defvar org-balance-parse-valu-hooks nil
@@ -987,6 +997,9 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 (defconst
   org-balance-valu-regexp
   (rx-to-string
+   ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
+   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+   ;; But either a number or a unit must be given.
    `(or (seq (optional
 	      (org-balance-numbered-group
 	       1 (regexp ,(org-balance-re-make-shy org-balance-number-regexp))))
