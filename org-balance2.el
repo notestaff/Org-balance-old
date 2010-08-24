@@ -258,9 +258,9 @@ when building regexps. Parse and produce code from FORM, which is `(org-balance-
        (= (match-beginning 0) 0)
        (= (match-end 0) (length s))))
 
-(defconst org-balance-re-next-group-num 50)
+(defconst org-balance-re-next-group-num 60)
 (defun org-balance-re-get-group-num ()
-  (incf org-balance-re-next-group-num))
+  (incf org-balance-re-next-group-num 20))
 
 (defmacro org-balance-re-make-group-names (&rest names)
   (cons
@@ -1069,6 +1069,11 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 (defvar org-balance-unit-regexp
   (regexp-opt (mapcar (lambda (unit-info) (symbol-name (car unit-info))) org-balance-unit2dim-alist)))
 
+
+(org-balance-re-make-group-names
+ org-balance-re-valu-number
+ org-balance-re-valu-unit)
+
 (defconst
   org-balance-valu-regexp
   (rx-to-string
@@ -1077,14 +1082,14 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; But either a number or a unit must be given.
    `(or (seq (optional
 	      (org-balance-numbered-group
-	       1 (regexp ,(org-balance-re-make-shy org-balance-number-regexp))))
+	       ,org-balance-re-valu-number (regexp ,org-balance-number-regexp)))
 	     (org-balance-numbered-group
-	      2 (regexp ,(org-balance-re-make-shy org-balance-unit-regexp))))
+	      ,org-balance-re-valu-unit (regexp ,org-balance-unit-regexp)))
 	(seq (org-balance-numbered-group
-	      1 (regexp ,(org-balance-re-make-shy org-balance-number-regexp)))
+	      ,org-balance-re-valu-number (regexp ,org-balance-number-regexp))
 	     (optional
 	      (org-balance-numbered-group
-	       2 (group (regexp ,(org-balance-re-make-shy org-balance-unit-regexp)))))))))
+	       ,org-balance-re-valu-unit (regexp ,org-balance-unit-regexp)))))))
 
   
 (defun org-balance-parse-valu (valu-str)
@@ -1095,10 +1100,11 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (save-match-data
      (if (and
 	  (string-match org-balance-valu-regexp valu-str)
-	  (or (match-string 1 valu-str) (match-string 2 valu-str)))
+	  (or (match-string org-balance-re-valu-number valu-str)
+	      (match-string org-balance-re-valu-unit valu-str)))
 	 (org-balance-make-valu (org-balance-string-to-number
-				 (or (match-string 1 valu-str) "1"))
-				(or (match-string 2 valu-str) "item"))
+				 (or (match-string org-balance-re-valu-number valu-str) "1"))
+				(or (match-string org-balance-re-valu-unit valu-str) "item"))
        (error "Could not parse %s as a value with a unit" valu-str)))))
 
 
