@@ -258,9 +258,9 @@ when building regexps. Parse and produce code from FORM, which is `(org-balance-
        (= (match-beginning 0) 0)
        (= (match-end 0) (length s))))
 
-(defconst org-balance-re-next-group-num 60)
+(defconst org-balance-re-next-group-num 10)
 (defun org-balance-re-get-group-num ()
-  (incf org-balance-re-next-group-num 20))
+  (incf org-balance-re-next-group-num 1))
 
 (defmacro org-balance-re-make-group-names (&rest names)
   (cons
@@ -1146,18 +1146,6 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
        (error "Could not parse %s as a value range with a unit" valu-str)))))
 
 
-
-(defconst org-balance-valu-ratio-regexp
-  (concat "\\(?1:" (org-balance-re-make-shy org-balance-valu-regexp) "\\)" org-balance-ratio-words
-	  "\\(?2:" (org-balance-re-make-shy org-balance-valu-regexp) "\\)"))
-
-(defun org-balance-parse-valu-ratio3 (valu-ratio-str)
-  (save-match-data
-    (when (string-match org-balance-valu-ratio-regexp valu-ratio-str)
-      (cons (org-balance-parse-valu (match-string 1 valu-ratio-str))
-	    (org-balance-parse-valu (match-string 2 valu-ratio-str))))))
-
-
 (defconst org-balance-ratio-words (regexp-opt (list "per" "every" "each" "/" "a" "in a")))
 
 ;; Struct: org-balance-valu-ratio - a ratio of two valu's.
@@ -1198,35 +1186,46 @@ changing only the numerator."
   margin
   text)
 
+(org-balance-re-make-group-names
+ org-balance-valu-ratio-goal-grp-polarity
+ org-balance-valu-ratio-goal-grp-num
+ org-balance-valu-ratio-goal-grp-denom
+ org-balance-valu-ratio-goal-grp-margin-percent
+ org-balance-valu-ratio-goal-grp-margin-val) 
+
 (defconst org-balance-valu-ratio-goal-regexp
   (rx-to-string
    `(seq
      (optional
-      (org-balance-numbered-group 1
+      (org-balance-numbered-group
+       ,org-balance-valu-ratio-goal-grp-polarity
        (seq
 	(seq (or "at most" "at least"))
 	(one-or-more whitespace))))
       
      (org-balance-numbered-group
-      2 (regexp ,(org-balance-re-make-shy org-balance-valu-range-regexp)))
+      ,org-balance-valu-ratio-goal-grp-num (regexp ,org-balance-valu-range-regexp))
      (one-or-more whitespace)
      (regexp ,org-balance-ratio-words)
      (one-or-more whitespace)
      (org-balance-numbered-group
-      3 (regexp ,(org-balance-re-make-shy org-balance-valu-regexp)))
+      ,org-balance-valu-ratio-goal-grp-denom
+      (regexp ,org-balance-valu-regexp))
      (optional
       (seq
        (one-or-more whitespace)
        "+-"
        (zero-or-more whitespace)
-       (or
-	 (seq (org-balance-numbered-group 4
-					  (regexp ,(org-balance-re-make-shy org-balance-number-regexp)))
+       (seq
+	(or
+	 (seq (org-balance-numbered-group ,org-balance-valu-ratio-goal-grp-margin-percent
+					  (regexp ,org-balance-number-regexp))
 	      (zero-or-more whitespace)
 	      "%")
 	 (org-balance-numbered-group
-	  5 (regexp ,(org-balance-re-make-shy org-balance-valu-regexp)))))))))
-
+	  ,org-balance-valu-ratio-goal-grp-margin-val
+	  (regexp ,org-balance-valu-regexp)))))))))
+  
 (defun org-balance-parse-valu-ratio-goal (goal-str)
   "Parse a string representing a valu-ratio goal.
 
@@ -1235,14 +1234,20 @@ The syntax is: [at most]
 "
   (save-match-data
     (if (org-balance-full-match org-balance-valu-ratio-goal-regexp goal-str)
-	(let ((valu-range (org-balance-parse-valu-range (match-string 2 goal-str))))
+	(let ((valu-range (org-balance-parse-valu-range
+			   (match-string org-balance-valu-ratio-goal-grp-num goal-str))))
+	  (message "annnnd: %s" (match-string org-balance-valu-ratio-goal-grp-margin-percent
+					      goal-str))
 	  (make-org-balance-valu-ratio-goal 
 	   :num-min (car valu-range)
 	   :num-max (cdr valu-range)
-	   :denom (org-balance-parse-valu (match-string 3 goal-str))
-	   :polarity (match-string 1 goal-str)
-	   :margin (or (and (match-string 4 goal-str) (org-balance-parse-number (match-string 4 goal-str)))
-		       (and (match-string 5 goal-str) (org-balance-parse-valu (match-string 5 goal-str))))
+	   :denom (org-balance-parse-valu (match-string org-balance-valu-ratio-goal-grp-denom goal-str))
+	   :polarity (match-string org-balance-valu-ratio-goal-grp-polarity goal-str)
+	   :margin (or (and (match-string org-balance-valu-ratio-goal-grp-margin-percent goal-str)
+			    (org-balance-parse-number
+			     (match-string org-balance-valu-ratio-goal-grp-margin-percent goal-str)))
+		       (and (match-string org-balance-valu-ratio-goal-grp-margin-val goal-str)
+			    (org-balance-parse-valu (match-string org-balance-valu-ratio-goal-grp-margin-val goal-str))))
 	   :text goal-str))
       (error "Could not parse %s as a valu ratio goal" goal-str))))
 
