@@ -227,31 +227,6 @@ when building regexps. Parse and produce code from FORM, which is `(org-balance-
 (unless (assoc 'org-balance-numbered-group rx-constituents)
   (push '(org-balance-numbered-group . (org-balance-rx-numbered-group 1 nil)) rx-constituents))
 
-(defun org-balance-re-make-shy-aux-1 (re)
-  "Make all groups in regexp RE shy"
-  (save-match-data
-    (replace-regexp-in-string
-     (rx
-      (seq "\\(" (not (any "?")) (not (any ":"))))
-     (lambda (match)
-       (concat  "\\(?:"
-		(substring match
-			   (- (length match) 2))))
-     re
-     'fixedcase 'literal)))
-
-(defun org-balance-re-make-shy-aux-2 (re)
-  "Make all groups in regexp RE shy"
-  (save-match-data
-     (replace-regexp-in-string
-      (rx
-       (seq "\\(?" (one-or-more (any digit)) ":"))
-      "\\(?" re 'fixedcase 'literal)))
-
-(defun org-balance-re-make-shy (re)
-  "Make all groups in regexp RE shy"
-   (org-balance-re-make-shy-aux-2 re))
-
 (defun org-balance-full-match (re s)
   "Do a string match, but fail unless the regexp matches the full string"
   (and (string-match re s)
