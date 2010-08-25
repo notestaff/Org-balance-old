@@ -1171,7 +1171,27 @@ changing only the numerator."
  org-balance-valu-ratio-goal-grp-num
  org-balance-valu-ratio-goal-grp-denom
  org-balance-valu-ratio-goal-grp-margin-percent
- org-balance-valu-ratio-goal-grp-margin-val) 
+ org-balance-valu-ratio-goal-grp-margin-val)
+
+(defconst org-balance-polarity-atmost-regexp (regexp-opt (list "at most")))
+(defconst org-balance-polarity-atleast-regexp (regexp-opt (list "at least")))
+(defconst org-balance-polarity-regexp
+  (rx-to-string
+   `(seq (zero-or-more whitespace)
+	 (seq
+	  (or (regexp ,org-balance-polarity-atmost-regexp)
+	      (regexp ,org-balance-polarity-atleast-regexp)))
+	 (zero-or-more whitespace))))
+
+(defun org-balance-parse-polarity (polarity-str)
+  (save-match-data
+    (cond ((org-balance-full-match org-balance-polarity-atmost-regexp
+				   (org-balance-trim-whitespace polarity-str))
+	   'atmost)
+	  ((org-balance-full-match org-balance-polarity-atleast-regexp
+				   (org-balance-trim-whitespace polarity-str))
+	   'atleast)
+	  (t (error "Could not parse %s as a polarity" polarity-str)))))
 
 (defconst org-balance-valu-ratio-goal-regexp
   (rx-to-string
@@ -1179,10 +1199,7 @@ changing only the numerator."
      (optional
       (org-balance-numbered-group
        ,org-balance-valu-ratio-goal-grp-polarity
-       (seq
-	(seq (or "at most" "at least"))
-	(one-or-more whitespace))))
-      
+       (regexp ,org-balance-polarity-regexp)))
      (org-balance-numbered-group
       ,org-balance-valu-ratio-goal-grp-num (regexp ,org-balance-valu-range-regexp))
      (one-or-more whitespace)
@@ -1220,7 +1237,7 @@ The syntax is: [at most]
 	   :num-min (car valu-range)
 	   :num-max (cdr valu-range)
 	   :denom (org-balance-parse-valu (match-string org-balance-valu-ratio-goal-grp-denom goal-str))
-	   :polarity (match-string org-balance-valu-ratio-goal-grp-polarity goal-str)
+	   :polarity (org-balance-parse-polarity (match-string org-balance-valu-ratio-goal-grp-polarity goal-str))
 	   :margin (or (and (match-string org-balance-valu-ratio-goal-grp-margin-percent goal-str)
 			    (org-balance-parse-number
 			     (match-string org-balance-valu-ratio-goal-grp-margin-percent goal-str)))
