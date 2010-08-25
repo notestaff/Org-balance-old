@@ -507,6 +507,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				   :num (org-balance-valu-ratio-goal-num-min parsed-goal)
 				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
 			    (message "goal %s actual %s" goal-def-here actual)
+
+			    
 			    
 			    ))))))))
 	    (when (> org-balance-num-warnings 0)
@@ -1137,13 +1139,6 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 (defstruct org-balance-valu-ratio num denom
   ;; ratio- - the word from org-balance-ratio-words to use when printing the ratio.
   ratio-word)
-
-(defun org-balance-parse-valu-ratio (ratio-str)
-  "Parse a string describing a ratio of two valu's: e.g. '3 hours a day' or '100 dollars per month'."
-  (let ((parts (split-string ratio-str org-balance-ratio-words)))
-    (make-org-balance-valu-ratio
-     :num (org-balance-parse-valu (first parts)) :denom (org-balance-parse-valu (second parts))
-     :ratio-word (save-match-data (string-match org-balance-ratio-words ratio-str) (match-string 0 ratio-str)))))
 
 (defun org-balance-convert-valu-ratio (old-valu-ratio new-valu-ratio)
   "Convert a valu ratio to new units, e.g. minutes per day to hours per week.  We keep the denominator of the new ratio,

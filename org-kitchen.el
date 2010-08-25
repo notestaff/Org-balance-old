@@ -545,3 +545,12 @@ expression, in a shy group for safety."
 (defun org-balance-re-make-shy (re)
   "Make all groups in regexp RE shy"
    (org-balance-re-make-shy-aux-2 re))
+
+
+(defun org-balance-parse-valu-ratio (ratio-str)
+  "Parse a string describing a ratio of two valu's: e.g. '3 hours a day' or '100 dollars per month'."
+  (let ((parts (split-string ratio-str org-balance-ratio-words)))
+    (make-org-balance-valu-ratio
+     :num (org-balance-parse-valu (first parts)) :denom (org-balance-parse-valu (second parts))
+     :ratio-word (save-match-data (string-match org-balance-ratio-words ratio-str) (match-string 0 ratio-str)))))
+
