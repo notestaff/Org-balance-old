@@ -73,9 +73,11 @@
 (defgroup org-balance nil
   "Options for the org-balance package"
   :tag "Org Balance"
-  :group 'org)
+  :group 'org
+  :link '(url-link "http://sourceforge.net/projects/org-balance/")
+  )
 
-(defcustom org-balance-min-neglect-percent 5
+(defcustom org-balance-default-margin-percent 5.0
   "Report entries as neglected if they are neglected by at least percentage"
   :group 'org-balance
   :type 'float)
@@ -85,6 +87,14 @@
 before today."
   :group 'org-balance
   :type 'string)   ;; todo: add a validation function to make sure this can be parsed as a duration.
+
+
+(defcustom org-balance-default-polarity (quote (("clockedtime" . atleast) ("done" . atleast) ("spend" . atmost)))
+  "Default polarity to use for specific properties"
+  :group 'org-balance
+  :type '(alist :key-type string :value-type (radio (const :tag "at least" atleast)
+						    (const :tag "at most" atmost))))
+  
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -506,10 +516,37 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				  (make-org-balance-valu-ratio
 				   :num (org-balance-valu-ratio-goal-num-min parsed-goal)
 				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
-			    (message "goal %s actual %s" goal-def-here actual)
 
-			    
-			    
+			    (let* ( (polarity (org-balance-valu-ratio-goal-polarity parsed-goal))
+				    (margin (or (org-balance-valu-ratio-goal-margin parsed-goal)
+						org-balance-default-margin-percent))
+				    (range-min (- (org-balance-valu-val (org-balance-valu-ratio-goal-num-min parsed-goal))
+						  (if (numberp margin)
+						      (* (/ (float margin) 100.0) (org-balance-valu-val (org-balance-valu-ratio-goal-num-min parsed-goal)))
+						    (org-balance-valu-val margin))))
+				    
+				    (range-max (+ (org-balance-valu-val (org-balance-valu-ratio-goal-num-max parsed-goal))
+						  (if (numberp margin)
+						     (* (/ (float margin) 100.0) (org-balance-valu-val (org-balance-valu-ratio-goal-num-max parsed-goal)))
+						    (org-balance-valu-val margin))))
+				    
+				    (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
+				    (delta (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+						 ((< range-max actual-num)
+						  (if (eq polarity 'atleast) (- actual-num range-max) (- range-max actual-num)))
+						 ((< actual-num range-min)
+						  (if (eq polarity 'atmost) (- range-min actual-num) (- actual-num range-min))))))
+
+			      ;; so, actually, show delta vs specified range not vs margin;
+			      ;; show it in units of the goal; and show both absolute and relative shift.
+
+			      ;; let's make the sparse tree work well first, including robust error reporting, and handling multiple
+			      ;; goals per entry, before moving on to the more involved issue of agenda.
+
+			      ;; need a way to filter the goals shown, by priority of goal, as well as by arbitrary criterion.
+
+			      (message "goal %s actual %s delta %s" goal-def-here actual delta)
+			      )
 			    ))))))))
 	    (when (> org-balance-num-warnings 0)
 	      (message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings))))))))
@@ -930,7 +967,6 @@ units are measured; for example, for time we use minutes."
 
 ;; Struct: org-balance-valu - a value together with a given unit of measurement, e.g., 5 hours. 
 (defstruct (org-balance-valu
-	    (:constructor nil)
 	    (:constructor new-org-balance-valu
 			  (val unit-name
 			       &aux (unit
