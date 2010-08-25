@@ -235,9 +235,14 @@ when building regexps. Parse and produce code from FORM, which is `(org-balance-
 
 (defconst org-balance-re-next-group-num 10)
 (defun org-balance-re-get-group-num ()
-  (incf org-balance-re-next-group-num 1))
+  "Create a unique number to be used for a particular numbered
+group within a particular regexp."  
+  (incf org-balance-re-next-group-num))
 
 (defmacro org-balance-re-make-group-names (&rest names)
+  "Declare the specified variables as constants and assign them
+unique integer ids, for use as ids of group numbers in numbered
+groups in regexps." 
   (cons
    'progn
    (mapcar
@@ -252,8 +257,7 @@ when building regexps. Parse and produce code from FORM, which is `(org-balance-
   "Sparse tree of items closed in a certain time range.
 Still experimental, may disappear in the future.
 
-Adapted from some org code that seems to have since been removed
-from the distribution."
+Adapted from `org-closed-in-range' from org.el."
   (interactive)
   ;; Get the time interval from the user.
   (let* ((time1 (org-float-time
@@ -466,12 +470,16 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		     (goal-def-here (org-match-string-no-properties 2))
 		     (parsed-goal
 		      (condition-case err
-			  (org-balance-parse-valu-ratio goal-def-here)
+			  (org-balance-parse-valu-ratio-goal goal-def-here)
 			(error
-			 (setq org-balance-num-warnings (1+ org-balance-num-warnings))
+			 (incf org-balance-num-warnings)
 			 (message "Error parsing %s" goal-def-here)
 			 nil))))
 		(when parsed-goal
+		  ;;
+		  ;; Compute the actual usage under this subtree, and convert to the same
+		  ;; units as the goal, so we can compare them.
+		  ;;
 		  (save-match-data
 		    (save-excursion
 		      (save-restriction
@@ -482,7 +490,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				(if is-time (org-balance-clock-sum tstart tend)
 				  (org-balance-sum-property
 				   goal-name-here
-				   (org-balance-valu-unit (org-balance-valu-ratio-num parsed-goal))
+				   (org-balance-valu-unit
+				    (org-balance-valu-ratio-goal-num-min parsed-goal))
 				   tstart tend))))
 					; we only really need to set the text for entries where there is a goal.
 					; but is it faster just to set it?
@@ -492,10 +501,11 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				   :num
 				   (org-balance-make-valu sum-here
 							  (if is-time 'minutes
-							    (org-balance-valu-unit
-							     (org-balance-valu-ratio-num parsed-goal))))
+							    (org-balance-valu-unit (org-balance-valu-ratio-goal-num-min parsed-goal))))
 				   :denom days-in-interval)
-				  parsed-goal)))
+				  (make-org-balance-valu-ratio
+				   :num (org-balance-valu-ratio-goal-num-min parsed-goal)
+				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
 			    (message "goal %s actual %s" goal-def-here actual)
 			    
 			    ))))))))
@@ -1142,13 +1152,13 @@ changing only the numerator."
 	(new-denom (org-balance-valu-ratio-denom new-valu-ratio)))
     (make-org-balance-valu-ratio
      :num (org-balance-make-valu (/ (org-balance-valu-val (org-balance-convert-valu
-							  (org-balance-valu-ratio-num old-valu-ratio)
-							  (org-balance-valu-unit new-num)))
-				   (org-balance-valu-val (org-balance-convert-valu
-							  (org-balance-valu-ratio-denom old-valu-ratio)
-							  (org-balance-valu-unit new-denom)
-							  (org-balance-valu-val new-denom))))
-				(org-balance-valu-unit new-num))
+							   (org-balance-valu-ratio-num old-valu-ratio)
+							   (org-balance-valu-unit new-num)))
+				    (org-balance-valu-val (org-balance-convert-valu
+							   (org-balance-valu-ratio-denom old-valu-ratio)
+							   (org-balance-valu-unit new-denom)
+							   (org-balance-valu-val new-denom))))
+				 (org-balance-valu-unit new-num))
      :denom new-denom :ratio-word (org-balance-valu-ratio-ratio-word new-valu-ratio)))) 
 
 
@@ -1211,8 +1221,6 @@ The syntax is: [at most]
     (if (org-balance-full-match org-balance-valu-ratio-goal-regexp goal-str)
 	(let ((valu-range (org-balance-parse-valu-range
 			   (match-string org-balance-valu-ratio-goal-grp-num goal-str))))
-	  (message "annnnd: %s" (match-string org-balance-valu-ratio-goal-grp-margin-percent
-					      goal-str))
 	  (make-org-balance-valu-ratio-goal 
 	   :num-min (car valu-range)
 	   :num-max (cdr valu-range)
