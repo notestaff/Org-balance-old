@@ -1098,15 +1098,16 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
 
    (save-match-data
-     (if (and
-	  (string-match org-balance-valu-regexp valu-str)
-	  (or (match-string org-balance-re-valu-number valu-str)
-	      (match-string org-balance-re-valu-unit valu-str)))
+     (if (org-balance-full-match org-balance-valu-regexp valu-str)
 	 (org-balance-make-valu (org-balance-string-to-number
 				 (or (match-string org-balance-re-valu-number valu-str) "1"))
 				(or (match-string org-balance-re-valu-unit valu-str) "item"))
        (error "Could not parse %s as a value with a unit" valu-str)))))
 
+
+(org-balance-re-make-group-names
+ org-balance-valu-range-grp-range
+ org-balance-valu-range-grp-unit)
 
 (defconst
   org-balance-valu-range-regexp
@@ -1117,17 +1118,18 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    `(or (seq (optional
 	      (seq
 	       (org-balance-numbered-group
-		1 (regexp ,(org-balance-re-make-shy org-balance-number-range-regexp)))
+		,org-balance-valu-range-grp-range
+		(regexp ,org-balance-number-range-regexp))
 	       (one-or-more whitespace)))
 	     (org-balance-numbered-group
-	      2 (regexp ,(org-balance-re-make-shy org-balance-unit-regexp))))
+	      ,org-balance-valu-range-grp-unit (regexp ,org-balance-unit-regexp)))
 	(seq (org-balance-numbered-group
-	      1 (regexp ,(org-balance-re-make-shy org-balance-number-range-regexp)))
+	      ,org-balance-valu-range-grp-range (regexp ,org-balance-number-range-regexp))
 	     (optional
 	      (seq
 	       (one-or-more whitespace)
 	       (org-balance-numbered-group
-		2 (group (regexp ,(org-balance-re-make-shy org-balance-unit-regexp))))))))))
+		,org-balance-valu-range-grp-unit (regexp ,org-balance-unit-regexp))))))))
 
 (defun org-balance-parse-valu-range (valu-str)
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
@@ -1135,12 +1137,10 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
 
    (save-match-data
-     (if (and
-	  (org-balance-full-match org-balance-valu-range-regexp valu-str)
-	  (or (match-string 1 valu-str) (match-string 2 valu-str)))
+     (if (org-balance-full-match org-balance-valu-range-regexp valu-str)
 	 (let ((number-range (org-balance-parse-number-range
-			      (or (match-string 1 valu-str) "1")))
-	       (unit (or (match-string 2 valu-str) "item")))
+			      (or (match-string org-balance-valu-range-grp-range valu-str) "1")))
+	       (unit (or (match-string org-balance-valu-range-grp-unit valu-str) "item")))
 	   (cons (org-balance-make-valu (car number-range) unit)
 		 (org-balance-make-valu (cdr number-range) unit)))
        (error "Could not parse %s as a value range with a unit" valu-str)))))
