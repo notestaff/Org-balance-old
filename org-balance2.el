@@ -486,7 +486,9 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			 (message "Error parsing %s" goal-def-here)
 			 nil)))
 		     should-call-p
-		     cb-goal cb-actual cb-delta)
+		     ;; values we pass to the callback that renders the
+		     ;; goal info
+		     cb-goal cb-actual cb-delta-val cb-delta-percent)
 		(when parsed-goal
 		  ;;
 		  ;; Compute the actual usage under this subtree, and convert to the same
@@ -535,11 +537,14 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 						    (org-balance-valu-val margin))))
 				    
 				    (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
-				    (delta (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
-						 ((< range-max actual-num)
-						  (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
-						 ((< actual-num range-min)
-						  (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min))))))
+				    (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+						     ((< range-max actual-num)
+						      (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
+						     ((< actual-num range-min)
+						      (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min)))))
+				    (delta-percent
+				     (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min))))
+				    )
 
 			      
 
@@ -553,7 +558,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 
 			      ;(outline-flag-region line-here (1+ line-here) t)
-			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta delta)
+			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta-val delta-val
+				    cb-delta-percent delta-percent)
 			      (message "should-call %s" should-call-p)
 			      (save-match-data
 				(when callback1 (apply callback1 nil)))
@@ -568,20 +574,20 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 (defun org-balance-check-sparsetree ()
   "Show missed goals as sparsetree"
   (interactive)
+  (org-balance-remove-overlays)
   (org-overview)
   (org-balance-compute-goal-deltas
    :callback1
    (lambda ()
-     (org-balance-put-overlay (format "goal %s actual %s delta %s" cb-goal cb-actual cb-delta))
+     (org-balance-put-overlay (format "%4d%% \"%15s\" actual: %.2f"
+				      (round cb-delta-percent)
+				      cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual))))
      )
    :callback2
    (lambda ()
-     (message "goal %s actual %s delta %s" cb-goal cb-actual cb-delta)
-
      (let ((org-show-hierarchy-above t)
 	   (org-show-following-heading nil)
 	   (org-show-siblings nil))
-       (message "opening heading")
        (org-back-to-heading 'invis-ok)
        (org-show-context 'default)))))
 
