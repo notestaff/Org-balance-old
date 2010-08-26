@@ -436,13 +436,12 @@ We will also have a default interval, which can be overriden (or used?) with the
     )
   ))
 
-(defun* org-balance-compute-goal-deltas (&key goals tstart tend callback error-handler)
+(defun* org-balance-compute-goal-deltas (&key goals tstart tend callback1 callback2 error-handler)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
 resource GOAL toward that goal in the period between TSTART and TEND.  Call the callback with the value.
 "
   (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
   (unless tend (setq tend (org-float-time (org-current-time))))
-  (message "interval is %s" (- tend tstart))
 
   (let ((days-in-interval (org-balance-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
     (save-excursion
@@ -476,7 +475,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	      ;; (e.g. using looking-back-at)
 	      ;; then:
 	      
-	      (let* ((goal-name-here (org-match-string-no-properties 1))
+	      (let* ((line-here (org-current-line))
+		     (goal-name-here (org-match-string-no-properties 1))
 		     (goal-def-here (org-match-string-no-properties 2))
 		     (parsed-goal
 		      (condition-case err
@@ -484,7 +484,9 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(error
 			 (incf org-balance-num-warnings)
 			 (message "Error parsing %s" goal-def-here)
-			 nil))))
+			 nil)))
+		     should-call-p
+		     cb-goal cb-actual cb-delta)
 		(when parsed-goal
 		  ;;
 		  ;; Compute the actual usage under this subtree, and convert to the same
@@ -520,22 +522,26 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			    (let* ( (polarity (org-balance-valu-ratio-goal-polarity parsed-goal))
 				    (margin (or (org-balance-valu-ratio-goal-margin parsed-goal)
 						org-balance-default-margin-percent))
-				    (range-min (- (org-balance-valu-val (org-balance-valu-ratio-goal-num-min parsed-goal))
+				    (goal-min (org-balance-valu-val (org-balance-valu-ratio-goal-num-min parsed-goal)))
+				    (goal-max (org-balance-valu-val (org-balance-valu-ratio-goal-num-max parsed-goal)))
+				    (range-min (- goal-min
 						  (if (numberp margin)
-						      (* (/ (float margin) 100.0) (org-balance-valu-val (org-balance-valu-ratio-goal-num-min parsed-goal)))
+						      (* (/ (float margin) 100.0) goal-min)
 						    (org-balance-valu-val margin))))
 				    
-				    (range-max (+ (org-balance-valu-val (org-balance-valu-ratio-goal-num-max parsed-goal))
+				    (range-max (+ goal-max
 						  (if (numberp margin)
-						     (* (/ (float margin) 100.0) (org-balance-valu-val (org-balance-valu-ratio-goal-num-max parsed-goal)))
+						     (* (/ (float margin) 100.0) goal-max)
 						    (org-balance-valu-val margin))))
 				    
 				    (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
 				    (delta (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
 						 ((< range-max actual-num)
-						  (if (eq polarity 'atleast) (- actual-num range-max) (- range-max actual-num)))
+						  (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
 						 ((< actual-num range-min)
-						  (if (eq polarity 'atmost) (- range-min actual-num) (- actual-num range-min))))))
+						  (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min))))))
+
+			      
 
 			      ;; so, actually, show delta vs specified range not vs margin;
 			      ;; show it in units of the goal; and show both absolute and relative shift.
@@ -545,15 +551,45 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 			      ;; need a way to filter the goals shown, by priority of goal, as well as by arbitrary criterion.
 
-			      (message "goal %s actual %s delta %s" goal-def-here actual delta)
-			      )
-			    ))))))))
-	    (when (> org-balance-num-warnings 0)
-	      (message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings))))))))
 
-(defun try-goals ()
+			      ;(outline-flag-region line-here (1+ line-here) t)
+			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta delta)
+			      (message "should-call %s" should-call-p)
+			      (save-match-data
+				(when callback1 (apply callback1 nil)))
+			    )))))))
+		(when (and should-call-p callback2)
+		  (save-excursion
+		    (save-match-data
+		      (apply callback2 nil)))))
+	      (when (> org-balance-num-warnings 0)
+		(message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings)))))))))
+
+(defun org-balance-check-sparsetree ()
+  "Show missed goals as sparsetree"
   (interactive)
-  (org-balance-compute-goal-deltas))
+  (org-overview)
+  (org-balance-compute-goal-deltas
+   :callback1
+   (lambda ()
+     (org-balance-put-overlay (format "goal %s actual %s delta %s" cb-goal cb-actual cb-delta))
+     )
+   :callback2
+   (lambda ()
+     (message "goal %s actual %s delta %s" cb-goal cb-actual cb-delta)
+
+     (let ((org-show-hierarchy-above t)
+	   (org-show-following-heading nil)
+	   (org-show-siblings nil))
+       (message "opening heading")
+       (org-back-to-heading 'invis-ok)
+       (org-show-context 'default)))))
+
+
+
+(defun show-prefix (x)
+  (interactive "P")
+  (message "%s" x))
 
 
 (defun org-balance-show-neglected-time (&optional tstart tend)
