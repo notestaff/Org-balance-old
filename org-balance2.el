@@ -172,6 +172,15 @@ from the `before-change-functions' in the current buffer."
 ;; General-purpose utility routines used in org-balance module
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defmacro dbg (&rest exprs)
+  "Print the values of exprs, so you can write e.g. (dbg a b) to print 'a=1 b=2'."
+  (append
+   (list 'message
+	 (mapconcat (lambda (expr)
+		      (concat (format "%s" expr) "=%s "))
+		    exprs
+		    ""))
+   exprs))
 
 (defun org-balance-get-property (prop &optional default-val)
   "Get the value of a property, represented either as text property or org property,
@@ -367,11 +376,8 @@ as you were doing it.
 			     'with-hm 'inactive)
       (insert " => " (format "%2d:%02d" h m)))))
 
-(defconst org-balance-minutes-per-day (* 60 24))
 
-
-(defvar org-balance-goal-prefix "goal_")
-
+(defconst org-balance-goal-prefix "goal_")
 
 (defun org-balance-clock-sum (tstart tend)
   "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
@@ -394,25 +400,18 @@ as you were doing it.
 	(goto-char (point-min))
 	(while (re-search-forward
 		(concat "^[ \t]*" org-clock-string
-			"[ \t]*\\(?:\\(\\[.*?\\]\\)-+\\(\\[.*?\\]\\)\\|=>[ \t]+\\([0-9]+\\):\\([0-9]+\\)\\)")
+			"[ \t]*\\(?:\\(\\[.*?\\]\\)-+\\(\\[.*?\\]\\)\\)")
 		nil t)
-	  (cond
-	   ((match-end 1)
-	    ;; Two time stamps
-	    (setq ts (match-string 1)
-		  te (match-string 2)
-		  ts (org-float-time
-		      (apply 'encode-time (org-parse-time-string ts)))
-		  te (org-float-time
-		      (apply 'encode-time (org-parse-time-string te)))
-		  ts (if tstart (max ts tstart) ts)
-		  te (if tend (min te tend) te)
-		  dt (- te ts)
-		  total-minutes (if (> dt 0) (+ total-minutes (floor (/ dt 60))) total-minutes)))
-	   ((match-end 3)
-	    ;; A naked time
-	    (setq total-minutes (+ total-minutes (string-to-number (match-string 4))
-			(* 60 (string-to-number (match-string 3))))))))))
+	  (setq ts (match-string 1)
+		te (match-string 2)
+		ts (org-float-time
+		    (apply 'encode-time (org-parse-time-string ts)))
+		te (org-float-time
+		    (apply 'encode-time (org-parse-time-string te)))
+		ts (if tstart (max ts tstart) ts)
+		te (if tend (min te tend) te)
+		dt (- te ts)
+		total-minutes (if (> dt 0) (+ total-minutes (floor (/ dt 60))) total-minutes)))))
     total-minutes))
     
 
@@ -477,6 +476,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	      
 	      (let* ((line-here (org-current-line))
 		     (goal-name-here (org-match-string-no-properties 1))
+		     (goal-prop-here (substring goal-name-here (length org-balance-goal-prefix)))
 		     (goal-def-here (org-match-string-no-properties 2))
 		     (parsed-goal
 		      (condition-case err
@@ -503,7 +503,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			       (sum-here
 				(if is-time (org-balance-clock-sum tstart tend)
 				  (org-balance-sum-property
-				   goal-name-here
+				   goal-prop-here
 				   (org-balance-valu-unit
 				    (org-balance-valu-ratio-goal-num-min parsed-goal))
 				   tstart tend))))
@@ -521,7 +521,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				   :num (org-balance-valu-ratio-goal-num-min parsed-goal)
 				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
 
-			    (let* ( (polarity (org-balance-valu-ratio-goal-polarity parsed-goal))
+			    (let* ( (polarity (or (org-balance-valu-ratio-goal-polarity parsed-goal)
+						  (cdr (assoc-string goal-prop-here org-balance-default-polarity))))
 				    (margin (or (org-balance-valu-ratio-goal-margin parsed-goal)
 						org-balance-default-margin-percent))
 				    (goal-min (org-balance-valu-val (org-balance-valu-ratio-goal-num-min parsed-goal)))
@@ -546,7 +547,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				     (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min))))
 				    )
 
-			      
+			      (dbg goal-name-here goal-prop-here goal-def-here polarity actual-num range-min range-max goal-min goal-max delta-val delta-percent)
 
 			      ;; so, actually, show delta vs specified range not vs margin;
 			      ;; show it in units of the goal; and show both absolute and relative shift.
@@ -560,7 +561,6 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      ;(outline-flag-region line-here (1+ line-here) t)
 			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta-val delta-val
 				    cb-delta-percent delta-percent)
-			      (message "should-call %s" should-call-p)
 			      (save-match-data
 				(when callback1 (apply callback1 nil)))
 			    )))))))
@@ -942,15 +942,6 @@ When called repeatedly, scroll the window that is displaying the buffer."
 ;; unit for display (e.g. from "8.57 minutes per day" to "1 hour a week").
 
 
-(defconst org-balance-unit2minutes
-  `((second . 0.0166666666667) (seconds . 0.0166666666667) (minute . 1) (minutes . 1)
-    (min . 1) (mins . 1)
-    (hour . 60) (hours . 60) (hr . 60) (hrs . 60) (day . ,org-balance-minutes-per-day)
-    (days . ,org-balance-minutes-per-day) (week . 10080) (weeks . 10080)
-    (month . 43200) (months . 43200) (year . 525600) (years . 525600)
-    (bluemoon 1e12))
- "Number of minutes in each unit" )
-
 (defconst org-balance-units
   '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
 	     (workweek . 7200)
@@ -1315,7 +1306,9 @@ The syntax is: [at most]
 	   :num-min (car valu-range)
 	   :num-max (cdr valu-range)
 	   :denom (org-balance-parse-valu (match-string org-balance-valu-ratio-goal-grp-denom goal-str))
-	   :polarity (org-balance-parse-polarity (match-string org-balance-valu-ratio-goal-grp-polarity goal-str))
+	   :polarity
+	   (let ((polarity-str (match-string org-balance-valu-ratio-goal-grp-polarity goal-str)))
+	     (if polarity-str (org-balance-parse-polarity polarity-str) nil))
 	   :margin (or (and (match-string org-balance-valu-ratio-goal-grp-margin-percent goal-str)
 			    (org-balance-parse-number
 			     (match-string org-balance-valu-ratio-goal-grp-margin-percent goal-str)))
@@ -1324,45 +1317,6 @@ The syntax is: [at most]
 	   :text goal-str))
       (error "Could not parse %s as a valu ratio goal" goal-str))))
 
-
-(defun org-balance-parse-duration-into-minutes (duration-str)
-  (condition-case err
-      (let* ((duration-list (if (stringp duration-str) (split-string duration-str) duration-str))
-	     (unit-pos (1- (length duration-list)))
-	     (unit (nth unit-pos duration-list))
-	     (minutes-in-unit (assoc-val (intern unit) org-balance-unit2minutes))
-	     (num-units (if (= unit-pos 0) 1 (string-to-number (first duration-list))))
-	     (duration-in-minutes (float (* num-units minutes-in-unit))))
-	`((duration-in-minutes . ,duration-in-minutes) (minutes-in-unit . ,minutes-in-unit) (unit . ,unit)))
-    (error (signal 'org-balance-parse-error (list duration-str err)))))
-
-
-(defun org-balance-parse-time-fraction (fraction-str)
-  (let* ((parts (split-string fraction-str (regexp-opt (list " per " " every " " each " " / " " a " " in a ")))))
-    (/ (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (first parts)))
-       (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (second parts))))))
-
-
-(defun org-balance-report-time-fraction (fraction-str minutes-per-day)
-  "Given minutes per day, report the equivalent time fraction in the original units"
-  (let* ((parts (split-string fraction-str (regexp-opt (list " per " " every " " each " " / " " a " " in a "))))
-	 (minutes-in-their-denom (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (second parts))))
-	 (days-in-their-denom (/ minutes-in-their-denom org-balance-minutes-per-day))
-	 (parse-their-num (org-balance-parse-duration-into-minutes (first parts)))
-	 (minutes-per-their-num-unit (assoc-val 'minutes-in-unit parse-their-num))
-	 (fraction-in-their-units (/ (* minutes-per-day days-in-their-denom) minutes-per-their-num-unit))
-	 )
-    fraction-in-their-units))
-    
-(defun org-balance-parse-count (s)
-  (let ((known-words '((once . 1) (twice . 2) (thrice . 3))))
-    (cond ((assoc (intern s) known-words) (assoc-val (intern s) known-words))
-	  ((string-match "\\([[:digit:]]+\\) ?\\([xX]\\|times?\\)?" s) (string-to-number (match-string 1 s))))))
-
-(defun org-balance-parse-frequency-per-day (fraction-str)
-  (let* ((parts (split-string fraction-str (regexp-opt (list " per " " every " " each " " / " " a ")))))
-    (* org-balance-minutes-per-day (/ (float (org-balance-parse-count (first parts)))
-	       (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (second parts)))))))
 
 (provide 'org-balance)
 
