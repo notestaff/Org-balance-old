@@ -554,3 +554,51 @@ expression, in a shy group for safety."
      :num (org-balance-parse-valu (first parts)) :denom (org-balance-parse-valu (second parts))
      :ratio-word (save-match-data (string-match org-balance-ratio-words ratio-str) (match-string 0 ratio-str)))))
 
+(defconst org-balance-minutes-per-day (* 60 24))
+(defconst org-balance-unit2minutes
+  `((second . 0.0166666666667) (seconds . 0.0166666666667) (minute . 1) (minutes . 1)
+    (min . 1) (mins . 1)
+    (hour . 60) (hours . 60) (hr . 60) (hrs . 60) (day . ,org-balance-minutes-per-day)
+    (days . ,org-balance-minutes-per-day) (week . 10080) (weeks . 10080)
+    (month . 43200) (months . 43200) (year . 525600) (years . 525600)
+    (bluemoon 1e12))
+ "Number of minutes in each unit" )
+
+(defun org-balance-parse-duration-into-minutes (duration-str)
+  (condition-case err
+      (let* ((duration-list (if (stringp duration-str) (split-string duration-str) duration-str))
+	     (unit-pos (1- (length duration-list)))
+	     (unit (nth unit-pos duration-list))
+	     (minutes-in-unit (assoc-val (intern unit) org-balance-unit2minutes))
+	     (num-units (if (= unit-pos 0) 1 (string-to-number (first duration-list))))
+	     (duration-in-minutes (float (* num-units minutes-in-unit))))
+	`((duration-in-minutes . ,duration-in-minutes) (minutes-in-unit . ,minutes-in-unit) (unit . ,unit)))
+    (error (signal 'org-balance-parse-error (list duration-str err)))))
+
+
+(defun org-balance-parse-time-fraction (fraction-str)
+  (let* ((parts (split-string fraction-str (regexp-opt (list " per " " every " " each " " / " " a " " in a ")))))
+    (/ (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (first parts)))
+       (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (second parts))))))
+
+
+(defun org-balance-report-time-fraction (fraction-str minutes-per-day)
+  "Given minutes per day, report the equivalent time fraction in the original units"
+  (let* ((parts (split-string fraction-str (regexp-opt (list " per " " every " " each " " / " " a " " in a "))))
+	 (minutes-in-their-denom (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (second parts))))
+	 (days-in-their-denom (/ minutes-in-their-denom org-balance-minutes-per-day))
+	 (parse-their-num (org-balance-parse-duration-into-minutes (first parts)))
+	 (minutes-per-their-num-unit (assoc-val 'minutes-in-unit parse-their-num))
+	 (fraction-in-their-units (/ (* minutes-per-day days-in-their-denom) minutes-per-their-num-unit))
+	 )
+    fraction-in-their-units))
+    
+(defun org-balance-parse-count (s)
+  (let ((known-words '((once . 1) (twice . 2) (thrice . 3))))
+    (cond ((assoc (intern s) known-words) (assoc-val (intern s) known-words))
+	  ((string-match "\\([[:digit:]]+\\) ?\\([xX]\\|times?\\)?" s) (string-to-number (match-string 1 s))))))
+
+(defun org-balance-parse-frequency-per-day (fraction-str)
+  (let* ((parts (split-string fraction-str (regexp-opt (list " per " " every " " each " " / " " a ")))))
+    (* org-balance-minutes-per-day (/ (float (org-balance-parse-count (first parts)))
+	       (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (second parts)))))))
