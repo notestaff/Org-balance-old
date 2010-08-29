@@ -79,7 +79,9 @@
 	 ;; start a fresh mapping for group names encountered inside
 	 ;; this named group
 	 (rxx-env (list (cons nil nil)))
-	 (grp-def (rxx-get-rxx grp-def-xregexp))
+	 (grp-def (or (rxx-get-rxx grp-def-xregexp)
+		      (make-rxx-info :parser 'identity :env (list (cons nil nil))
+				     :form `(seq (regexp ,grp-def-xregexp)))))
 	 (regexp-here (format "\\(?%d:%s\\)" grp-num
 			      (rx-to-string (rxx-info-form grp-def)))))
     (nconc old-rxx-env (list (cons grp-name (make-rxx-info
