@@ -62,6 +62,7 @@
 (require 'org-agenda)
 (eval-when-compile (require 'cl))
 (require 'rx)
+(require 'rxx)
 
 (defvar org-clock-report-include-clocking-task)
 
@@ -233,42 +234,11 @@ is not set (and is removed if it was set before and CLEAR-WHEN_DEFAULT is non-ni
 	     (seq (zero-or-more whitespace) string-end)))
      "" (if (symbolp s) (symbol-name s) s))))
 
-(defun org-balance-rx-numbered-group (form)
-  "Extend the rx macro and rx-to-string function to support numbered groups
-when building regexps. Parse and produce code from FORM, which is `(org-balance-numbered-group group-number ...)'."
-  (concat "\\(?"
-	  (number-to-string (second form))
-	  ":"
-	  ;; Several sub-forms implicitly concatenated.
-	  (mapconcat (lambda (re) (rx-form re ':)) (cddr form) nil)
-          "\\)"))
-
-(unless (assoc 'org-balance-numbered-group rx-constituents)
-  (push '(org-balance-numbered-group . (org-balance-rx-numbered-group 1 nil)) rx-constituents))
-
 (defun org-balance-full-match (re s)
   "Do a string match, but fail unless the regexp matches the full string"
   (and (string-match re s)
        (= (match-beginning 0) 0)
        (= (match-end 0) (length s))))
-
-(defconst org-balance-re-next-group-num 10)
-(defun org-balance-re-get-group-num ()
-  "Create a unique number to be used for a particular numbered
-group within a particular regexp."  
-  (incf org-balance-re-next-group-num))
-
-(defmacro org-balance-re-make-group-names (&rest names)
-  "Declare the specified variables as constants and assign them
-unique integer ids, for use as ids of group numbers in numbered
-groups in regexps." 
-  (cons
-   'progn
-   (mapcar
-    (lambda (name)
-      (let* ((name-str (symbol-name name)))
-	`(defconst ,name (org-balance-re-get-group-num))))
-    names)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -488,7 +458,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		     (goal-def-here (org-match-string-no-properties 2))
 		     (parsed-goal
 		      (condition-case err
-			  (org-balance-parse-valu-ratio-goal goal-def-here)
+			  (rxx-parse org-balance-parse-valu-ratio-goal-regexp goal-def-here)
 			(error
 			 (incf org-balance-num-warnings)
 			 (message "Error parsing %s" goal-def-here)
@@ -1052,13 +1022,13 @@ we convert to the specified multiples of new unit."
     (ten . 10)))
 
 (defconst org-balance-number-regexp
-  (rx-to-string
+  (rxx
    `(seq
      (zero-or-more whitespace)
      
      (or
       ;; either an english number name
-      ,(cons 'or (mapcar (lambda (number-info) (symbol-name (car number-info))) org-balance-number-names))
+      (named-grp number-name ,(regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
       
       ;; or a floating-point number, possibly in scientific notation
       (seq
@@ -1072,7 +1042,11 @@ we convert to the specified multiples of new unit."
 	     (optional (any "+-"))
 	     (one-or-more (any digit))))))
      
-     (zero-or-more whitespace)))
+     (zero-or-more whitespace))
+   (lambda (match)
+     (if (rxx-match-val 'number-name) (cdr (assoc-string (rxx-match-val 'number-name) org-balance-number-names))
+       (string-to-number match)))
+   "number")
    "Regular expression for a floating-point number")
 			
 
@@ -1091,39 +1065,18 @@ Unlike the standard `string-to-number', if the string as a whole cannot be inter
 by whitespace, it throws an error rather than silently returning zero.
 "
   (if (numberp s) s
-    (if (org-balance-is-valid-number-p s)
-	(or (org-balance-assoc-val (org-balance-trim-whitespace s)
-				   org-balance-number-names 'nil-ok)
-	    (string-to-number s))
-      (error "Could not parse as number: %s" s))))
+    (rxx-parse org-balance-number-regexp s)))
 
 (defalias 'org-balance-parse-number 'org-balance-string-to-number)
 
-(org-balance-re-make-group-names
- org-balance-number-range-start org-balance-number-range-end)
-
 (defconst org-balance-number-range-regexp
-  (rx-to-string
+  (rxx
    `(seq
-     (org-balance-numbered-group
-      ,org-balance-number-range-start
-      (regexp ,org-balance-number-regexp))
-     (optional
-      "-"
-      (org-balance-numbered-group
-       ,org-balance-number-range-end
-       (regexp ,org-balance-number-regexp))))))
-
-(defun org-balance-parse-number-range (s)
-  "Parse a range of numbers, such as 1-2.  A single number N is parsed as the range
-N-N."
-  (save-match-data
-    (if (org-balance-full-match org-balance-number-range-regexp s)
-	(cons (org-balance-parse-number (match-string org-balance-number-range-start s))
-	      (org-balance-parse-number
-	       (or (match-string org-balance-number-range-end s)
-		   (match-string org-balance-number-range-start s))))
-      (error "Could not parse %s as number range" s))))
+     (named-grp range-start ,org-balance-number-regexp)
+     (optional "-" (named-grp range-end ,org-balance-number-regexp)))
+   (lambda (match)
+     (cons (rxx-match-val 'range-start)
+	   (or (rxx-match-val 'range-end) (rxx-match-val 'range-start))))))
 
 (defvar org-balance-parse-valu-hooks nil
   "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
@@ -1131,84 +1084,50 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 `org-balance-valu' struct if it successfully parsed the string, or nil if it didn't.")
 
 (defvar org-balance-unit-regexp
-  (regexp-opt (mapcar (lambda (unit-info) (symbol-name (car unit-info))) org-balance-unit2dim-alist)))
-
-
-(org-balance-re-make-group-names
- org-balance-re-valu-number
- org-balance-re-valu-unit)
+  (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist))))
 
 (defconst
   org-balance-valu-regexp
-  (rx-to-string
+  (rxx
    ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
    ;; But either a number or a unit must be given.
-   `(or (seq (optional
-	      (org-balance-numbered-group
-	       ,org-balance-re-valu-number (regexp ,org-balance-number-regexp)))
-	     (org-balance-numbered-group
-	      ,org-balance-re-valu-unit (regexp ,org-balance-unit-regexp)))
-	(seq (org-balance-numbered-group
-	      ,org-balance-re-valu-number (regexp ,org-balance-number-regexp))
-	     (optional
-	      (org-balance-numbered-group
-	       ,org-balance-re-valu-unit (regexp ,org-balance-unit-regexp)))))))
+   `(or (seq (optional (named-grp val ,org-balance-number-regexp))
+	     (named-grp unit ,org-balance-unit-regexp))
+	(seq (named-grp val) (optional (named-grp unit))))
+   (lambda (match-str)
+     (org-balance-make-valu (or (rxx-match-val 'val) 1)
+			    (or (rxx-match-val 'unit) "item")))
+   "value with unit")
+  "regexp for value with a unit, e.g. '1 day'")
 
   
 (defun org-balance-parse-valu (valu-str)
   "Given a string representing a value with units, parse it into an org-balance-valu structure."
   (or
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
-
-   (save-match-data
-     (if (org-balance-full-match org-balance-valu-regexp valu-str)
-	 (org-balance-make-valu (org-balance-string-to-number
-				 (or (match-string org-balance-re-valu-number valu-str) "1"))
-				(or (match-string org-balance-re-valu-unit valu-str) "item"))
-       (error "Could not parse %s as a value with a unit" valu-str)))))
-
-
-(org-balance-re-make-group-names
- org-balance-valu-range-grp-range
- org-balance-valu-range-grp-unit)
+   (rxx-parse org-balance-valu-regexp valu-str)))
 
 (defconst
   org-balance-valu-range-regexp
-  (rx-to-string
+  (rxx
    ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
    ;; But either a number or a unit must be given.
-   `(or (seq (optional
-	      (seq
-	       (org-balance-numbered-group
-		,org-balance-valu-range-grp-range
-		(regexp ,org-balance-number-range-regexp))
-	       (one-or-more whitespace)))
-	     (org-balance-numbered-group
-	      ,org-balance-valu-range-grp-unit (regexp ,org-balance-unit-regexp)))
-	(seq (org-balance-numbered-group
-	      ,org-balance-valu-range-grp-range (regexp ,org-balance-number-range-regexp))
-	     (optional
-	      (seq
-	       (one-or-more whitespace)
-	       (org-balance-numbered-group
-		,org-balance-valu-range-grp-unit (regexp ,org-balance-unit-regexp))))))))
+   `(or (seq (optional (seq (named-grp range ,org-balance-number-range-regexp) (one-or-more whitespace)))
+	     (named-grp unit ,org-balance-unit-regexp))
+	(seq (named-grp range) (optional (one-or-more whitespace) (named-grp unit))))
+   (lambda (match-str)
+     (let ((number-range (or (rxx-match-val 'range) (cons 1 1)))
+	   (unit (or (rxx-match-val 'unit) "item")))
+       (cons (org-balance-make-valu (car number-range) unit)
+	     (org-balance-make-valu (cdr number-range) unit))))
+   "value range"))
+     
 
 (defun org-balance-parse-valu-range (valu-str)
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
-  (or
-   (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
-
-   (save-match-data
-     (if (org-balance-full-match org-balance-valu-range-regexp valu-str)
-	 (let ((number-range (org-balance-parse-number-range
-			      (or (match-string org-balance-valu-range-grp-range valu-str) "1")))
-	       (unit (or (match-string org-balance-valu-range-grp-unit valu-str) "item")))
-	   (cons (org-balance-make-valu (car number-range) unit)
-		 (org-balance-make-valu (cdr number-range) unit)))
-       (error "Could not parse %s as a value range with a unit" valu-str)))))
-
+  (rxx-parse org-balance-valu-range-regexp valu-str))
 
 (defconst org-balance-ratio-words (regexp-opt (list "per" "every" "each" "/" "a" "in a")))
 
@@ -1243,48 +1162,29 @@ changing only the numerator."
   margin
   text)
 
-(org-balance-re-make-group-names
- org-balance-valu-ratio-goal-grp-polarity
- org-balance-valu-ratio-goal-grp-num
- org-balance-valu-ratio-goal-grp-denom
- org-balance-valu-ratio-goal-grp-margin-percent
- org-balance-valu-ratio-goal-grp-margin-val)
-
 (defconst org-balance-polarity-atmost-regexp (regexp-opt (list "at most")))
 (defconst org-balance-polarity-atleast-regexp (regexp-opt (list "at least")))
 (defconst org-balance-polarity-regexp
-  (rx-to-string
+  (rxx
    `(seq (zero-or-more whitespace)
 	 (seq
-	  (or (regexp ,org-balance-polarity-atmost-regexp)
-	      (regexp ,org-balance-polarity-atleast-regexp)))
-	 (zero-or-more whitespace))))
+	  (or (named-grp atmost ,org-balance-polarity-atmost-regexp)
+	      (named-grp atleast ,org-balance-polarity-atleast-regexp)))
+	 (zero-or-more whitespace))
+   (lambda (match-str)
+     (if (rxx-match-val 'atmost) 'atmost 'atleast))
+   "polarity"))
 
 (defun org-balance-parse-polarity (polarity-str)
-  (save-match-data
-    (cond ((org-balance-full-match org-balance-polarity-atmost-regexp
-				   (org-balance-trim-whitespace polarity-str))
-	   'atmost)
-	  ((org-balance-full-match org-balance-polarity-atleast-regexp
-				   (org-balance-trim-whitespace polarity-str))
-	   'atleast)
-	  (t (error "Could not parse %s as a polarity" polarity-str)))))
+  (rxx-parse org-balance-polarity-regexp polarity-str))
 
 (defconst org-balance-valu-ratio-goal-regexp
-  (rx-to-string
+  (rxx
    `(seq
-     (optional
-      (org-balance-numbered-group
-       ,org-balance-valu-ratio-goal-grp-polarity
-       (regexp ,org-balance-polarity-regexp)))
-     (org-balance-numbered-group
-      ,org-balance-valu-ratio-goal-grp-num (regexp ,org-balance-valu-range-regexp))
-     (one-or-more whitespace)
-     (regexp ,org-balance-ratio-words)
-     (one-or-more whitespace)
-     (org-balance-numbered-group
-      ,org-balance-valu-ratio-goal-grp-denom
-      (regexp ,org-balance-valu-regexp))
+     (optional (named-grp polarity ,org-balance-polarity-regexp))
+     (named-grp num ,org-balance-valu-range-regexp)
+     (one-or-more whitespace) (regexp ,org-balance-ratio-words) (one-or-more whitespace)
+     (named-grp denom ,org-balance-valu-regexp)
      (optional
       (seq
        (one-or-more whitespace)
@@ -1292,38 +1192,21 @@ changing only the numerator."
        (zero-or-more whitespace)
        (seq
 	(or
-	 (seq (org-balance-numbered-group ,org-balance-valu-ratio-goal-grp-margin-percent
-					  (regexp ,org-balance-number-regexp))
+	 (seq (named-grp margin-percent ,org-balance-number-regexp)
 	      (zero-or-more whitespace)
 	      "%")
-	 (org-balance-numbered-group
-	  ,org-balance-valu-ratio-goal-grp-margin-val
-	  (regexp ,org-balance-valu-regexp)))))))))
-  
-(defun org-balance-parse-valu-ratio-goal (goal-str)
-  "Parse a string representing a valu-ratio goal.
+	 (named-grp margin-val ,org-balance-valu-regexp))))))
+   (lambda (goal-str)
+     (let ((num (rxx-match-val 'num)))
+       (make-org-balance-valu-ratio-goal 
+	:num-min (car num)
+	:num-max (cdr num)
+	:denom (rxx-match-val 'denom)
+	:polarity (rxx-match-val 'polarity)
+	:margin (or (rxx-match-val 'margin-percent) (rxx-match-val 'margin-val))
+	:text goal-str)))
+   "value ratio goal"))
 
-The syntax is: [at most]
-
-"
-  (save-match-data
-    (if (org-balance-full-match org-balance-valu-ratio-goal-regexp goal-str)
-	(let ((valu-range (org-balance-parse-valu-range
-			   (match-string org-balance-valu-ratio-goal-grp-num goal-str))))
-	  (make-org-balance-valu-ratio-goal 
-	   :num-min (car valu-range)
-	   :num-max (cdr valu-range)
-	   :denom (org-balance-parse-valu (match-string org-balance-valu-ratio-goal-grp-denom goal-str))
-	   :polarity
-	   (let ((polarity-str (match-string org-balance-valu-ratio-goal-grp-polarity goal-str)))
-	     (if polarity-str (org-balance-parse-polarity polarity-str) nil))
-	   :margin (or (and (match-string org-balance-valu-ratio-goal-grp-margin-percent goal-str)
-			    (org-balance-parse-number
-			     (match-string org-balance-valu-ratio-goal-grp-margin-percent goal-str)))
-		       (and (match-string org-balance-valu-ratio-goal-grp-margin-val goal-str)
-			    (org-balance-parse-valu (match-string org-balance-valu-ratio-goal-grp-margin-val goal-str))))
-	   :text goal-str))
-      (error "Could not parse %s as a valu ratio goal" goal-str))))
 
 
 (provide 'org-balance)
