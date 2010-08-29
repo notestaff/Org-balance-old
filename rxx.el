@@ -82,9 +82,12 @@
 	     (grp-num (incf rxx-next-grp-num))
 	     (old-rxx-env rxx-env)
 	     (rxx-env (rxx-new-env))
-	     (grp-def (or (get-rxx-info grp-def-xregexp)
-			  (make-rxx-info :parser 'identity :env (list (cons nil nil))
-					 :form `(seq (regexp ,grp-def-xregexp)))))
+	     (grp-def
+	      (or (when (stringp grp-def-xregexp) (get-rxx-info grp-def-xregexp))
+		  (make-rxx-info :parser 'identity :env (rxx-new-env)
+				 :form
+				 (if (stringp grp-def-xregexp) `(seq (regexp ,grp-def-xregexp))
+				   grp-def-xregexp))))
 	     (regexp-here (format "\\(?%d:%s\\)" grp-num
 				  (rx-to-string (rxx-info-form grp-def)))))
     
