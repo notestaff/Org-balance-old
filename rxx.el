@@ -128,6 +128,9 @@
 	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
 		      rxx-env))
 	   (grp-info (rxx-env-lookup grp-name rxx-env))
+	   (dummy
+	    (unless grp-info
+	      (error "Named group %s not found" grp-name)))
 	   (match-here (match-string (rxx-info-num grp-info) rxx-obj)))
       (funcall code))))
 
