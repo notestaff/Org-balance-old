@@ -458,7 +458,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		     (goal-def-here (org-match-string-no-properties 2))
 		     (parsed-goal
 		      (condition-case err
-			  (rxx-parse org-balance-parse-valu-ratio-goal-regexp goal-def-here)
+			  (rxx-parse org-balance-valu-ratio-goal-regexp goal-def-here)
 			(error
 			 (incf org-balance-num-warnings)
 			 (message "Error parsing %s" goal-def-here)
