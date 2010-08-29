@@ -557,7 +557,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   (org-balance-compute-goal-deltas
    :callback1
    (lambda ()
-     (org-balance-put-overlay (format "%4d%% \"%15s\" actual: %.2f"
+     (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
 				      (round cb-delta-percent)
 				      cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual))))
      )
@@ -1162,21 +1162,16 @@ changing only the numerator."
   margin
   text)
 
-(defconst org-balance-polarity-atmost-regexp (regexp-opt (list "at most")))
-(defconst org-balance-polarity-atleast-regexp (regexp-opt (list "at least")))
 (defconst org-balance-polarity-regexp
   (rxx
    `(seq (zero-or-more whitespace)
 	 (seq
-	  (or (named-grp atmost ,org-balance-polarity-atmost-regexp)
-	      (named-grp atleast ,org-balance-polarity-atleast-regexp)))
+	  (or (named-grp atmost ,(regexp-opt (list "at most")))
+	      (named-grp atleast ,(regexp-opt (list "at least")))))
 	 (zero-or-more whitespace))
    (lambda (match-str)
      (if (rxx-match-val 'atmost) 'atmost 'atleast))
    "polarity"))
-
-(defun org-balance-parse-polarity (polarity-str)
-  (rxx-parse org-balance-polarity-regexp polarity-str))
 
 (defconst org-balance-valu-ratio-goal-regexp
   (rxx
@@ -1186,16 +1181,18 @@ changing only the numerator."
      (one-or-more whitespace) (regexp ,org-balance-ratio-words) (one-or-more whitespace)
      (named-grp denom ,org-balance-valu-regexp)
      (optional
-      (seq
-       (one-or-more whitespace)
-       "+-"
-       (zero-or-more whitespace)
+      (named-grp
+       margin
        (seq
-	(or
-	 (seq (named-grp margin-percent ,org-balance-number-regexp)
-	      (zero-or-more whitespace)
-	      "%")
-	 (named-grp margin-val ,org-balance-valu-regexp))))))
+	(one-or-more whitespace)
+	"+-"
+	(zero-or-more whitespace)
+	(seq
+	 (or
+	  (seq (named-grp percent ,org-balance-number-regexp)
+	       (zero-or-more whitespace)
+	       "%")
+	  (named-grp val ,org-balance-valu-regexp)))))))
    (lambda (goal-str)
      (let ((num (rxx-match-val 'num)))
        (make-org-balance-valu-ratio-goal 
@@ -1203,7 +1200,7 @@ changing only the numerator."
 	:num-max (cdr num)
 	:denom (rxx-match-val 'denom)
 	:polarity (rxx-match-val 'polarity)
-	:margin (or (rxx-match-val 'margin-percent) (rxx-match-val 'margin-val))
+	:margin (or (rxx-match-val '(margin percent)) (rxx-match-val '(margin val)))
 	:text goal-str)))
    "value ratio goal"))
 
