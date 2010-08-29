@@ -177,12 +177,13 @@ the parsed result in case of match, or nil in case of mismatch."
   ;; add options to:
   ;;   - require that the full string match
   ;;   - work with re-search-forward and re-search-bwd.
-  ;;     
-  (when (string-match xregexp s)
-    (let* ((rxx-info (rxx-get-rxx xregexp))
-	   (rxx-env (rxx-info-env rxx-info))
-	   (rxx-obj s))
-      (funcall (rxx-info-parser rxx-info) (match-string 0 s)))))
+  ;;
+  (save-match-data
+    (when (string-match xregexp s)
+      (let* ((rxx-info (rxx-get-rxx xregexp))
+	     (rxx-env (rxx-info-env rxx-info))
+	     (rxx-obj s))
+	(funcall (rxx-info-parser rxx-info) (match-string 0 s))))))
 
 ;;
 ;; so, i can take the regexp form and call rx-to-string on it
