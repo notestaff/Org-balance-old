@@ -120,17 +120,21 @@
 
 (defun rxx-match-aux (code)
   "Common part of `rxx-match-val' and `rxx-match-string'; see their documentation."
+  (declare (special grp-name object xregexp rxx-object rxx-xregexp))
   (save-match-data
-    (let* ((rxx-object (or object (when (boundp 'rxx-object) rxx-object)))
-	   (xregexp (or xregexp (when (boundp 'rxx-xregexp) rxx-xregexp)))
-	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
-		      rxx-env))
-	   (grp-info (rxx-env-lookup grp-name rxx-env))
-	   (dummy
-	    (unless grp-info
-	      (error "Named group %s not found" grp-name)))
-	   (match-here (match-string (rxx-info-num grp-info) rxx-object)))
-      (funcall code))))
+    (let* ((xregexp (or xregexp (when (boundp 'rxx-xregexp) rxx-xregexp))))
+      (unless xregexp
+	(error "Need to provide xregexp, either as argument or by binding rxx-xregexp"))
+      (unless (and (stringp xregexp) (get-rxx-info xregexp))
+	(error "Need to provide xregexp returned by `rxx'; got `%s'" xregexp))
+      (let* ((rxx-env (rxx-info-env (get-rxx-info xregexp)))
+	     (grp-info (rxx-env-lookup grp-name rxx-env))
+	     (dummy
+	      (unless grp-info
+		(error "Named group %s not found" grp-name)))
+	     (rxx-object (or object (when (boundp 'rxx-object) rxx-object)))
+	     (match-here (match-string (rxx-info-num grp-info) rxx-object)))
+	(funcall code)))))
 
 (defun rxx-match-val (grp-name &optional object xregexp)
   "Return the parsed value matched by named group GRP-NAME.
