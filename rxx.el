@@ -118,7 +118,7 @@
 						   :form (rxx-info-form grp-def)))))
 	  regexp-here)))))
 
-(defun rxx-match-val (grp-name &optional object xregexp)
+(defun rxx-match-aux (code)
 
   ;; so, if this group stands for just a group, then, just return a string.
   ;; but, if this group stands for 
@@ -129,22 +129,18 @@
 		      rxx-env))
 	   (grp-info (rxx-env-lookup grp-name rxx-env))
 	   (match-here (match-string (rxx-info-num grp-info) rxx-obj)))
-      (when match-here
-	(let ((rxx-env (rxx-info-env grp-info))) 
-	  (funcall (rxx-info-parser grp-info) match-here))))))
+      (funcall code))))
 
+(defun rxx-match-val (grp-name &optional object xregexp)
+  (rxx-match-aux
+   (lambda ()
+     (when match-here
+       (let ((rxx-env (rxx-info-env grp-info))) 
+	 (funcall (rxx-info-parser grp-info) match-here))))))
 
 (defun rxx-match-string (grp-name &optional object xregexp)
+  (rxx-match-aux (lambda () match-here)))
 
-  ;; so, if this group stands for just a group, then, just return a string.
-  ;; but, if this group stands for 
-
-  (save-match-data
-    (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
-	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
-		      rxx-env))
-	   (grp-info (rxx-env-lookup grp-name rxx-env)))
-      (match-string (rxx-info-num grp-info) rxx-obj))))
 
 (defun rxx (form &optional parser descr)
   "Construct a regexp from the FORM, using the syntax of `rx-to-string' with some
