@@ -602,3 +602,129 @@ expression, in a shy group for safety."
   (let* ((parts (split-string fraction-str (regexp-opt (list " per " " every " " each " " / " " a ")))))
     (* org-balance-minutes-per-day (/ (float (org-balance-parse-count (first parts)))
 	       (assoc-val 'duration-in-minutes (org-balance-parse-duration-into-minutes (second parts)))))))
+
+
+(defconst org-balance-re-next-group-num 10)
+(defun org-balance-re-get-group-num ()
+  "Create a unique number to be used for a particular numbered
+group within a particular regexp."  
+  (incf org-balance-re-next-group-num))
+
+(defmacro org-balance-re-make-group-names (&rest names)
+  "Declare the specified variables as constants and assign them
+unique integer ids, for use as ids of group numbers in numbered
+groups in regexps." 
+  (cons
+   'progn
+   (mapcar
+    (lambda (name)
+      (let* ((name-str (symbol-name name)))
+	`(defconst ,name (org-balance-re-get-group-num))))
+    names)))
+
+
+(defun org-balance-rx-numbered-group (form)
+  "Extend the rx macro and rx-to-string function to support numbered groups
+when building regexps. Parse and produce code from FORM, which is `(org-balance-numbered-group group-number ...)'."
+  (concat "\\(?"
+	  (number-to-string (second form))
+	  ":"
+	  ;; Several sub-forms implicitly concatenated.
+	  (mapconcat (lambda (re) (rx-form re ':)) (cddr form) nil)
+          "\\)"))
+
+(unless (assoc 'org-balance-numbered-group rx-constituents)
+  (push '(org-balance-numbered-group . (org-balance-rx-numbered-group 1 nil)) rx-constituents))
+
+;;
+;; so, i can take the regexp form and call rx-to-string on it
+;; (after first binding rx-constituents to our extensions in a let).
+;; during that time, there will be callbacks to our rxx-named-xregexp forms.
+;;
+;; our routine for handling this form will:
+;;   - generate a group number for wrapping what matched this form
+;;   - add 
+;;
+;;
+;;
+
+(defconst org-balance-clock-time-xregexp
+  (rxx
+   '(seq "[" (one-or-more anything) "]")
+   (lambda (time-str)
+     (org-float-time (apply 'encode-time (org-parse-time-string time-str)))))
+  "A clock time, e.g. [2010-03-17 Wed 16:27]")
+	       
+(defconst org-balance-clock-range-xregexp
+  (rxx
+   `(seq
+     (zero-or-more whitespace)
+     ,org-clock-string (one-or-more whitespace)
+     
+     (named-grp clock-range-start ,org-balance-clock-time-xregexp) "--"
+     (named-grp clock-range-end ,org-balance-clock-time-xregexp)
+     
+     ;(one-or-more whitespace) "=>" (one-or-more whitespace)
+     ;(shy-grp ,time-duration-xregexp)
+     )
+   
+   (lambda (clock-range-str)
+     (list (rxx-match-val 'clock-range-start)
+	   (rxx-match-val 'clock-range-end))))
+  "A clock time range, e.g. [2010-03-17 Wed 16:27]--[2010-03-18 Thu 12:42] => 20:15")
+
+(defconst rxx-int-xregexp (rxx '(one-or-more digit) 'string-to-number))
+
+(setq z "123")
+
+(defconst rxx-interval-xregexp (rxx `(seq
+				      (named-grp beg ,rxx-int-xregexp)
+				      "-"
+				      (named-grp end ,rxx-int-xregexp))))
+
+(message "%s" rxx-interval-xregexp)
+
+(when nil
+  (progn
+    (setq z "CLOCK: [2009-11-01 Sun 14:34]--[2009-11-02 Mon 11:51]")
+    (string-match org-balance-clock-range-xregexp z)
+    (rxx-match-val 'clock-range-end z org-balance-clock-range-xregexp)))
+
+(string-match org-balance-clock-time-xregexp "[to]")
+		  
+(defun rxx-match-string (grp-name &optional object xregexp)
+
+  ;; so, if this group stands for just a group, then, just return a string.
+  ;; but, if this group stands for 
+
+  (save-match-data
+    (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
+	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
+		      rxx-env))
+	   (grp-info (cdr (assq grp-name rxx-env))))
+      (match-string (rxx-info-num grp-info) rxx-obj))))
+
+;; so, what needs to happen is that when we make this recursive call,
+;; we need to make 
+;;
+;; so, the macro would save the regexp as a string,
+;; but would also save the original form, so that if we need to construct
+;; a regexp with this subexpr, we can.
+;; 
+
+
+;; also make a macro that just constructs an expression for local use,
+;; e.g. within a let, rather than necessarily defining a global constant.
+
+
+;; so, what needs to happen is that when we make this recursive call,
+;; we need to make 
+;;
+;; so, the macro would save the regexp as a string,
+;; but would also save the original form, so that if we need to construct
+;; a regexp with this subexpr, we can.
+;; 
+
+
+;; also make a macro that just constructs an expression for local use,
+;; e.g. within a let, rather than necessarily defining a global constant.

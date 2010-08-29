@@ -158,6 +158,8 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 					       0
 					       nil))
 				rx-constituents))
+
+	 ;; also allow named-group or ngrp or other names
     
 	 ;; var: regexp - the string regexp for the form.
 	 (regexp
