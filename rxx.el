@@ -3,7 +3,7 @@
 ;;
 ;; Author: Ilya Shlyakhter <ilya_shl at alum dot mit dot edu>
 ;; Keywords: outlines, hypermedia, calendar, wp
-;; Homepage: http://orgmode.org
+;; Homepage: http://ilya.cc/rxx
 ;; Version: 0.9
 ;;
 ;; This file is not yet part of GNU Emacs.
@@ -56,40 +56,51 @@
 (require 'rx)
 (eval-when-compile (require 'cl))
 
-(defstruct rxx-info form parser regexp env num)
+(defstruct rxx-info form parser regexp env num descr)
 
-(defun rxx-get-rxx (xregexp)
-  "Extract rxx-info from regexp string, if there"
+(defun get-rxx-info (xregexp)
+  "Extract rxx-info from regexp string, if there, otherwise return nil."
   (get-text-property 0 'rxx xregexp))
 
-(defun rxx-put-rxx (regexp rxx-info)
-  "Put rxx-info on a regexp string"
+(defun put-rxx-info (regexp rxx-info)
+  "Put rxx-info on a regexp string, replacing any already there."
     (put-text-property 0 (length regexp) 'rxx rxx-info regexp))
-  
+
+(defun rxx-new-env ()
+  "Create a fresh rxx-env mapping group names to group definitions"
+  (list (cons nil nil)))
 
 (defun rxx-process-named-grp (form)
   "Process the (named-grp grp-name grp-def) form."
   (let* ((grp-name (second form))
-	 (dummy (when (assq grp-name rxx-env )
-		  (error "Duplicate group name %s" grp-name)))
-	 (grp-def-xregexp (third form))
-	 (grp-num (incf rxx-next-grp-num))
-	 (old-rxx-env rxx-env)
-
-	 ;; start a fresh mapping for group names encountered inside
-	 ;; this named group
-	 (rxx-env (list (cons nil nil)))
-	 (grp-def (or (rxx-get-rxx grp-def-xregexp)
-		      (make-rxx-info :parser 'identity :env (list (cons nil nil))
-				     :form `(seq (regexp ,grp-def-xregexp)))))
-	 (regexp-here (format "\\(?%d:%s\\)" grp-num
-			      (rx-to-string (rxx-info-form grp-def)))))
-    (nconc old-rxx-env (list (cons grp-name (make-rxx-info
-					     :num grp-num
-					     :parser (rxx-info-parser grp-def)
-					     :env rxx-env
-					     :form (rxx-info-form grp-def)))))
-    regexp-here))
+	 ;(dummy (when (assq grp-name rxx-env )
+	;	  (error "Duplicate group name %s" grp-name)))
+	 (prev-grp-def (assq grp-name rxx-env)))
+    (if prev-grp-def
+	(rxx-info-regexp (cdr prev-grp-def))
+      (let* ((grp-def-xregexp (third form))
+	     (grp-num (incf rxx-next-grp-num))
+	     (old-rxx-env rxx-env)
+	     (rxx-env (rxx-new-env))
+	     (grp-def (or (get-rxx-info grp-def-xregexp)
+			  (make-rxx-info :parser 'identity :env (list (cons nil nil))
+					 :form `(seq (regexp ,grp-def-xregexp)))))
+	     (regexp-here (format "\\(?%d:%s\\)" grp-num
+				  (rx-to-string (rxx-info-form grp-def)))))
+    
+	(nconc old-rxx-env (list (cons grp-name (make-rxx-info
+						 :num grp-num
+						 :parser (rxx-info-parser grp-def)
+						 :env rxx-env
+						 
+						 :regexp regexp-here
+						 
+						 ;; also put regexp here
+						 ;; if group seen before, reuse, unless this is an error
+						 ;; (make it an option to disable this error)
+						 
+						 :form (rxx-info-form grp-def)))))
+	regexp-here))))
 
 (defun rxx-match-val (grp-name &optional object xregexp)
 
@@ -98,7 +109,7 @@
 
   (save-match-data
     (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
-	   (rxx-env (if xregexp (rxx-info-env (rxx-get-rxx xregexp))
+	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
 		      rxx-env))
 	   (grp-info (cdr (assq grp-name rxx-env)))
 	   (match-here (match-string (rxx-info-num grp-info) rxx-obj)))
@@ -114,7 +125,7 @@
 
   (save-match-data
     (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
-	   (rxx-env (if xregexp (rxx-info-env (rxx-get-rxx xregexp))
+	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
 		      rxx-env))
 	   (grp-info (cdr (assq grp-name rxx-env))))
       (match-string (rxx-info-num grp-info) rxx-obj))))
@@ -131,7 +142,7 @@
 ;; also make a macro that just constructs an expression for local use,
 ;; e.g. within a let, rather than necessarily defining a global constant.
 
-(defun rxx (form &optional parser)
+(defun rxx (form &optional parser descr)
   "Construct a regexp from the FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions include (named-grp name forms); in the returned regexp, 
 named groups are represented as numbered groups, and a mapping of group names to
@@ -146,12 +157,14 @@ into an object.  The PARSER function is
 passed one argument, the matched string, and may also call rxx-match-val
 and rxx-match-string with name of named groups in the form to get their values.
 It does not need to pass the regexp to these functions.
+
+DESCR, if given, is used in error messages by `rxx-parse'.
 "
   ;
   ; cache the result of rxx-xregexp on the whole form.
   ; but also save it for use in subexpressions.
   ;
-  (let* ((rxx-env (list (cons nil nil)))
+  (let* ((rxx-env (rxx-new-env))
 	 (rxx-next-grp-num 20)
 	 (rx-constituents (cons '(named-grp . (rxx-process-named-grp
 					       2  ; at least two args: grp name and def
@@ -167,13 +180,13 @@ It does not need to pass the regexp to these functions.
 	  (rx-to-string form))
 	 (rxx-info (make-rxx-info
 		    :form form :parser (if parser parser 'identity)
-		    :regexp regexp :env rxx-env
+		    :regexp regexp :env rxx-env :descr descr
 		    )))
-    (rxx-put-rxx regexp rxx-info)
+    (put-rxx-info regexp rxx-info)
     regexp
     ))
 
-(defun rxx-parse (xregexp s)
+(defun rxx-parse (xregexp s &optional partial-match-ok)
   "Match the string against the given extended regexp, and return
 the parsed result in case of match, or nil in case of mismatch."
   ;; add options to:
@@ -181,11 +194,16 @@ the parsed result in case of match, or nil in case of mismatch."
   ;;   - work with re-search-forward and re-search-bwd.
   ;;
   (save-match-data
-    (when (string-match xregexp s)
-      (let* ((rxx-info (rxx-get-rxx xregexp))
-	     (rxx-env (rxx-info-env rxx-info))
-	     (rxx-obj s))
-	(funcall (rxx-info-parser rxx-info) (match-string 0 s))))))
+    (let ((rxx-info (get-rxx-info xregexp)))
+      (if (and (string-match xregexp s)
+	       (or partial-match-ok
+		   (and (= (match-beginning 0) 0)
+			(= (match-end 0) (length s)))))
+	  (let* ((rxx-env (rxx-info-env rxx-info))
+		 (rxx-obj s))
+	    (funcall (rxx-info-parser rxx-info) (match-string 0 s)))
+	(error "Error parsing \`%s\' as %s" s
+	       (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))))
 
 ;;
 ;; so, i can take the regexp form and call rx-to-string on it
