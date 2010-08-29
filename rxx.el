@@ -58,6 +58,15 @@
 
 (defstruct rxx-info form parser regexp env num)
 
+(defun rxx-get-rxx (xregexp)
+  "Extract rxx-info from regexp string, if there"
+  (get-text-property 0 'rxx xregexp))
+
+(defun rxx-put-rxx (regexp rxx-info)
+  "Put rxx-info on a regexp string"
+    (put-text-property 0 (length regexp) 'rxx rxx-info regexp))
+  
+
 (defun rxx-process-named-grp (form)
   "Process the (named-grp grp-name grp-def) form."
   (let* ((grp-name (second form))
@@ -70,7 +79,7 @@
 	 ;; start a fresh mapping for group names encountered inside
 	 ;; this named group
 	 (rxx-env (list (cons nil nil)))
-	 (grp-def (get-text-property 0 'rxx grp-def-xregexp))
+	 (grp-def (rxx-get-rxx grp-def-xregexp))
 	 (regexp-here (format "\\(?%d:%s\\)" grp-num
 			      (rx-to-string (rxx-info-form grp-def)))))
     (nconc old-rxx-env (list (cons grp-name (make-rxx-info
@@ -80,38 +89,33 @@
 					     :form (rxx-info-form grp-def)))))
     regexp-here))
 
-(defun rxx-string-match (xregexp s)
-    ;
-    ; temporarily add our syntax to 
-    ;
-    (when (string-match (rxx-regexp xregexp) s)
-      (let ((name2num (rxx-xregexp-name2num xregexp)))
-	(funcall (rxx-xregexp-parser xregexp) (match-string 0))
-      )))
-
 (defun rxx-match-val (grp-name &optional object xregexp)
 
   ;; so, if this group stands for just a group, then, just return a string.
   ;; but, if this group stands for 
-  
-  (let* ((rxx-env (if xregexp (rxx-info-env (get-text-property 0 'rxx xregexp))
-		    rxx-env))
-	 (grp-info (cdr (assq grp-name rxx-env)))
-	 (match-here (match-string (rxx-info-num grp-info) object)))
-    (when match-here
-      (let ((rxx-env (rxx-info-env grp-info))) 
-	(funcall (rxx-info-parser grp-info) match-here)))))
+
+  (save-match-data
+    (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
+	   (rxx-env (if xregexp (rxx-info-env (rxx-get-rxx xregexp))
+		      rxx-env))
+	   (grp-info (cdr (assq grp-name rxx-env)))
+	   (match-here (match-string (rxx-info-num grp-info) rxx-obj)))
+      (when match-here
+	(let ((rxx-env (rxx-info-env grp-info))) 
+	  (funcall (rxx-info-parser grp-info) match-here))))))
 
 
 (defun rxx-match-string (grp-name &optional object xregexp)
 
   ;; so, if this group stands for just a group, then, just return a string.
   ;; but, if this group stands for 
-  
-  (let* ((rxx-env (if xregexp (rxx-info-env (get-text-property 0 'rxx xregexp))
-		    rxx-env))
-	 (grp-info (cdr (assq grp-name rxx-env))))
-	 (match-string (rxx-info-num grp-info) object)))
+
+  (save-match-data
+    (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
+	   (rxx-env (if xregexp (rxx-info-env (rxx-get-rxx xregexp))
+		      rxx-env))
+	   (grp-info (cdr (assq grp-name rxx-env))))
+      (match-string (rxx-info-num grp-info) rxx-obj))))
 
 ;; so, what needs to happen is that when we make this recursive call,
 ;; we need to make 
@@ -163,7 +167,7 @@ It does not need to pass the regexp to these functions.
 		    :form form :parser (if parser parser 'identity)
 		    :regexp regexp :env rxx-env
 		    )))
-    (put-text-property 0 (length regexp) 'rxx rxx-info regexp)
+    (rxx-put-rxx regexp rxx-info)
     regexp
     ))
 
@@ -174,9 +178,11 @@ the parsed result in case of match, or nil in case of mismatch."
   ;;   - require that the full string match
   ;;   - work with re-search-forward and re-search-bwd.
   ;;     
-  (when (string-match (rxx-xregexp-regexp xregexp) s)
-    (let ((name2num (rxx-xregexp-name2num xregexp)))
-      (apply (rxx-xregexp-parser xregexp) (match-string 0)))))
+  (when (string-match xregexp s)
+    (let* ((rxx-info (rxx-get-rxx xregexp))
+	   (rxx-env (rxx-info-env rxx-info))
+	   (rxx-obj s))
+      (funcall (rxx-info-parser rxx-info) (match-string 0 s)))))
 
 ;;
 ;; so, i can take the regexp form and call rx-to-string on it
@@ -211,7 +217,7 @@ the parsed result in case of match, or nil in case of mismatch."
      )
    
    (lambda (clock-range-str)
-     (cons (rxx-match-val 'clock-range-start)
+     (list (rxx-match-val 'clock-range-start)
 	   (rxx-match-val 'clock-range-end))))
   "A clock time range, e.g. [2010-03-17 Wed 16:27]--[2010-03-18 Thu 12:42] => 20:15")
 
@@ -230,7 +236,7 @@ the parsed result in case of match, or nil in case of mismatch."
   (progn
     (setq z "CLOCK: [2009-11-01 Sun 14:34]--[2009-11-02 Mon 11:51]")
     (string-match org-balance-clock-range-xregexp z)
-    (rxx-match-val 'clock-range-start z org-balance-clock-range-xregexp)))
+    (rxx-match-val 'clock-range-end z org-balance-clock-range-xregexp)))
 
 (string-match org-balance-clock-time-xregexp "[to]")
 		  
