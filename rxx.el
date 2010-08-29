@@ -70,6 +70,15 @@
   "Create a fresh rxx-env mapping group names to group definitions"
   (list (cons nil nil)))
 
+(defun rxx-env-lookup (grp-name rxx-env)
+  "Lookup the rxx-info for this grp-name"
+  (when (symbolp grp-name) (setq grp-name (list grp-name)))
+  (let ((grp-info (cdr (assq (first grp-name) rxx-env))))
+    (if (cdr grp-name)
+	(rxx-env-lookup (cdr grp-name)
+			(rxx-info-env grp-info))
+      grp-info)))
+
 (defun rxx-process-named-grp (form)
   "Process the (named-grp grp-name grp-def) form."
   (let* ((grp-name (second form))
@@ -114,7 +123,7 @@
     (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
 	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
 		      rxx-env))
-	   (grp-info (cdr (assq grp-name rxx-env)))
+	   (grp-info (rxx-env-lookup grp-name rxx-env))
 	   (match-here (match-string (rxx-info-num grp-info) rxx-obj)))
       (when match-here
 	(let ((rxx-env (rxx-info-env grp-info))) 
@@ -130,7 +139,7 @@
     (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
 	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
 		      rxx-env))
-	   (grp-info (cdr (assq grp-name rxx-env))))
+	   (grp-info (rxx-env-lookup grp-name rxx-env)))
       (match-string (rxx-info-num grp-info) rxx-obj))))
 
 (defun rxx (form &optional parser descr)
