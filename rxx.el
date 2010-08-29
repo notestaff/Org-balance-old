@@ -167,7 +167,7 @@ DESCR, if given, is used in error messages by `rxx-parse'.
   (let* ((rxx-env (rxx-new-env))
 	 (rxx-next-grp-num 20)
 	 (rx-constituents (cons '(named-grp . (rxx-process-named-grp
-					       2  ; at least two args: grp name and def
+					       0
 					       nil))
 				rx-constituents))
     
