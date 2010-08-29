@@ -69,9 +69,9 @@
 
 	 ;; start a fresh mapping for group names encountered inside
 	 ;; this named group
-	 (rxx-env '((nil)))
+	 (rxx-env (list (cons nil nil)))
 	 (grp-def (get-text-property 0 'rxx grp-def-xregexp))
-	 (regexp-here (format "\\(%d?:%s\\)" grp-num
+	 (regexp-here (format "\\(?%d:%s\\)" grp-num
 			      (rx-to-string (rxx-info-form grp-def)))))
     (nconc old-rxx-env (list (cons grp-name (make-rxx-info
 					     :num grp-num
@@ -89,7 +89,7 @@
 	(funcall (rxx-xregexp-parser xregexp) (match-string 0))
       )))
 
-(defun rxx-match-val (grp-name &optional xregexp)
+(defun rxx-match-val (grp-name &optional object xregexp)
 
   ;; so, if this group stands for just a group, then, just return a string.
   ;; but, if this group stands for 
@@ -97,10 +97,21 @@
   (let* ((rxx-env (if xregexp (rxx-info-env (get-text-property 0 'rxx xregexp))
 		    rxx-env))
 	 (grp-info (cdr (assq grp-name rxx-env)))
-	 (match-here (match-string (rxx-grp-num grp-info))))
+	 (match-here (match-string (rxx-info-num grp-info) object)))
     (when match-here
-      (let ((rxx-env (rxx-grp-env grp-info))) 
-	(funcall (rxx-grp-parser grp-info) match-here)))))
+      (let ((rxx-env (rxx-info-env grp-info))) 
+	(funcall (rxx-info-parser grp-info) match-here)))))
+
+
+(defun rxx-match-string (grp-name &optional object xregexp)
+
+  ;; so, if this group stands for just a group, then, just return a string.
+  ;; but, if this group stands for 
+  
+  (let* ((rxx-env (if xregexp (rxx-info-env (get-text-property 0 'rxx xregexp))
+		    rxx-env))
+	 (grp-info (cdr (assq grp-name rxx-env))))
+	 (match-string (rxx-info-num grp-info) object)))
 
 ;; so, what needs to happen is that when we make this recursive call,
 ;; we need to make 
@@ -134,22 +145,13 @@ It does not need to pass the regexp to these functions.
   ; cache the result of rxx-xregexp on the whole form.
   ; but also save it for use in subexpressions.
   ;
-
-  (let* (;; var: rxx-env - map from group name used in FORM
-	 ;; to group info in the returned regexp.
-	 ;; Only includes mappings for named groups at top leve of 
-	 ;; FORM, not for any nested once.
-	 (rxx-env '((nil)))
-
-	 ;; var: rxx-next-grp-num - the next group number to generate
-	 ;;    as we generate group numbers for named groups.
+  (let* ((rxx-env (list (cons nil nil)))
 	 (rxx-next-grp-num 20)
-
-	 ;; extend the language understood by rx-to-string with named groups
 	 (rx-constituents (cons '(named-grp . (rxx-process-named-grp
 					       2  ; at least two args: grp name and def
 					       nil))
 				rx-constituents))
+    
 	 ;; var: regexp - the string regexp for the form.
 	 (regexp
 	  ;; whenever the rx-to-string call below encounters a (named-grp ) construct
@@ -163,7 +165,7 @@ It does not need to pass the regexp to these functions.
 		    )))
     (put-text-property 0 (length regexp) 'rxx rxx-info regexp)
     regexp
-  ))
+    ))
 
 (defun rxx-parse (xregexp s)
   "Match the string against the given extended regexp, and return
@@ -198,7 +200,7 @@ the parsed result in case of match, or nil in case of mismatch."
 (defconst org-balance-clock-range-xregexp
   (rxx
    `(seq
-     line-start (zero-or-more whitespace)
+     (zero-or-more whitespace)
      ,org-clock-string (one-or-more whitespace)
      
      (named-grp clock-range-start ,org-balance-clock-time-xregexp) "--"
@@ -212,6 +214,25 @@ the parsed result in case of match, or nil in case of mismatch."
      (cons (rxx-match-val 'clock-range-start)
 	   (rxx-match-val 'clock-range-end))))
   "A clock time range, e.g. [2010-03-17 Wed 16:27]--[2010-03-18 Thu 12:42] => 20:15")
+
+(defconst rxx-int-xregexp (rxx '(one-or-more digit) 'string-to-number))
+
+(setq z "123")
+
+(defconst rxx-interval-xregexp (rxx `(seq
+				      (named-grp beg ,rxx-int-xregexp)
+				      "-"
+				      (named-grp end ,rxx-int-xregexp))))
+
+(message "%s" rxx-interval-xregexp)
+
+(when nil
+  (progn
+    (setq z "CLOCK: [2009-11-01 Sun 14:34]--[2009-11-02 Mon 11:51]")
+    (string-match org-balance-clock-range-xregexp z)
+    (rxx-match-val 'clock-range-start z org-balance-clock-range-xregexp)))
+
+(string-match org-balance-clock-time-xregexp "[to]")
 		  
 (provide 'rxx)
 
