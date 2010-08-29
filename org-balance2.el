@@ -338,6 +338,14 @@ Useful when you did some task but weren't near a computer to start/stop the org 
 as you were doing it.
 "
   (interactive)
+  ;
+  ; allow various specifications of time: :15 for 15 mins, 15m or any other (number, unit) thing.
+  ; also compound specs such as 1 hour 15 mins (so, basically, ((value unit)+) as long as units
+  ; are compatible and keep decreasing.
+  ;
+  ; also, have additional ways to enter some specific units -- e.g. $1 for money units,
+  ; :15 for 15 mins, 01:15, etc.  1h30m, 1.5hrs, etc.
+  ;
   (unless hours (setq hours (float (string-to-number (read-string "How many hours? ")))))
   (unless ago (setq ago (float (string-to-number (read-string "Finished how long ago (in hours)? " nil nil 0)))))
 
