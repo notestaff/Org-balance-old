@@ -130,18 +130,6 @@
 	   (grp-info (cdr (assq grp-name rxx-env))))
       (match-string (rxx-info-num grp-info) rxx-obj))))
 
-;; so, what needs to happen is that when we make this recursive call,
-;; we need to make 
-;;
-;; so, the macro would save the regexp as a string,
-;; but would also save the original form, so that if we need to construct
-;; a regexp with this subexpr, we can.
-;; 
-
-
-;; also make a macro that just constructs an expression for local use,
-;; e.g. within a let, rather than necessarily defining a global constant.
-
 (defun rxx (form &optional parser descr)
   "Construct a regexp from the FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions include (named-grp name forms); in the returned regexp, 
@@ -205,61 +193,5 @@ the parsed result in case of match, or nil in case of mismatch."
 	(error "Error parsing \`%s\' as %s" s
 	       (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))))
 
-;;
-;; so, i can take the regexp form and call rx-to-string on it
-;; (after first binding rx-constituents to our extensions in a let).
-;; during that time, there will be callbacks to our rxx-named-xregexp forms.
-;;
-;; our routine for handling this form will:
-;;   - generate a group number for wrapping what matched this form
-;;   - add 
-;;
-;;
-;;
-
-(defconst org-balance-clock-time-xregexp
-  (rxx
-   '(seq "[" (one-or-more anything) "]")
-   (lambda (time-str)
-     (org-float-time (apply 'encode-time (org-parse-time-string time-str)))))
-  "A clock time, e.g. [2010-03-17 Wed 16:27]")
-	       
-(defconst org-balance-clock-range-xregexp
-  (rxx
-   `(seq
-     (zero-or-more whitespace)
-     ,org-clock-string (one-or-more whitespace)
-     
-     (named-grp clock-range-start ,org-balance-clock-time-xregexp) "--"
-     (named-grp clock-range-end ,org-balance-clock-time-xregexp)
-     
-     ;(one-or-more whitespace) "=>" (one-or-more whitespace)
-     ;(shy-grp ,time-duration-xregexp)
-     )
-   
-   (lambda (clock-range-str)
-     (list (rxx-match-val 'clock-range-start)
-	   (rxx-match-val 'clock-range-end))))
-  "A clock time range, e.g. [2010-03-17 Wed 16:27]--[2010-03-18 Thu 12:42] => 20:15")
-
-(defconst rxx-int-xregexp (rxx '(one-or-more digit) 'string-to-number))
-
-(setq z "123")
-
-(defconst rxx-interval-xregexp (rxx `(seq
-				      (named-grp beg ,rxx-int-xregexp)
-				      "-"
-				      (named-grp end ,rxx-int-xregexp))))
-
-(message "%s" rxx-interval-xregexp)
-
-(when nil
-  (progn
-    (setq z "CLOCK: [2009-11-01 Sun 14:34]--[2009-11-02 Mon 11:51]")
-    (string-match org-balance-clock-range-xregexp z)
-    (rxx-match-val 'clock-range-end z org-balance-clock-range-xregexp)))
-
-(string-match org-balance-clock-time-xregexp "[to]")
-		  
 (provide 'rxx)
 
