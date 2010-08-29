@@ -81,38 +81,42 @@
 
 (defun rxx-process-named-grp (form)
   "Process the (named-grp grp-name grp-def) form."
+  (unless (and (consp form) (>= (length form) 2))
+    (error "Named group syntax error in %s: proper syntax is (named-grp name def)"
+	   form))
   (let* ((grp-name (second form))
-	 ;(dummy (when (assq grp-name rxx-env )
-	;	  (error "Duplicate group name %s" grp-name)))
 	 (prev-grp-def (assq grp-name rxx-env)))
     (if prev-grp-def
 	(rxx-info-regexp (cdr prev-grp-def))
-      (let* ((grp-def-xregexp (third form))
-	     (grp-num (incf rxx-next-grp-num))
-	     (old-rxx-env rxx-env)
-	     (rxx-env (rxx-new-env))
-	     (grp-def
-	      (or (when (stringp grp-def-xregexp) (get-rxx-info grp-def-xregexp))
-		  (make-rxx-info :parser 'identity :env (rxx-new-env)
-				 :form
-				 (if (stringp grp-def-xregexp) `(seq (regexp ,grp-def-xregexp))
-				   grp-def-xregexp))))
-	     (regexp-here (format "\\(?%d:%s\\)" grp-num
-				  (rx-to-string (rxx-info-form grp-def)))))
-    
-	(nconc old-rxx-env (list (cons grp-name (make-rxx-info
-						 :num grp-num
-						 :parser (rxx-info-parser grp-def)
-						 :env rxx-env
-						 
-						 :regexp regexp-here
-						 
-						 ;; also put regexp here
-						 ;; if group seen before, reuse, unless this is an error
-						 ;; (make it an option to disable this error)
-						 
-						 :form (rxx-info-form grp-def)))))
-	regexp-here))))
+      (progn
+	(unless (third form)
+	  (error "Missing named group definition: %s" form))
+	(let* ((grp-def-xregexp (third form))
+	       (grp-num (incf rxx-next-grp-num))
+	       (old-rxx-env rxx-env)
+	       (rxx-env (rxx-new-env))
+	       (grp-def
+		(or (when (stringp grp-def-xregexp) (get-rxx-info grp-def-xregexp))
+		    (make-rxx-info :parser 'identity :env (rxx-new-env)
+				   :form
+				   (if (stringp grp-def-xregexp) `(seq (regexp ,grp-def-xregexp))
+				     grp-def-xregexp))))
+	       (regexp-here (format "\\(?%d:%s\\)" grp-num
+				    (rx-to-string (rxx-info-form grp-def)))))
+	  
+	  (nconc old-rxx-env (list (cons grp-name (make-rxx-info
+						   :num grp-num
+						   :parser (rxx-info-parser grp-def)
+						   :env rxx-env
+						   
+						   :regexp regexp-here
+						   
+						   ;; also put regexp here
+						   ;; if group seen before, reuse, unless this is an error
+						   ;; (make it an option to disable this error)
+						   
+						   :form (rxx-info-form grp-def)))))
+	  regexp-here)))))
 
 (defun rxx-match-val (grp-name &optional object xregexp)
 
@@ -165,9 +169,9 @@ DESCR, if given, is used in error messages by `rxx-parse'.
   ; but also save it for use in subexpressions.
   ;
   (let* ((rxx-env (rxx-new-env))
-	 (rxx-next-grp-num 20)
+	 (rxx-next-grp-num 10)
 	 (rx-constituents (cons '(named-grp . (rxx-process-named-grp
-					       0
+					       1
 					       nil))
 				rx-constituents))
 
@@ -185,8 +189,7 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 		    :regexp regexp :env rxx-env :descr descr
 		    )))
     (put-rxx-info regexp rxx-info)
-    regexp
-    ))
+    regexp))
 
 (defun rxx-parse (xregexp s &optional partial-match-ok)
   "Match the string against the given extended regexp, and return
