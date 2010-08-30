@@ -58,22 +58,44 @@
 (require 'rx)
 (eval-when-compile (require 'cl))
 
-(defstruct rxx-info form parser regexp env num descr)
+;; struct: rxx-info - information about a regexp or one named group within it.  when the former, it is attached to a regexp
+;;    as a text property by `put-rxx-info'; the resulting annotated regexp is referred to as an aregexp in this module.
+(defstruct rxx-info
+  ;; field: form - the lisp form passed to `rx-to-string' to generate this regexp
+  form
+  ;; field: regexp - the regexp string returned by `rx-to-string'
+  regexp
+  ;; field: parser - function that takes a string matching this regexp, and constructs a parsed object from it.
+  ;;   in the simplest case it is the identity function that just returns the matched string itself.
+  ;;   the function can call `rxx-match-val' and `rxx-match-string' to get the parsed object or the string matched by
+  ;;   a named group of this regexp.
+  parser
+  ;; field: env - environment for resolving the names of named groups of this regexp.  maps name to rxx-info for the group.
+  env
+  ;; field: num - if this rxx-info is for the top-level regexp, nil; else, the number of the explicitly numbered group
+  ;; to which this named group was mapped.
+  num
+  ;; field: descr - a string describing what is matched by this regexp; used for creating readable error messages.
+  descr)
 
 (defun get-rxx-info (aregexp)
   "Extract rxx-info from regexp string, if there, otherwise return nil."
   (when (stringp aregexp) (get-text-property 0 'rxx aregexp)))
 
 (defun put-rxx-info (regexp rxx-info)
-  "Put rxx-info on a regexp string, replacing any already there."
+  "Put rxx-info on a regexp string, replacing any already there.  This creates an aregexp (annotated regexp)."
     (put-text-property 0 (length regexp) 'rxx rxx-info regexp))
 
 (defun rxx-new-env ()
-  "Create a fresh rxx-env mapping group names to group definitions"
+  "Create a fresh environment mapping group names to rxx-infos.  There is an environment for the top-level regexp, and
+also a separate one within each named group (for nested named groups).  We represent the environment as an alist.
+The alist always has at least one cell; this lets us add entries to an environment that was dynamically scoped into a
+function."
   (list (cons nil nil)))
 
 (defun rxx-env-lookup (grp-name rxx-env)
-  "Lookup the rxx-info for this grp-name, or return nil if not found."
+  "Lookup the rxx-info for the named group GRP-NAME in the environment RXX-ENV, or return nil if not found.  GRP-NAME is
+either a symbol, or a list of symbols indicating a path through nested named groups."
   (when (symbolp grp-name) (setq grp-name (list grp-name)))
   (let ((grp-info (cdr-safe (assq (first grp-name) rxx-env))))
     (when grp-info
@@ -83,16 +105,23 @@
 	grp-info))))
 
 (defun rxx-named-grp-num (grp-name &optional aregexp)
-  "Look up the numbered group number assigned to the given named group"
+  "Look up the explicitly numbered group number assigned to the given named group.  The annotated regexp must either be
+passed in as AREGEXP or scoped in as RXX-AREGEXP."
   (declare (special rxx-aregexp))
-  (rxx-info-num (rxx-env-lookup grp-name (rxx-info-env (get-rxx-info (or aregexp rxx-aregexp))))))
+  (rxx-info-num
+   (rxx-env-lookup
+    grp-name
+    (rxx-info-env
+     (get-rxx-info
+      (or aregexp (when (boundp 'rxx-aregexp) rxx-aregexp)
+	  (error "The annotated regexp must be either passed in explicitly, or scoped in as `rxx-aregexp'.")))))))
 
 (defun rxx-process-named-grp (form)
-  "Process the (named-grp grp-name grp-def) form."
+  "Process the (named-grp GRP-NAME GRP-DEF) form.  GRP-DEF can be an annotated regexp, a plain regexp, or a list of forms
+to be interpreted by `rxx-to-string'."
   (rx-check form)
   (unless (and (consp form) (>= (length form) 2))
-    (error "Named group syntax error in %s: proper syntax is (named-grp name def)"
-	   form))
+    (error "Named group syntax error in %s: proper syntax is (named-grp name def)" form))
   (let* ((grp-name (second form))
 	 (prev-grp-def (rxx-env-lookup grp-name rxx-env)))
     (if prev-grp-def (rxx-info-regexp prev-grp-def)
