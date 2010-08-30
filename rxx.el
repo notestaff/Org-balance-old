@@ -179,10 +179,13 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
     (rx-backref `(backref ,(rxx-info-num prev-grp-def)))))
 
 (defun rxx-call-parser (rxx-info match-str)
-  (let ((parser (rxx-info-parser rxx-info)))
-    (if (functionp parser)
-	(funcall parser match-str)
-      (eval parser))))
+  (let* ((symbols (delq nil (mapcar 'car (rxx-info-env rxx-info))))
+	 (symbol-vals (mapcar 'rxx-match-val symbols))
+	(parser (rxx-info-parser rxx-info)))
+    (progv symbols symbol-vals
+      (if (functionp parser)
+	  (funcall parser match-str)
+	(eval parser)))))
 
 (defun rxx-match-aux (code)
   "Common code of `rxx-match-val', `rxx-match-string', `rxx-match-beginning' and `rxx-match-end'.  Looks up the rxx-info
@@ -237,7 +240,7 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
   "When generating group numbers for explicitly numbered groups corresponding to named groups in a regexp, start
 with this number.") 
 
-(defun rxx (form &optional parser descr)
+(defun rxx-to-string (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions, taken together, allow specifying simple grammars
 in a modular fashion using regular expressions.
@@ -299,6 +302,9 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 		    )))
     (put-rxx-info regexp rxx-info)
     regexp))
+
+(defmacro rxx (form &optional parser descr)
+  (rxx-to-string form parser descr))
 
 (defun rxx-parse (aregexp s &optional partial-match-ok)
   "Match the string against the given extended regexp, and return
