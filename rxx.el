@@ -1,4 +1,4 @@
-;;; rxx.el --- Extension to the rx macro for writing readable regexps; adds parsing of named subexpressions.
+;;; rxx.el --- Create simple grammars using emacs regexps.
 ;; Copyright (C) 2010 Free Software Foundation, Inc.
 ;;
 ;; Author: Ilya Shlyakhter <ilya_shl at alum dot mit dot edu>
@@ -105,8 +105,9 @@ either a symbol, or a list of symbols indicating a path through nested named gro
 	grp-info))))
 
 (defun rxx-named-grp-num (grp-name &optional aregexp)
-  "Look up the explicitly numbered group number assigned to the given named group.  The annotated regexp must either be
-passed in as AREGEXP or scoped in as RXX-AREGEXP."
+  "Look up the explicitly numbered group number assigned to the given named group, for passing as the SUBEXP argument
+to routines such as `replace-match', `match-substitute-replacement' or `replace-regexp-in-string'.
+The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-AREGEXP."
   (declare (special rxx-aregexp))
   (rxx-info-num
    (rxx-env-lookup
@@ -117,37 +118,34 @@ passed in as AREGEXP or scoped in as RXX-AREGEXP."
 	  (error "The annotated regexp must be either passed in explicitly, or scoped in as `rxx-aregexp'.")))))))
 
 (defun rxx-process-named-grp (form)
-  "Process the (named-grp GRP-NAME GRP-DEF) form.  GRP-DEF can be an annotated regexp, a plain regexp, or a list of forms
-to be interpreted by `rxx-to-string'."
+  "Process the (named-grp GRP-NAME GRP-DEF) form, when called from `rx-to-string'.  GRP-DEF can be an annotated regexp,
+a plain regexp, or a list of forms to be recursively interpreted by `rxx'."
   (rx-check form)
   (unless (and (consp form) (>= (length form) 2))
     (error "Named group syntax error in %s: proper syntax is (named-grp name def)" form))
   (let* ((grp-name (second form))
 	 (prev-grp-def (rxx-env-lookup grp-name rxx-env)))
     (if prev-grp-def (rxx-info-regexp prev-grp-def)
-      (progn
-	(unless (third form)
-	  (error "Missing named group definition: %s" form))
-	(let* ((grp-def-aregexp (third form))
-	       (grp-num (incf rxx-next-grp-num))
-	       (old-rxx-env rxx-env)
-	       (rxx-env (rxx-new-env))
-	       (grp-def
-		(or (when (stringp grp-def-aregexp) (get-rxx-info grp-def-aregexp))
-		    (make-rxx-info :parser 'identity :env (rxx-new-env)
-				   :form
-				   (if (stringp grp-def-aregexp) `(seq (regexp ,grp-def-aregexp))
-				     grp-def-aregexp))))
-	       (regexp-here (format "\\(?%d:%s\\)" grp-num
-				    (rx-to-string (rxx-info-form grp-def)))))
-	  
-	  (nconc old-rxx-env (list (cons grp-name (make-rxx-info
-						   :num grp-num
-						   :parser (rxx-info-parser grp-def)
-						   :env rxx-env
-						   :regexp regexp-here
-						   :form (rxx-info-form grp-def)))))
-	  regexp-here)))))
+      (let* ((grp-def-aregexp (or (third form) (error "Missing named group definition: %s" form)))
+	     (grp-num (incf rxx-next-grp-num))
+	     (old-rxx-env rxx-env)
+	     (rxx-env (rxx-new-env))
+	     (grp-def
+	      (or (when (stringp grp-def-aregexp) (get-rxx-info grp-def-aregexp))
+		  (make-rxx-info :parser 'identity :env (rxx-new-env)
+				 :form
+				 (if (stringp grp-def-aregexp) `(seq (regexp ,grp-def-aregexp))
+				   grp-def-aregexp))))
+	     (regexp-here (format "\\(?%d:%s\\)" grp-num
+				  (rx-to-string (rxx-info-form grp-def)))))
+	
+	(nconc old-rxx-env (list (cons grp-name (make-rxx-info
+						 :num grp-num
+						 :parser (rxx-info-parser grp-def)
+						 :env rxx-env
+						 :regexp regexp-here
+						 :form (rxx-info-form grp-def)))))
+	regexp-here))))
 
 
 (defun rxx-process-named-backref (form)
