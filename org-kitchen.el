@@ -769,12 +769,13 @@ growing the physical representation of the vector as needed."
 
 (defsetf rxx-dyn-vec-aref rxx-dyn-vec-aset)
 
+(defconst brk ")")
 
-(let* ((number-regexp (rxx (one-or-more digit) string-to-number))
-       (fraction-regexp (rxx (seq (named-grp num number-regexp) "/" (named-grp denom number-regexp))
-			     (cons num denom)))
-       (paren-regexp (rxx (seq "(" (named-grp val fraction-regexp) ")") val))
-       (range-regexp (rxx (seq "[" (named-grp rmin paren-regexp) "]--[" (named-grp rmax paren-regexp) "]") (list rmin rmax))))
+(let* ((number-regexp (rxxm (one-or-more digit) string-to-number))
+       (fraction-regexp (rxx '(seq (named-grp num number-regexp) "/" (named-grp denom number-regexp))
+			     '(cons num denom)))
+       (paren-regexp (rxxm (seq "(" (named-grp val fraction-regexp) (eval brk)) val))
+       (range-regexp (rxx '(seq "[" (named-grp rmin paren-regexp) "]--[" (named-grp rmax paren-regexp) "]") '(list rmin rmax))))
   (rxx-parse range-regexp "[(1/2)]--[(3/4)]"))
 
 (rxxlet* ((number-regexp (one-or-more digit) string-to-number)

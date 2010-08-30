@@ -240,6 +240,12 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
   "When generating group numbers for explicitly numbered groups corresponding to named groups in a regexp, start
 with this number.") 
 
+(defun rxx-process-eval-regexp (form)
+  "Parse and produce code from FORM, which is `(eval-regexp FORM)'."
+  (rx-check form)
+  (rx-group-if (eval (cadr form)) rx-parent))
+
+
 (defun rxx (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions, taken together, allow specifying simple grammars
@@ -282,6 +288,7 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 
 	 ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
 	 (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
+				    (eval-regexp . (rxx-process-eval-regexp 1 1))
 				    (shy-grp . seq)
 				    (named-group . named-grp) (shy-group . shy-grp)
 				    (named-backref . (rxx-process-named-backref 1 1)))
@@ -302,6 +309,9 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 		    )))
     (put-rxx-info regexp rxx-info)
     regexp))
+
+(defmacro rxxm (form &optional parser descr)
+  (rxx form parser descr))
 
 (defun rxx-parse (aregexp s &optional partial-match-ok)
   "Match the string against the given extended regexp, and return

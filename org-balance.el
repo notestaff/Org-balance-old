@@ -1168,24 +1168,26 @@ changing only the numerator."
      '(if atmost 'atmost 'atleast)
    "polarity"))
 
+
 (defconst org-balance-valu-ratio-goal-regexp
-  (rxx
-   `(seq
-     (optional (named-grp polarity ,org-balance-polarity-regexp))
-     (named-grp num ,org-balance-valu-range-regexp)
-     (one-or-more whitespace) (regexp ,org-balance-ratio-words) (one-or-more whitespace)
-     (named-grp denom ,org-balance-valu-regexp)
-     (optional
-       (seq
-	(one-or-more whitespace)
-	"+-"
-	(zero-or-more whitespace)
-	(seq
-	 (or
-	  (seq (named-grp margin-percent ,org-balance-number-regexp)
-	       (zero-or-more whitespace)
-	       "%")
-	  (named-grp margin-val ,org-balance-valu-regexp))))))
+  (rxxm
+   (seq
+    (optional (named-grp polarity org-balance-polarity-regexp))
+    (named-grp num org-balance-valu-range-regexp)
+    (one-or-more whitespace) (eval-regexp org-balance-ratio-words) (one-or-more whitespace)
+    (named-grp denom org-balance-valu-regexp)
+    (optional
+     ;; specify margin
+     (seq
+      (one-or-more whitespace)
+      "+-"
+      (zero-or-more whitespace)
+      (seq
+       (or
+	(seq (named-grp margin-percent org-balance-number-regexp)
+	     (zero-or-more whitespace)
+	     "%")
+	(named-grp margin-val org-balance-valu-regexp))))))
    (lambda (goal-str)
      (make-org-balance-valu-ratio-goal 
       :num-min (car num)
@@ -1194,8 +1196,7 @@ changing only the numerator."
       :polarity polarity
       :margin (or margin-percent margin-val)
       :text goal-str)))
-   "value ratio goal")
-
+  "value ratio goal")
 
 
 (provide 'org-balance)
