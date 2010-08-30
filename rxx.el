@@ -250,6 +250,7 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 	 (rxx-next-grp-num rxx-first-grp-num)
 	 (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				    (shy-grp . seq)
+				    (named-group . named-grp) (shy-group . shy-grp)
 				    (named-backref . (rxx-process-named-backref 1 1)))
 				  rx-constituents))
 
