@@ -58,9 +58,9 @@
 
 (defstruct rxx-info form parser regexp env num descr)
 
-(defun get-rxx-info (xregexp)
+(defun get-rxx-info (aregexp)
   "Extract rxx-info from regexp string, if there, otherwise return nil."
-  (get-text-property 0 'rxx xregexp))
+  (get-text-property 0 'rxx aregexp))
 
 (defun put-rxx-info (regexp rxx-info)
   "Put rxx-info on a regexp string, replacing any already there."
@@ -91,16 +91,16 @@
       (progn
 	(unless (third form)
 	  (error "Missing named group definition: %s" form))
-	(let* ((grp-def-xregexp (third form))
+	(let* ((grp-def-aregexp (third form))
 	       (grp-num (incf rxx-next-grp-num))
 	       (old-rxx-env rxx-env)
 	       (rxx-env (rxx-new-env))
 	       (grp-def
-		(or (when (stringp grp-def-xregexp) (get-rxx-info grp-def-xregexp))
+		(or (when (stringp grp-def-aregexp) (get-rxx-info grp-def-aregexp))
 		    (make-rxx-info :parser 'identity :env (rxx-new-env)
 				   :form
-				   (if (stringp grp-def-xregexp) `(seq (regexp ,grp-def-xregexp))
-				     grp-def-xregexp))))
+				   (if (stringp grp-def-aregexp) `(seq (regexp ,grp-def-aregexp))
+				     grp-def-aregexp))))
 	       (regexp-here (format "\\(?%d:%s\\)" grp-num
 				    (rx-to-string (rxx-info-form grp-def)))))
 	  
@@ -125,7 +125,7 @@
 
   (save-match-data
     (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
-	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
+	   (rxx-env (if aregexp (rxx-info-env (get-rxx-info aregexp))
 		      rxx-env))
 	   (grp-info (rxx-env-lookup grp-name rxx-env))
 	   (dummy
@@ -134,14 +134,14 @@
 	   (match-here (match-string (rxx-info-num grp-info) rxx-obj)))
       (funcall code))))
 
-(defun rxx-match-val (grp-name &optional object xregexp)
+(defun rxx-match-val (grp-name &optional object aregexp)
   (rxx-match-aux
    (lambda ()
      (when match-here
        (let ((rxx-env (rxx-info-env grp-info))) 
 	 (funcall (rxx-info-parser grp-info) match-here))))))
 
-(defun rxx-match-string (grp-name &optional object xregexp)
+(defun rxx-match-string (grp-name &optional object aregexp)
   (rxx-match-aux (lambda () match-here)))
 
 
@@ -152,7 +152,7 @@ named groups are represented as numbered groups, and a mapping of group names to
 group numbers is attached to the returned regexp as a text property.
 When interpreting the match result, you can use (rxx-match-string grp-name regexp)
 to get the text that matched.  Additionally, if the list of forms in the named group
-consists of one xregexp, you can call (rxx-match-val grp-name regexp) to get
+consists of one aregexp, you can call (rxx-match-val grp-name regexp) to get
 the matched subgroup as a parsed object rather than as a string.
 
 The PARSER, if given, is a function that parses the match of this expression
@@ -164,7 +164,7 @@ It does not need to pass the regexp to these functions.
 DESCR, if given, is used in error messages by `rxx-parse'.
 "
   ;
-  ; cache the result of rxx-xregexp on the whole form.
+  ; cache the result of rxx-aregexp on the whole form.
   ; but also save it for use in subexpressions.
   ;
   (let* ((rxx-env (rxx-new-env))
@@ -190,7 +190,7 @@ DESCR, if given, is used in error messages by `rxx-parse'.
     (put-rxx-info regexp rxx-info)
     regexp))
 
-(defun rxx-parse (xregexp s &optional partial-match-ok)
+(defun rxx-parse (aregexp s &optional partial-match-ok)
   "Match the string against the given extended regexp, and return
 the parsed result in case of match, or nil in case of mismatch."
   ;; add options to:
@@ -198,8 +198,8 @@ the parsed result in case of match, or nil in case of mismatch."
   ;;   - work with re-search-forward and re-search-bwd.
   ;;
   (save-match-data
-    (let ((rxx-info (get-rxx-info xregexp)))
-      (if (and (string-match xregexp s)
+    (let ((rxx-info (get-rxx-info aregexp)))
+      (if (and (string-match aregexp s)
 	       (or partial-match-ok
 		   (and (= (match-beginning 0) 0)
 			(= (match-end 0) (length s)))))
