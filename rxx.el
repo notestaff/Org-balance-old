@@ -62,7 +62,7 @@
 
 (defun get-rxx-info (aregexp)
   "Extract rxx-info from regexp string, if there, otherwise return nil."
-  (get-text-property 0 'rxx aregexp))
+  (when (stringp aregexp) (get-text-property 0 'rxx aregexp)))
 
 (defun put-rxx-info (regexp rxx-info)
   "Put rxx-info on a regexp string, replacing any already there."
@@ -130,26 +130,20 @@
     (rx-backref `(backref ,(rxx-info-num prev-grp-def)))))
 
 (defun rxx-match-aux (code)
-
-  ;; so, if this group stands for just a group, then, just return a string.
-  ;; but, if this group stands for
-
-
   (declare (special grp-name object aregexp rxx-object rxx-aregexp rxx-env))
 
   (save-match-data
-    (let* ((rxx-object (or object (when (boundp 'rxx-object) rxx-object)))
-	   (rxx-env
+    (let* ((rxx-env
 	    (if (boundp 'rxx-env) rxx-env
 	      (let ((aregexp (or aregexp (when (boundp 'rxx-aregexp) rxx-aregexp))))
-		(unless (and (stringp aregexp) (get-rxx-info aregexp))
-		  (error "Need annotated regexp, as returned by `rxx'.  Got instead: `%s'" aregexp))
-		(rxx-info-env (get-rxx-info aregexp)))))
-	   (grp-info (rxx-env-lookup grp-name rxx-env))
-	   (dummy
-	    (unless grp-info
-	      (error "Named group %s not found" grp-name)))
-	   (match-here (match-string (rxx-info-num grp-info) rxx-object)))
+		(rxx-info-env
+		 (or (get-rxx-info aregexp)
+		     (error "Need annotated regexp, as returned by `rxx'.  Got instead: `%s'" aregexp))))))
+	   (grp-info (or (rxx-env-lookup grp-name rxx-env) (error "Named group %s not found" grp-name)))
+	   (grp-num (rxx-info-num grp-info))
+	   (match-here
+	    (unless (eq object 'rxx-ignore)
+	      (match-string grp-num (or object (when (boundp 'rxx-object) rxx-object))))))
       (funcall code))))
 
 (defun rxx-match-val (grp-name &optional object aregexp)
@@ -161,6 +155,14 @@
 
 (defun rxx-match-string (grp-name &optional object aregexp)
   (rxx-match-aux (lambda () match-here)))
+
+(defun rxx-match-beginning (grp-name &optional aregexp)
+  (let ((object 'rxx-ignore))
+    (rxx-match-aux (lambda () (match-beginning grp-num)))))
+
+(defun rxx-match-end (grp-name &optional aregexp)
+  (let ((object 'rxx-ignore))
+    (rxx-match-aux (lambda () (match-end grp-num)))))
 
 (defconst rxx-first-grp-num 1)
 
