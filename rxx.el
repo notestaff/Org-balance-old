@@ -119,26 +119,28 @@ The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-ARE
 
 (defun rxx-process-named-grp (form)
   "Process the (named-grp GRP-NAME GRP-DEF) form, when called from `rx-to-string'.  GRP-DEF can be an annotated regexp,
-a plain regexp, or a list of forms to be recursively interpreted by `rxx'."
+a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an annotated regexp, you can call 
+`rxx-match-val' after doing a match to get the parsed object matched by this named group."
+  (declare (special rxx-next-grp-num rxx-env))
   (rx-check form)
-  (unless (and (consp form) (>= (length form) 2))
-    (error "Named group syntax error in %s: proper syntax is (named-grp name def)" form))
   (let* ((grp-name (second form))
 	 (prev-grp-def (rxx-env-lookup grp-name rxx-env)))
     (if prev-grp-def (rxx-info-regexp prev-grp-def)
       (let* ((grp-def-aregexp (or (third form) (error "Missing named group definition: %s" form)))
-	     (grp-num (incf rxx-next-grp-num))
+	     (grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
 	     (old-rxx-env rxx-env)
-	     (rxx-env (rxx-new-env))
+	     (rxx-env (rxx-new-env))  ;; within each named group, a new environment for group names
 	     (grp-def
-	      (or (when (stringp grp-def-aregexp) (get-rxx-info grp-def-aregexp))
+	      (or (get-rxx-info grp-def-aregexp)
 		  (make-rxx-info :parser 'identity :env (rxx-new-env)
-				 :form
-				 (if (stringp grp-def-aregexp) `(seq (regexp ,grp-def-aregexp))
-				   grp-def-aregexp))))
+				 :form (if (stringp grp-def-aregexp) `(seq (regexp ,grp-def-aregexp)) grp-def-aregexp))))
+	     ;; generate the string representation of the regexp inside this named group.   note that any named
+	     ;; groups _inside_ this regexp will result in recursive calls from `rxx-to-string' back to
+	     ;; `rxx-process-named-grp', which will generate new unique numbered group numbers for these nested named
+	     ;; groups, and will record the group-name-to-group-number mapping in the rxx-env environment attached
+	     ;; to this named subgroup.   
 	     (regexp-here (format "\\(?%d:%s\\)" grp-num
 				  (rx-to-string (rxx-info-form grp-def)))))
-	
 	(nconc old-rxx-env (list (cons grp-name (make-rxx-info
 						 :num grp-num
 						 :parser (rxx-info-parser grp-def)
@@ -149,7 +151,7 @@ a plain regexp, or a list of forms to be recursively interpreted by `rxx'."
 
 
 (defun rxx-process-named-backref (form)
-  "Process the (named-backref grp-name) form."
+  "Process the (named-backref GRP-NAME) form, when called from `rx-to-string'."
   (rx-check form)
   (let* ((grp-name (second form))
 	 (prev-grp-def (rxx-env-lookup grp-name rxx-env)))
