@@ -264,7 +264,7 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 	  (rx-to-string form))
 	 (rxx-info (make-rxx-info
 		    :form form :parser (if parser parser 'identity)
-		    :regexp regexp :env rxx-env :descr descr
+		    :env rxx-env :descr descr
 		    )))
     (put-rxx-info regexp rxx-info)
     regexp))
