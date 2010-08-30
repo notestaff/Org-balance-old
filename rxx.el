@@ -120,7 +120,7 @@
   (let* ((grp-name (second form))
 	 (prev-grp-def (rxx-env-lookup grp-name rxx-env)))
     (unless prev-grp-def (error "Group in backref not yet seen: %s" grp-name))
-    (rx-backref `(backref ,(rxx-grp-num prev-grp-def)))))
+    (rx-backref `(backref ,(rxx-info-num prev-grp-def)))))
 
 (defun rxx-match-aux (code)
 
