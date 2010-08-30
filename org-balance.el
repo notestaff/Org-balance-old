@@ -1095,9 +1095,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    `(or (seq (optional (named-grp val ,org-balance-number-regexp))
 	     (named-grp unit ,org-balance-unit-regexp))
 	(seq (named-grp val) (optional (named-grp unit))))
-   (lambda (match-str)
-     (org-balance-make-valu (or (rxx-match-val 'val) 1)
-			    (or (rxx-match-val 'unit) "item")))
+   '(org-balance-make-valu (or val 1) (or unit "item"))
    "value with unit")
   "regexp for value with a unit, e.g. '1 day'")
 

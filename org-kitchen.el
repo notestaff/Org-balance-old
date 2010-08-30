@@ -777,12 +777,16 @@ growing the physical representation of the vector as needed."
        (range-regexp (rxx (seq "[" (named-grp rmin paren-regexp) "]--[" (named-grp rmax paren-regexp) "]") (list rmin rmax))))
   (rxx-parse range-regexp "[(1/2)]--[(3/4)]"))
 
-(rxxlet ((number-regexp (one-or-more digit) string-to-number)
-	 (fraction-regexp (seq (named-grp num number-regexp) "/" (named-grp denom number-regexp))
-			  (cons num denom))
-	 (paren-regexp (seq "(" (named-grp val fraction-regexp) ")") val)
-	 (range-regexp (seq "[" (named-grp rmin paren-regexp) "]--[" (named-grp rmax paren-regexp) "]")
-		       (list rmin rmax)))
-	(rxx-parse range-regexp "[(1/2)]--[(3/4)]"))
+(rxxlet* ((number-regexp (one-or-more digit) string-to-number)
+	  (fraction-regexp (seq (named-grp num number-regexp) "/" (named-grp denom number-regexp))
+			   (cons num denom))
+	  (paren-regexp (seq "(" (named-grp val fraction-regexp) ")") val)
+	  (range-regexp (seq "[" (named-grp rmin paren-regexp) "]--[" (named-grp rmax paren-regexp) "]")
+			(list rmin rmax)))
+	 (rxx-parse range-regexp "[(1/2)]--[(3/4)]x"))
 
 
+(defmacro rxxlet* (bindings forms)
+  (list 'let* (mapcar (lambda (binding) (list (first binding) (list 'rxx (second binding) (third binding) (symbol-name (first binding)))))
+		      bindings)
+	forms))

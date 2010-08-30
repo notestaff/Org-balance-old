@@ -179,10 +179,13 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
     (rx-backref `(backref ,(rxx-info-num prev-grp-def)))))
 
 (defun rxx-call-parser (rxx-info match-str)
-  (let ((parser (rxx-info-parser rxx-info)))
-    (if (functionp parser)
-	(funcall parser match-str)
-      (eval parser))))
+  (let* ((symbols (delq nil (mapcar 'car (rxx-info-env rxx-info))))
+	  (symbol-vals (mapcar 'rxx-match-val symbols))
+	  (parser (rxx-info-parser rxx-info)))
+    (progv symbols symbol-vals
+      (if (functionp parser)
+	    (funcall parser match-str)
+	(eval parser)))))
 
 (defun rxx-match-aux (code)
   "Common code of `rxx-match-val', `rxx-match-string', `rxx-match-beginning' and `rxx-match-end'.  Looks up the rxx-info
