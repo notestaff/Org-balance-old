@@ -53,6 +53,8 @@
 ;;  subexprs.  you'd just need to call the correct parse routines for them.
 ;;
 
+;; user-callable functions: rxx-named-grp-num, rxx, rxx-match-val, rxx-match-string, rxx-parse
+
 (require 'rx)
 (eval-when-compile (require 'cl))
 
@@ -79,6 +81,11 @@
 	  (rxx-env-lookup (cdr grp-name)
 			  (rxx-info-env grp-info))
 	grp-info))))
+
+(defun rxx-named-grp-num (grp-name &optional aregexp)
+  "Look up the numbered group number assigned to the given named group"
+  (declare (special rxx-aregexp))
+  (rxx-info-num (rxx-env-lookup grp-name (rxx-info-env (get-rxx-info (or aregexp rxx-aregexp))))))
 
 (defun rxx-process-named-grp (form)
   "Process the (named-grp grp-name grp-def) form."
