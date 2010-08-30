@@ -126,6 +126,12 @@ The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-ARE
   "Process the (named-grp GRP-NAME GRP-DEF) form, when called from `rx-to-string'.  GRP-DEF can be an annotated regexp,
 a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an annotated regexp, you can call 
 `rxx-match-val' after doing a match to get the parsed object matched by this named group."
+
+  ;
+  ; if the form is a symbol, and not one of the reserved ones in rx,
+  ; evaluate it as a variable.
+  ;
+  
   (declare (special rxx-next-grp-num rxx-env))
   (rx-check form)
   (let* ((grp-name (second form))
@@ -133,6 +139,11 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
     (if prev-grp-def
 	(rxx-info-regexp prev-grp-def)
       (let* ((grp-def-aregexp (or (third form) (error "Missing named group definition: %s" form)))
+	     (grp-def-aregexp (if (and (symbolp grp-def-aregexp)
+				       (boundp grp-def-aregexp)
+				       (get-rxx-info (symbol-value grp-def-aregexp)))
+				  (symbol-value grp-def-aregexp)
+				grp-def-aregexp))
 	     (grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
 	     (old-rxx-env rxx-env)
 	     (rxx-env (rxx-new-env))  ;; within each named group, a new environment for group names
@@ -167,6 +178,12 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
     (unless prev-grp-def (error "Group in backref not yet seen: %s" grp-name))
     (rx-backref `(backref ,(rxx-info-num prev-grp-def)))))
 
+(defun rxx-call-parser (rxx-info match-str)
+  (let ((parser (rxx-info-parser rxx-info)))
+    (if (functionp parser)
+	(funcall parser match-str)
+      (eval parser))))
+
 (defun rxx-match-aux (code)
   "Common code of `rxx-match-val', `rxx-match-string', `rxx-match-beginning' and `rxx-match-end'.  Looks up the rxx-info
 for the relevant named group, so that we can get the corresponding group explicitly numbered group number and pass it
@@ -194,7 +211,7 @@ may be scoped in via RXX-OBJECT.  The annotated regexp must either be passed in 
    (lambda ()
      (when match-here
        (let ((rxx-env (rxx-info-env grp-info))) 
-	 (funcall (rxx-info-parser grp-info) match-here))))))
+	 (rxx-call-parser grp-info match-here))))))
 
 (defun rxx-match-string (grp-name &optional object aregexp)
   "Return the substring matched by named group GRP-NAME.  OBJECT, if given, is the string or buffer we last searched;
@@ -221,9 +238,25 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
 with this number.") 
 
 (defun rxx (form &optional parser descr)
-  "Construct a regexp from the FORM, using the syntax of `rx-to-string' with some
+  "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions, taken together, allow specifying simple grammars
 in a modular fashion using regular expressions.
+
+The main extension is named groups, specified in FORM as (named-grp NAME FORMS...).
+A named group is analogous to an explicitly numbered group (and is in fact converted
+to one), except that it is referenced by name rather than by number.
+
+As a simple example, you might write things like:
+
+
+; in the returned regexp, 
+named groups are represented as explicitly numbered groups, and a mapping of group names to
+group numbers is attached to the returned regexp (as a text property).
+When interpreting the match result, you can use (rxx-match-string GRP-NAME REGEXP)
+to get the text that matched.  Additionally, if the list of forms in the named group
+consists of one aregexp, you can call (rxx-match-val grp-name regexp) to get
+the matched subgroup as a parsed object rather than as a string.
+
 
 to explain:
    that because we save the form and the parser, we can use this as a sub-regexp.
@@ -231,13 +264,6 @@ the saved form lets us generate new explicit group numbers, and
 the fact that the parser gets its subgroups by name within an environment lets us
 make the parser work with new set of group numbers.
 
-The extensions include (named-grp name form); in the returned regexp, 
-named groups are represented as explicitly numbered groups, and a mapping of group names to
-group numbers is attached to the returned regexp (as a text property).
-When interpreting the match result, you can use (rxx-match-string GRP-NAME REGEXP)
-to get the text that matched.  Additionally, if the list of forms in the named group
-consists of one aregexp, you can call (rxx-match-val grp-name regexp) to get
-the matched subgroup as a parsed object rather than as a string.
 
 The PARSER, if given, is a function that parses the match of this expression
 into an object.  The PARSER function is 
@@ -247,6 +273,7 @@ It does not need to pass the regexp to these functions.
 
 DESCR, if given, is used in error messages by `rxx-parse'.
 "
+  (declare (special rxx-first-grp-num))
   (let* ((rxx-env (rxx-new-env))
 	 (rxx-next-grp-num rxx-first-grp-num)
 
@@ -287,7 +314,7 @@ the parsed result in case of match, or nil in case of mismatch."
 			(= (match-end 0) (length s)))))
 	  (let* ((rxx-env (rxx-info-env rxx-info))
 		 (rxx-object s))
-	    (funcall (rxx-info-parser rxx-info) (match-string 0 s)))
+	    (rxx-call-parser rxx-info (match-string 0 s)))
 	(error "Error parsing \`%s\' as %s" s
 	       (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))))
 
