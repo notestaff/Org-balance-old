@@ -138,7 +138,10 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 	     ;; groups _inside_ this regexp will result in recursive calls from `rxx-to-string' back to
 	     ;; `rxx-process-named-grp', which will generate new unique numbered group numbers for these nested named
 	     ;; groups, and will record the group-name-to-group-number mapping in the rxx-env environment attached
-	     ;; to this named subgroup.   
+	     ;; to this named group.   Any parser function attached to this named group will be able to refer
+	     ;; to the parsed objects matched by these nested named groups using `rxx-match-val', which will look up
+	     ;; the mapping of nested group names to group numbers in the rxx-env environment created above for this
+	     ;; named group.
 	     (regexp-here (format "\\(?%d:%s\\)" grp-num
 				  (rx-to-string (rxx-info-form grp-def)))))
 	(nconc old-rxx-env (list (cons grp-name (make-rxx-info
