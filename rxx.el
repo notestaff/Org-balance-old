@@ -162,15 +162,18 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
     (rx-backref `(backref ,(rxx-info-num prev-grp-def)))))
 
 (defun rxx-match-aux (code)
+  "Common code of `rxx-match-val', `rxx-match-string', `rxx-match-beginning' and `rxx-match-end'.  Looks up the rxx-info
+for the relevant named group, so that we can get the corresponding group explicitly numbered group number and pass it
+to `match-string', `match-beginning' or `match-end'."
   (declare (special grp-name object aregexp rxx-object rxx-aregexp rxx-env))
-
   (save-match-data
     (let* ((rxx-env
 	    (if (boundp 'rxx-env) rxx-env
 	      (let ((aregexp (or aregexp (when (boundp 'rxx-aregexp) rxx-aregexp))))
 		(rxx-info-env
-		 (or (get-rxx-info aregexp)
-		     (error "Need annotated regexp, as returned by `rxx'.  Got instead: `%s'" aregexp))))))
+		 (or
+		  (get-rxx-info aregexp)
+		  (error "Annotated regexp created by `rxx' must either be passed in, or scoped in via RXX-AREGEXP."))))))
 	   (grp-info (or (rxx-env-lookup grp-name rxx-env) (error "Named group %s not found" grp-name)))
 	   (grp-num (rxx-info-num grp-info))
 	   (match-here
@@ -179,6 +182,9 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
       (funcall code))))
 
 (defun rxx-match-val (grp-name &optional object aregexp)
+  "Return the parsed object matched by named group GRP-NAME.  OBJECT, if given, is the string or buffer we last searched;
+may be scoped in via RXX-OBJECT.  The annotated regexp must either be passed in via AREGEXP or scoped in via RXX-AREGEXP."
+  (declare (special rxx-object rxx-aregexp))
   (rxx-match-aux
    (lambda ()
      (when match-here
@@ -186,17 +192,28 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 	 (funcall (rxx-info-parser grp-info) match-here))))))
 
 (defun rxx-match-string (grp-name &optional object aregexp)
+  "Return the substring matched by named group GRP-NAME.  OBJECT, if given, is the string or buffer we last searched;
+may be scoped in via RXX-OBJECT.  The annotated regexp must either be passed in via AREGEXP or scoped in via RXX-AREGEXP."
+  (declare (special rxx-object rxx-aregexp))
   (rxx-match-aux (lambda () match-here)))
 
 (defun rxx-match-beginning (grp-name &optional aregexp)
+  "Return the beginning position of the substring matched by named group GRP-NAME.  The annotated regexp must either be
+passed in via AREGEXP or scoped in via RXX-AREGEXP."
+  (declare (special rxx-aregexp))
   (let ((object 'rxx-ignore))
     (rxx-match-aux (lambda () (match-beginning grp-num)))))
 
 (defun rxx-match-end (grp-name &optional aregexp)
+  "Return the end position of the substring matched by named group GRP-NAME.  The annotated regexp must either be
+passed in via AREGEXP or scoped in via RXX-AREGEXP."
+  (declare (special rxx-aregexp))
   (let ((object 'rxx-ignore))
     (rxx-match-aux (lambda () (match-end grp-num)))))
 
-(defconst rxx-first-grp-num 1)
+(defconst rxx-first-grp-num 1
+  "When generating group numbers for explicitly numbered groups corresponding to named groups in a regexp, start
+with this number.") 
 
 (defun rxx (form &optional parser descr)
   "Construct a regexp from the FORM, using the syntax of `rx-to-string' with some
