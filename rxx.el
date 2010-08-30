@@ -119,33 +119,22 @@
 	  regexp-here)))))
 
 (defun rxx-match-aux (code)
-  "Common part of `rxx-match-val' and `rxx-match-string'; see their documentation."
-  (declare (special grp-name object xregexp rxx-object rxx-xregexp))
+
+  ;; so, if this group stands for just a group, then, just return a string.
+  ;; but, if this group stands for 
+
   (save-match-data
-    (let* ((xregexp (or xregexp (when (boundp 'rxx-xregexp) rxx-xregexp))))
-      (unless xregexp
-	(error "Need to provide xregexp, either as argument or by binding rxx-xregexp"))
-      (unless (and (stringp xregexp) (get-rxx-info xregexp))
-	(error "Need to provide xregexp returned by `rxx'; got `%s'" xregexp))
-      (let* ((rxx-env (rxx-info-env (get-rxx-info xregexp)))
-	     (grp-info (rxx-env-lookup grp-name rxx-env))
-	     (dummy
-	      (unless grp-info
-		(error "Named group %s not found" grp-name)))
-	     (rxx-object (or object (when (boundp 'rxx-object) rxx-object)))
-	     (match-here (match-string (rxx-info-num grp-info) rxx-object)))
-	(funcall code)))))
+    (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
+	   (rxx-env (if xregexp (rxx-info-env (get-rxx-info xregexp))
+		      rxx-env))
+	   (grp-info (rxx-env-lookup grp-name rxx-env))
+	   (dummy
+	    (unless grp-info
+	      (error "Named group %s not found" grp-name)))
+	   (match-here (match-string (rxx-info-num grp-info) rxx-obj)))
+      (funcall code))))
 
 (defun rxx-match-val (grp-name &optional object xregexp)
-  "Return the parsed value matched by named group GRP-NAME.
-OBJECT, if given, gives the string or buffer on which the match was done.
-If not given, and the variable rxx-object is bound, the object is taken from
-that variable.  `rxx-parse' binds rxx-object to the passed string.
-XREGEXP, if given, gives the xregexp within which the named group
-appeared.  If not given, and the variable rxx-xregexp is bound, the xregexp
-is taken from that variable.  If you make many calls to rx-match-val after matching
-a given xregexp, you can bind rxx-xregexp and not have to pass it to every call.
-"
   (rxx-match-aux
    (lambda ()
      (when match-here
@@ -153,10 +142,6 @@ a given xregexp, you can bind rxx-xregexp and not have to pass it to every call.
 	 (funcall (rxx-info-parser grp-info) match-here))))))
 
 (defun rxx-match-string (grp-name &optional object xregexp)
-  "Return the substring matched by named group GRP-NAME.
-OBJECT, if given, gives the string or buffer on which the match was done.
-If not given, and the variable rxx-object is bound, the object is taken from
-that variable.  `rxx-parse' binds rxx-object to the passed string."
   (rxx-match-aux (lambda () match-here)))
 
 
@@ -212,17 +197,14 @@ the parsed result in case of match, or nil in case of mismatch."
   ;;   - require that the full string match
   ;;   - work with re-search-forward and re-search-bwd.
   ;;
-  (unless (stringp xregexp) (signal 'wrong-type-argument (list 'stringp xregexp)))
   (save-match-data
     (let ((rxx-info (get-rxx-info xregexp)))
-      (unless rxx-info
-	(error "Need regexp returned by `rxx'; got `%s'" xregexp))
       (if (and (string-match xregexp s)
 	       (or partial-match-ok
 		   (and (= (match-beginning 0) 0)
 			(= (match-end 0) (length s)))))
 	  (let* ((rxx-env (rxx-info-env rxx-info))
-		 (rxx-object s))
+		 (rxx-obj s))
 	    (funcall (rxx-info-parser rxx-info) (match-string 0 s)))
 	(error "Error parsing \`%s\' as %s" s
 	       (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))))
