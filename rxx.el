@@ -71,23 +71,24 @@
   (list (cons nil nil)))
 
 (defun rxx-env-lookup (grp-name rxx-env)
-  "Lookup the rxx-info for this grp-name"
+  "Lookup the rxx-info for this grp-name, or return nil if not found."
   (when (symbolp grp-name) (setq grp-name (list grp-name)))
-  (let ((grp-info (cdr (assq (first grp-name) rxx-env))))
-    (if (cdr grp-name)
-	(rxx-env-lookup (cdr grp-name)
-			(rxx-info-env grp-info))
-      grp-info)))
+  (let ((grp-info (cdr-safe (assq (first grp-name) rxx-env))))
+    (when grp-info
+      (if (cdr grp-name)
+	  (rxx-env-lookup (cdr grp-name)
+			  (rxx-info-env grp-info))
+	grp-info))))
 
 (defun rxx-process-named-grp (form)
   "Process the (named-grp grp-name grp-def) form."
+  (rx-check form)
   (unless (and (consp form) (>= (length form) 2))
     (error "Named group syntax error in %s: proper syntax is (named-grp name def)"
 	   form))
   (let* ((grp-name (second form))
-	 (prev-grp-def (assq grp-name rxx-env)))
-    (if prev-grp-def
-	(rxx-info-regexp (cdr prev-grp-def))
+	 (prev-grp-def (rxx-env-lookup grp-name rxx-env)))
+    (if prev-grp-def (rxx-info-regexp prev-grp-def)
       (progn
 	(unless (third form)
 	  (error "Missing named group definition: %s" form))
@@ -108,15 +109,18 @@
 						   :num grp-num
 						   :parser (rxx-info-parser grp-def)
 						   :env rxx-env
-						   
 						   :regexp regexp-here
-						   
-						   ;; also put regexp here
-						   ;; if group seen before, reuse, unless this is an error
-						   ;; (make it an option to disable this error)
-						   
 						   :form (rxx-info-form grp-def)))))
 	  regexp-here)))))
+
+
+(defun rxx-process-named-backref (form)
+  "Process the (named-backref grp-name) form."
+  (rx-check form)
+  (let* ((grp-name (second form))
+	 (prev-grp-def (rxx-env-lookup grp-name rxx-env)))
+    (unless prev-grp-def (error "Group in backref not yet seen: %s" grp-name))
+    (rx-backref `(backref ,(rxx-grp-num prev-grp-def)))))
 
 (defun rxx-match-aux (code)
 
@@ -124,7 +128,7 @@
   ;; but, if this group stands for
 
 
-  (declare (special grp-name object aregexp rxx-object rxx-env))
+  (declare (special grp-name object aregexp rxx-object rxx-aregexp rxx-env))
 
   (save-match-data
     (let* ((rxx-object (or object (when (boundp 'rxx-object) rxx-object)))
@@ -151,6 +155,7 @@
 (defun rxx-match-string (grp-name &optional object aregexp)
   (rxx-match-aux (lambda () match-here)))
 
+(defconst rxx-first-grp-num 1)
 
 (defun rxx (form &optional parser descr)
   "Construct a regexp from the FORM, using the syntax of `rx-to-string' with some
@@ -170,16 +175,12 @@ It does not need to pass the regexp to these functions.
 
 DESCR, if given, is used in error messages by `rxx-parse'.
 "
-  ;
-  ; cache the result of rxx-aregexp on the whole form.
-  ; but also save it for use in subexpressions.
-  ;
   (let* ((rxx-env (rxx-new-env))
-	 (rxx-next-grp-num 10)
-	 (rx-constituents (cons '(named-grp . (rxx-process-named-grp
-					       1
-					       nil))
-				rx-constituents))
+	 (rxx-next-grp-num rxx-first-grp-num)
+	 (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
+				    (shy-grp . seq)
+				    (named-backref . (rxx-process-named-backref 1 1)))
+				  rx-constituents))
 
 	 ;; also allow named-group or ngrp or other names
     
