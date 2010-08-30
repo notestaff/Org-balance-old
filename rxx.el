@@ -128,8 +128,12 @@
 
   (save-match-data
     (let* ((rxx-object (or object (when (boundp 'rxx-object) rxx-object)))
-	   (rxx-env (if aregexp (rxx-info-env (get-rxx-info aregexp))
-		      rxx-env))
+	   (rxx-env
+	    (if (boundp 'rxx-env) rxx-env
+	      (let ((aregexp (or aregexp (when (boundp 'rxx-aregexp) rxx-aregexp))))
+		(unless (and (stringp aregexp) (get-rxx-info aregexp))
+		  (error "Need annotated regexp, as returned by `rxx'.  Got instead: `%s'" aregexp))
+		(rxx-info-env (get-rxx-info aregexp)))))
 	   (grp-info (rxx-env-lookup grp-name rxx-env))
 	   (dummy
 	    (unless grp-info
