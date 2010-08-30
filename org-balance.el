@@ -1115,13 +1115,11 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    `(or (seq (optional (seq (named-grp range ,org-balance-number-range-regexp) (one-or-more whitespace)))
 	     (named-grp unit ,org-balance-unit-regexp))
 	(seq (named-grp range) (optional (one-or-more whitespace) (named-grp unit))))
-   (lambda (match-str)
-     (let ((number-range (or (rxx-match-val 'range) (cons 1 1)))
-	   (unit (or (rxx-match-val 'unit) "item")))
-       (cons (org-balance-make-valu (car number-range) unit)
-	     (org-balance-make-valu (cdr number-range) unit))))
-   "value range"))
-     
+   '(let ((number-range (or range (cons 1 1)))
+	  (unit (or unit "item")))
+     (cons (org-balance-make-valu (car number-range) unit)
+	   (org-balance-make-valu (cdr number-range) unit))))
+   "value range")
 
 (defun org-balance-parse-valu-range (valu-str)
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
@@ -1167,8 +1165,7 @@ changing only the numerator."
 	  (or (named-grp atmost ,(regexp-opt (list "at most")))
 	      (named-grp atleast ,(regexp-opt (list "at least")))))
 	 (zero-or-more whitespace))
-   (lambda (match-str)
-     (if (rxx-match-val 'atmost) 'atmost 'atleast))
+     '(if atmost 'atmost 'atleast)
    "polarity"))
 
 (defconst org-balance-valu-ratio-goal-regexp
@@ -1179,28 +1176,25 @@ changing only the numerator."
      (one-or-more whitespace) (regexp ,org-balance-ratio-words) (one-or-more whitespace)
      (named-grp denom ,org-balance-valu-regexp)
      (optional
-      (named-grp
-       margin
        (seq
 	(one-or-more whitespace)
 	"+-"
 	(zero-or-more whitespace)
 	(seq
 	 (or
-	  (seq (named-grp percent ,org-balance-number-regexp)
+	  (seq (named-grp margin-percent ,org-balance-number-regexp)
 	       (zero-or-more whitespace)
 	       "%")
-	  (named-grp val ,org-balance-valu-regexp)))))))
+	  (named-grp margin-val ,org-balance-valu-regexp))))))
    (lambda (goal-str)
-     (let ((num (rxx-match-val 'num)))
-       (make-org-balance-valu-ratio-goal 
-	:num-min (car num)
-	:num-max (cdr num)
-	:denom (rxx-match-val 'denom)
-	:polarity (rxx-match-val 'polarity)
-	:margin (or (rxx-match-val '(margin percent)) (rxx-match-val '(margin val)))
-	:text goal-str)))
-   "value ratio goal"))
+     (make-org-balance-valu-ratio-goal 
+      :num-min (car num)
+      :num-max (cdr num)
+      :denom denom
+      :polarity polarity
+      :margin (or margin-percent margin-val)
+      :text goal-str)))
+   "value ratio goal")
 
 
 
