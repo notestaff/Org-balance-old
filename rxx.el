@@ -104,6 +104,11 @@ either a symbol, or a list of symbols indicating a path through nested named gro
 			  (rxx-info-env grp-info))
 	grp-info))))
 
+(defun rxx-env-bind (grp-name rxx-info rxx-env)
+  "Bind group name GRP-NAME to group annotation rxx-info in the
+environment RXX-ENV."
+  (nconc rxx-env (list (cons grp-name rxx-info))))
+
 (defun rxx-named-grp-num (grp-name &optional aregexp)
   "Look up the explicitly numbered group number assigned to the given named group, for passing as the SUBEXP argument
 to routines such as `replace-match', `match-substitute-replacement' or `replace-regexp-in-string'.
@@ -144,12 +149,12 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 	     ;; named group.
 	     (regexp-here (format "\\(?%d:%s\\)" grp-num
 				  (rx-to-string (rxx-info-form grp-def)))))
-	(nconc old-rxx-env (list (cons grp-name (make-rxx-info
-						 :num grp-num
-						 :parser (rxx-info-parser grp-def)
-						 :env rxx-env
-						 :regexp regexp-here
-						 :form (rxx-info-form grp-def)))))
+	(rxx-env-bind grp-name (make-rxx-info
+				:num grp-num
+				:parser (rxx-info-parser grp-def)
+				:env rxx-env
+				:regexp regexp-here
+				:form (rxx-info-form grp-def)) old-rxx-env)
 	regexp-here))))
 
 
@@ -216,10 +221,19 @@ with this number.")
 
 (defun rxx (form &optional parser descr)
   "Construct a regexp from the FORM, using the syntax of `rx-to-string' with some
-extensions.  The extensions include (named-grp name forms); in the returned regexp, 
-named groups are represented as numbered groups, and a mapping of group names to
-group numbers is attached to the returned regexp as a text property.
-When interpreting the match result, you can use (rxx-match-string grp-name regexp)
+extensions.  The extensions, taken together, allow specifying simple grammars
+in a modular fashion using regular expressions.
+
+to explain:
+   that because we save the form and the parser, we can use this as a sub-regexp.
+the saved form lets us generate new explicit group numbers, and
+the fact that the parser gets its subgroups by name within an environment lets us
+make the parser work with new set of group numbers.
+
+The extensions include (named-grp name form); in the returned regexp, 
+named groups are represented as explicitly numbered groups, and a mapping of group names to
+group numbers is attached to the returned regexp (as a text property).
+When interpreting the match result, you can use (rxx-match-string GRP-NAME REGEXP)
 to get the text that matched.  Additionally, if the list of forms in the named group
 consists of one aregexp, you can call (rxx-match-val grp-name regexp) to get
 the matched subgroup as a parsed object rather than as a string.
