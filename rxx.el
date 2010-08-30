@@ -121,17 +121,20 @@
 (defun rxx-match-aux (code)
 
   ;; so, if this group stands for just a group, then, just return a string.
-  ;; but, if this group stands for 
+  ;; but, if this group stands for
+
+
+  (declare (special grp-name object aregexp rxx-object rxx-env))
 
   (save-match-data
-    (let* ((rxx-obj (or object (when (boundp 'rxx-obj) rxx-obj)))
+    (let* ((rxx-object (or object (when (boundp 'rxx-object) rxx-object)))
 	   (rxx-env (if aregexp (rxx-info-env (get-rxx-info aregexp))
 		      rxx-env))
 	   (grp-info (rxx-env-lookup grp-name rxx-env))
 	   (dummy
 	    (unless grp-info
 	      (error "Named group %s not found" grp-name)))
-	   (match-here (match-string (rxx-info-num grp-info) rxx-obj)))
+	   (match-here (match-string (rxx-info-num grp-info) rxx-object)))
       (funcall code))))
 
 (defun rxx-match-val (grp-name &optional object aregexp)
@@ -204,7 +207,7 @@ the parsed result in case of match, or nil in case of mismatch."
 		   (and (= (match-beginning 0) 0)
 			(= (match-end 0) (length s)))))
 	  (let* ((rxx-env (rxx-info-env rxx-info))
-		 (rxx-obj s))
+		 (rxx-object s))
 	    (funcall (rxx-info-parser rxx-info) (match-string 0 s)))
 	(error "Error parsing \`%s\' as %s" s
 	       (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))))
