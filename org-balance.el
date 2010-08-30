@@ -1125,7 +1125,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
   (rxx-parse org-balance-valu-range-regexp valu-str))
 
-(defconst org-balance-ratio-words (regexp-opt (list "per" "every" "each" "/" "a" "in a")))
+(defconst org-balance-ratio-words (list "per" "every" "each" "/" "a" "in a"))
 
 ;; Struct: org-balance-valu-ratio - a ratio of two valu's.
 (defstruct org-balance-valu-ratio num denom
@@ -1174,7 +1174,7 @@ changing only the numerator."
    (seq
     (optional (named-grp polarity org-balance-polarity-regexp))
     (named-grp num org-balance-valu-range-regexp)
-    (one-or-more whitespace) (eval-regexp org-balance-ratio-words) (one-or-more whitespace)
+    (one-or-more whitespace) (eval-regexp (regexp-opt org-balance-ratio-words)) (one-or-more whitespace)
     (named-grp denom org-balance-valu-regexp)
     (optional
      ;; specify margin
