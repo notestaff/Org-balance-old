@@ -1,4 +1,4 @@
-;;; rxx.el --- Create simple grammars using emacs regexps.
+;;; rxx.el --- Create recursive grammars using nested regexps.
 ;; Copyright (C) 2010 Free Software Foundation, Inc.
 ;;
 ;; Author: Ilya Shlyakhter <ilya_shl at alum dot mit dot edu>
@@ -177,8 +177,7 @@ to `match-string', `match-beginning' or `match-end'."
 	   (grp-info (or (rxx-env-lookup grp-name rxx-env) (error "Named group %s not found" grp-name)))
 	   (grp-num (rxx-info-num grp-info))
 	   (match-here
-	    (unless (eq object 'rxx-ignore)
-	      (match-string grp-num (or object (when (boundp 'rxx-object) rxx-object))))))
+	    (unless (eq object 'rxx-ignore) (match-string grp-num (or object (when (boundp 'rxx-object) rxx-object))))))
       (funcall code))))
 
 (defun rxx-match-val (grp-name &optional object aregexp)
@@ -260,11 +259,10 @@ DESCR, if given, is used in error messages by `rxx-parse'.
   "Match the string against the given extended regexp, and return
 the parsed result in case of match, or nil in case of mismatch."
   ;; add options to:
-  ;;   - require that the full string match
   ;;   - work with re-search-forward and re-search-bwd.
   ;;
   (save-match-data
-    (let ((rxx-info (get-rxx-info aregexp)))
+    (let ((rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp))))
       (if (and (string-match aregexp s)
 	       (or partial-match-ok
 		   (and (= (match-beginning 0) 0)
