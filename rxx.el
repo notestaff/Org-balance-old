@@ -246,7 +246,7 @@ with this number.")
   (rx-group-if (eval (cadr form)) rx-parent))
 
 
-(defun rxx (form &optional parser descr)
+(defun rxx-to-string (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions, taken together, allow specifying simple grammars
 in a modular fashion using regular expressions.
@@ -310,8 +310,8 @@ DESCR, if given, is used in error messages by `rxx-parse'.
     (put-rxx-info regexp rxx-info)
     regexp))
 
-(defmacro rxxm (form &optional parser descr)
-  (rxx form parser descr))
+(defmacro rxx (form &optional parser descr)
+  (rxx-to-string form parser descr))
 
 (defun rxx-parse (aregexp s &optional partial-match-ok)
   "Match the string against the given extended regexp, and return

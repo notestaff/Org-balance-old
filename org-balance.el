@@ -1023,12 +1023,12 @@ we convert to the specified multiples of new unit."
 
 (defconst org-balance-number-regexp
   (rxx
-   `(seq
+   (seq
      (zero-or-more whitespace)
      
      (or
       ;; either an english number name
-      (named-grp number-name ,(regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
+      (named-grp number-name (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names)))))
       
       ;; or a floating-point number, possibly in scientific notation
       (seq
@@ -1044,7 +1044,7 @@ we convert to the specified multiples of new unit."
      
      (zero-or-more whitespace))
    (lambda (match)
-     (if (rxx-match-val 'number-name) (cdr (assoc-string (rxx-match-val 'number-name) org-balance-number-names))
+     (if number-name (cdr (assoc-string number-name org-balance-number-names))
        (string-to-number match)))
    "number")
    "Regular expression for a floating-point number")
@@ -1071,20 +1071,18 @@ by whitespace, it throws an error rather than silently returning zero.
 
 (defconst org-balance-number-range-regexp
   (rxx
-   `(seq
-     (named-grp range-start ,org-balance-number-regexp)
-     (optional "-" (named-grp range-end ,org-balance-number-regexp)))
-   (lambda (match)
-     (cons (rxx-match-val 'range-start)
-	   (or (rxx-match-val 'range-end) (rxx-match-val 'range-start))))))
+   (seq
+    (named-grp range-start org-balance-number-regexp)
+    (optional "-" (named-grp range-end org-balance-number-regexp)))
+   (cons range-start (or range-end range-start))))
 
 (defvar org-balance-parse-valu-hooks nil
   "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
 such as $5 into the canonical form `5 dollars'.  Each hook must take a string as an argument and return either an
 `org-balance-valu' struct if it successfully parsed the string, or nil if it didn't.")
 
-(defvar org-balance-unit-regexp
-  (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist))))
+(defconst org-balance-unit-regexp
+  (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist))))))
 
 (defconst
   org-balance-valu-regexp
@@ -1092,10 +1090,10 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
    ;; But either a number or a unit must be given.
-   `(or (seq (optional (named-grp val ,org-balance-number-regexp))
-	     (named-grp unit ,org-balance-unit-regexp))
+   (or (seq (optional (named-grp val org-balance-number-regexp))
+	    (named-grp unit org-balance-unit-regexp))
 	(seq (named-grp val) (optional (named-grp unit))))
-   '(org-balance-make-valu (or val 1) (or unit "item"))
+   (org-balance-make-valu (or val 1) (or unit "item"))
    "value with unit")
   "regexp for value with a unit, e.g. '1 day'")
 
@@ -1112,11 +1110,11 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
    ;; But either a number or a unit must be given.
-   `(or (seq (optional (seq (named-grp range ,org-balance-number-range-regexp) (one-or-more whitespace)))
-	     (named-grp unit ,org-balance-unit-regexp))
+   (or (seq (optional (seq (named-grp range org-balance-number-range-regexp) (one-or-more whitespace)))
+	     (named-grp unit org-balance-unit-regexp))
 	(seq (named-grp range) (optional (one-or-more whitespace) (named-grp unit))))
-   '(let ((number-range (or range (cons 1 1)))
-	  (unit (or unit "item")))
+   (let ((number-range (or range (cons 1 1)))
+	 (unit (or unit "item")))
      (cons (org-balance-make-valu (car number-range) unit)
 	   (org-balance-make-valu (cdr number-range) unit))))
    "value range")
@@ -1160,17 +1158,16 @@ changing only the numerator."
 
 (defconst org-balance-polarity-regexp
   (rxx
-   `(seq (zero-or-more whitespace)
-	 (seq
-	  (or (named-grp atmost ,(regexp-opt (list "at most")))
-	      (named-grp atleast ,(regexp-opt (list "at least")))))
+   (seq (zero-or-more whitespace)
+	(seq
+	 (or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
+	     (named-grp atleast (eval-regexp (regexp-opt (list "at least"))))))
 	 (zero-or-more whitespace))
-     '(if atmost 'atmost 'atleast)
+     (if atmost 'atmost 'atleast)
    "polarity"))
 
-
 (defconst org-balance-valu-ratio-goal-regexp
-  (rxxm
+  (rxx
    (seq
     (optional (named-grp polarity org-balance-polarity-regexp))
     (named-grp num org-balance-valu-range-regexp)
