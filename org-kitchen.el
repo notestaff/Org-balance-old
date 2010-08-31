@@ -784,7 +784,7 @@ growing the physical representation of the vector as needed."
 	  (paren-regexp (seq "(" (named-grp val fraction-regexp) ")") val)
 	  (range-regexp (seq "[" (named-grp rmin paren-regexp) "]--[" (named-grp rmax paren-regexp) "]")
 			(list rmin rmax)))
-	 (rxx-parse range-regexp "[(1/2)]--[(3/4)]x"))
+	 (rxx-parse range-regexp "[(1/2)]--[(3/4)]"))
 
 
 (defmacro rxxlet* (bindings forms)
