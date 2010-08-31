@@ -1092,7 +1092,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; But either a number or a unit must be given.
    (or (seq (optional (named-grp val org-balance-number-regexp))
 	    (named-grp unit org-balance-unit-regexp))
-	(seq (named-grp val) (optional (named-grp unit))))
+	(seq (named-grp val org-balance-number-regexp) (optional (named-grp unit org-balance-unit-regexp))))
    (org-balance-make-valu (or val 1) (or unit "item"))
    "value with unit")
   "regexp for value with a unit, e.g. '1 day'")
@@ -1112,7 +1112,8 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; But either a number or a unit must be given.
    (or (seq (optional (seq (named-grp range org-balance-number-range-regexp) (one-or-more whitespace)))
 	     (named-grp unit org-balance-unit-regexp))
-	(seq (named-grp range) (optional (one-or-more whitespace) (named-grp unit))))
+	(seq (named-grp range org-balance-number-range-regexp)
+	     (optional (one-or-more whitespace) (named-grp unit org-balance-unit-regexp))))
    (let ((number-range (or range (cons 1 1)))
 	 (unit (or unit "item")))
      (cons (org-balance-make-valu (car number-range) unit)
