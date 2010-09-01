@@ -161,10 +161,12 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 	 (equiv-old-grp-defs
 	  (delq nil
 		(mapcar (lambda (old-grp-def)
-			  (or (null grp-def-raw) (equal old-grp-def grp-def)))
+			  (when (or (null grp-def-raw)  (equal (rxx-info-form old-grp-def) grp-def-raw))
+			    old-grp-def))
 			old-grp-defs))))
+    (dbg equiv-old-grp-defs)
     (if equiv-old-grp-defs
-      (rxx-info-regexp (first equiv-org-grp-defs))
+      (rxx-info-regexp (first equiv-old-grp-defs))
       (let* ((grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
 	     (old-rxx-env rxx-env)
 	     (rxx-env (rxx-new-env))  ;; within each named group, a new environment for group names
