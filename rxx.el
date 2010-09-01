@@ -86,27 +86,31 @@
   "Put rxx-info on a regexp string, replacing any already there.  This creates an aregexp (annotated regexp)."
     (put-text-property 0 (length regexp) 'rxx rxx-info regexp))
 
-(defun rxx-new-env ()
+(defun rxx-new-env (&optional parent-env)
   "Create a fresh environment mapping group names to rxx-infos.  There is an environment for the top-level regexp, and
 also a separate one within each named group (for nested named groups).  We represent the environment as an alist.
 The alist always has at least one cell; this lets us add entries to an environment that is bound (pointed to) by
 several lisp symbols, without having to find and rebind all the symbols."
-  (list (cons nil nil)))
+  (list (cons nil parent-env)))
+
+(defun rxx-parent-env (rxx-env) (cdr (first rxx-env)))
 
 (defun rxx-env-lookup (grp-name rxx-env)
   "Lookup the rxx-info for the named group GRP-NAME in the environment RXX-ENV, or return nil if not found.  GRP-NAME is
 either a symbol, or a list of symbols indicating a path through nested named groups.  Since multiple groups may be
 bound to the same name in an environment, this returns a list."
   (when (symbolp grp-name) (setq grp-name (list grp-name)))
-  (let ((grp-infos (cdr-safe (assq (first grp-name) rxx-env))))
-    (apply 'append
-	   (mapcar
-	    (lambda (grp-info)
-	      (if (cdr grp-name)
-		  (rxx-env-lookup (cdr grp-name)
-				  (rxx-info-env grp-info))
-		(list grp-info)))
-	    grp-infos))))
+  (if (eq (first grp-name) '..)
+      (rxx-env-lookup (cdr grp-name) (rxx-parent-env rxx-env))
+    (let ((grp-infos (cdr-safe (assq (first grp-name) rxx-env))))
+      (apply 'append
+	     (mapcar
+	      (lambda (grp-info)
+		(if (cdr grp-name)
+		    (rxx-env-lookup (cdr grp-name)
+				    (rxx-info-env grp-info))
+		  (list grp-info)))
+	      grp-infos)))))
 
 (defun rxx-env-bind (grp-name rxx-info rxx-env)
   "Bind group name GRP-NAME to group annotation RXX-INFO in the
@@ -144,6 +148,9 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
   
   (declare (special rxx-next-grp-num rxx-env))
   (rx-check form)
+  (or
+   (and (boundp 'rxx-replace-named-grps)
+	   (cdr-safe (assoc (second form) rxx-replace-named-grps)))
   (let* ((grp-name (second form))
 	 (grp-def-raw (third form))
 	 (old-grp-defs (rxx-env-lookup grp-name rxx-env))
@@ -156,7 +163,8 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
     (if equiv-old-grp-defs (rxx-info-regexp (first equiv-old-grp-defs))
       (let* ((grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
 	     (old-rxx-env rxx-env)
-	     (rxx-env (rxx-new-env))  ;; within each named group, a new environment for group names
+	     (rxx-env (rxx-new-env old-rxx-env))  ;; within each named group, a new environment for group names
+	     (rxx-path (cons grp-name rxx-path))
 	     (grp-def
 	      (or (and (symbolp grp-def-raw)
 		       (boundp grp-def-raw)
@@ -190,7 +198,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 				:env rxx-env
 				:regexp regexp-here
 				:form (rxx-info-form grp-def)) old-rxx-env)
-	regexp-here))))
+	regexp-here)))))
 
 
 (defun rxx-process-named-backref (form)
@@ -289,7 +297,7 @@ For detailed description, see `rxx'.
   (declare (special rxx-first-grp-num))
   (let* ((rxx-env (rxx-new-env))
 	 (rxx-next-grp-num rxx-first-grp-num)
-
+	 (rxx-path nil)
 	 ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
 	 (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				    (eval-regexp . (rxx-process-eval-regexp 1 1))

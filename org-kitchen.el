@@ -796,3 +796,8 @@ growing the physical representation of the vector as needed."
   (assert (member 'polarity rxx-disable-grps))
   (rxx-parse (rxx-to-string (rxx-info-form (get-rxx-info rxx-valu-ratio-goal-regexp))
 			    (rxx-info-parser (get-rxx-info rxx-valu-ratio-goal-regexp))) "at leastttt once a month"))
+
+
+(defconst rxx-clock-range-regexp2
+  (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-")
+	    (named-grp to rxx-clock-regexp :replace left-bracket (named-backref (.. from left-bracket)))) (cons from to)))

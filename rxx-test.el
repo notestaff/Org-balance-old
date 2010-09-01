@@ -205,6 +205,22 @@ TIME defaults to the current time."
 (assert (equal (rxx-parse rxx-clock-range-regexp "CLOCK:[2010-08-31 Tue 07:43]--<2010-08-31 Tue 13:43>") '(1283254980.0 . 1283276580.0)))
 
 
+(defconst rxx-clock-range-regexp2
+  (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp))
+       (cons (rxx-match-val '(from time .. .. to time)) to)))
+
+(assert (equal (rxx-parse rxx-clock-range-regexp2 "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '("2010-08-31 Tue 13:43" . 1283276580.0)))
+
+(mapcar 'car (rxx-info-env (first (rxx-env-lookup '(from .. to) (rxx-info-env (get-rxx-info rxx-clock-range-regexp))))))
+
+;(defconst rxx-clock-range-regexp2
+;  (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-")
+;	    (named-grp to (eval-regexp (let ((rxx-replace-named-grps (list (cons (quote left-bracket) (quote (named-backref left-bracket)))))) rxx-clock-regexp)))) (cons from to)))
+;(rxx-parse rxx-clock-range-regexp2 "")
+
+
+
+
 
 
 
