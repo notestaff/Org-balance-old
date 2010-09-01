@@ -167,7 +167,12 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 	 ;; the mapping of nested group names to group numbers in the rxx-env environment created above for this
 	 ;; named group.
 	 (regexp-here (format "\\(?%d:%s\\)" grp-num
-			      (rx-to-string (rxx-info-form grp-def)))))
+			      (if (and (boundp 'rxx-disable-grps) (member grp-name rxx-disable-grps))
+				  (progn
+				    (message "DISABLING %s" grp-name)
+				    (rx-to-string (rxx-info-form grp-def))
+				    ".*")
+				(rx-to-string (rxx-info-form grp-def))))))
 	(rxx-env-bind grp-name (make-rxx-info
 				:num grp-num
 				:parser (rxx-info-parser grp-def)
@@ -218,7 +223,7 @@ to `match-string', `match-beginning' or `match-end'."
 		       (when match (cons match grp-info))))
 		   grp-infos))))
       (when matches-here
-	(assert (= (length matches-here) 1))
+	(unless (= (length matches-here) 1) (error "More than one match to group %s" grp-name))
 	(let* ((match-info-here (first matches-here))
 	       (match-here (car match-info-here))
 	       (grp-info (cdr match-info-here))
