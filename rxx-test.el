@@ -158,6 +158,11 @@
 (assert (equal (rxx-parse rxx-valu-ratio-goal-regexp "at least once a day +- 5%")
 	       '(:num-min (1 . "item") :num-max (1 . "item") :denom (1 . "day") :polarity atleast :margin 5 :text "at least once a day +- 5%")))
 
+(assert (equal (rxx-parse (rxx (seq (or (named-grp num (one-or-more digit)) (seq "hithere" (named-grp num)))  (named-backref num))) "1212") "1212"))
+
+
+(assert (equal (rxx-parse (rxx (seq (or (named-grp num (one-or-more digit)) (seq "hithere" (named-grp num)))  (named-backref num)) (string-to-number num)) "hithere1212") 12))
+
 
 
 

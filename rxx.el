@@ -197,9 +197,10 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
   "Process the (named-backref GRP-NAME) form, when called from `rx-to-string'."
   (rx-check form)
   (let* ((grp-name (second form))
-	 (prev-grp-def (rxx-env-lookup grp-name rxx-env)))
-    (unless prev-grp-def (error "Group in backref not yet seen: %s" grp-name))
-    (rx-backref `(backref ,(rxx-info-num prev-grp-def)))))
+	 (prev-grp-defs (rxx-env-lookup grp-name rxx-env)))
+    (unless prev-grp-defs (error "Group in backref not yet seen: %s" grp-name))
+    (unless (= (length prev-grp-defs) 1) (error "Ambiguous backref to group %s" grp-name))
+    (rx-backref `(backref ,(rxx-info-num (first prev-grp-defs))))))
 
 (defun rxx-call-parser (rxx-info match-str)
   (let* ((symbols (delq nil (mapcar 'car (rxx-info-env rxx-info))))
