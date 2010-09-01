@@ -483,7 +483,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				  (org-balance-sum-property
 				   goal-prop-here
 				   (org-balance-valu-unit
-				    (org-balance-valu-ratio-goal-num-min parsed-goal))
+				    (org-balance-valu-ratio-goal-numer-min parsed-goal))
 				   tstart tend))))
 					; we only really need to set the text for entries where there is a goal.
 					; but is it faster just to set it?
@@ -493,18 +493,18 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				   :num
 				   (org-balance-make-valu sum-here
 							  (if is-time 'minutes
-							    (org-balance-valu-unit (org-balance-valu-ratio-goal-num-min parsed-goal))))
+							    (org-balance-valu-unit (org-balance-valu-ratio-goal-numer-min parsed-goal))))
 				   :denom days-in-interval)
 				  (make-org-balance-valu-ratio
-				   :num (org-balance-valu-ratio-goal-num-min parsed-goal)
+				   :num (org-balance-valu-ratio-goal-numer-min parsed-goal)
 				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
 
 			    (let* ( (polarity (or (org-balance-valu-ratio-goal-polarity parsed-goal)
 						  (cdr (assoc-string goal-prop-here org-balance-default-polarity))))
 				    (margin (or (org-balance-valu-ratio-goal-margin parsed-goal)
 						org-balance-default-margin-percent))
-				    (goal-min (org-balance-valu-val (org-balance-valu-ratio-goal-num-min parsed-goal)))
-				    (goal-max (org-balance-valu-val (org-balance-valu-ratio-goal-num-max parsed-goal)))
+				    (goal-min (org-balance-valu-val (org-balance-valu-ratio-goal-numer-min parsed-goal)))
+				    (goal-max (org-balance-valu-val (org-balance-valu-ratio-goal-numer-max parsed-goal)))
 				    (range-min (- goal-min
 						  (if (numberp margin)
 						      (* (/ (float margin) 100.0) goal-min)
@@ -1150,8 +1150,8 @@ changing only the numerator."
 
 ;; Struct: org-balance-valu-ratio-goal - the user-specified goal you have for a ratio.
 (defstruct org-balance-valu-ratio-goal
-  num-min
-  num-max
+  numer-min
+  numer-max
   denom
   polarity
   margin
@@ -1171,9 +1171,9 @@ changing only the numerator."
   (rxx
    (seq
     (optional (named-grp polarity org-balance-polarity-regexp))
-    (named-grp num org-balance-valu-range-regexp)
+    (named-grp numerator org-balance-valu-range-regexp)
     (one-or-more whitespace) (eval-regexp (regexp-opt org-balance-ratio-words)) (one-or-more whitespace)
-    (named-grp denom org-balance-valu-regexp)
+    (named-grp denominator org-balance-valu-regexp)
     (optional
      ;; specify margin
      (seq
@@ -1182,17 +1182,17 @@ changing only the numerator."
       (zero-or-more whitespace)
       (seq
        (or
-	(seq (named-grp margin-percent org-balance-number-regexp)
+	(seq (named-grp margin org-balance-number-regexp)
 	     (zero-or-more whitespace)
 	     "%")
-	(named-grp margin-val org-balance-valu-regexp))))))
+	(named-grp margin org-balance-valu-regexp))))))
    (lambda (goal-str)
      (make-org-balance-valu-ratio-goal 
-      :num-min (car num)
-      :num-max (cdr num)
-      :denom denom
+      :numer-min (car numerator)
+      :numer-max (cdr numerator)
+      :denom denominator
       :polarity polarity
-      :margin (or margin-percent margin-val)
+      :margin margin
       :text goal-str)))
   "value ratio goal")
 
