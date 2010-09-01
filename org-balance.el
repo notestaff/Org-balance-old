@@ -175,14 +175,15 @@ from the `before-change-functions' in the current buffer."
 
 (defmacro dbg (&rest exprs)
   "Print the values of exprs, so you can write e.g. (dbg a b) to print 'a=1 b=2'."
-  (append
-   (list 'message
-	 (mapconcat (lambda (expr)
-		      (concat (format "%s" expr) "=%s "))
-		    exprs
-		    ""))
-   exprs))
-
+  `(progn
+      (message
+       ,(mapconcat (lambda (expr)
+		     (concat (format "%s" expr) "=%s "))
+		  exprs
+		  "")
+       ,@exprs)
+      ,@exprs))
+  
 (defun org-balance-get-property (prop &optional default-val)
   "Get the value of a property, represented either as text property or org property,
 at point.  If PROP is a symbol or keyword it is assumed
