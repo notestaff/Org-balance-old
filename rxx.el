@@ -352,10 +352,10 @@ DESCR, if given, is used in error messages by `rxx-parse'.
   
   (rxx-to-string form parser descr))
 
-(defmacro rxxlet* (bindings forms)
+(defmacro rxxlet* (bindings &optional forms)
   (list 'let* (mapcar (lambda (binding) (list (first binding) (list 'rxx (second binding) (third binding) (symbol-name (first binding)))))
 		      bindings)
-	forms))
+	(or forms (and bindings (car-safe (car-safe (last bindings)))))))
 
 (defun rxx-parse (aregexp s &optional partial-match-ok)
   "Match the string against the given extended regexp, and return
