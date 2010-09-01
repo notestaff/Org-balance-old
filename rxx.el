@@ -164,7 +164,6 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 			  (when (or (null grp-def-raw)  (equal (rxx-info-form old-grp-def) grp-def-raw))
 			    old-grp-def))
 			old-grp-defs))))
-    (dbg equiv-old-grp-defs)
     (if equiv-old-grp-defs
       (rxx-info-regexp (first equiv-old-grp-defs))
       (let* ((grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
