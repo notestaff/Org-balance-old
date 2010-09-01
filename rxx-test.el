@@ -162,6 +162,50 @@
 
 
 (assert (equal (rxx-parse (rxx (seq (or (named-grp num (one-or-more digit)) (seq "hithere" (named-grp num)))  (named-backref num)) (string-to-number num)) "hithere1212") 12))
+;;;borrowed from orgmode
+(defconst rxx-clock-string "CLOCK:")
+
+
+(defun rxx-parse-time-string (s &optional nodefault)
+  "Parse the standard Org-mode time string.
+This should be a lot faster than the normal `parse-time-string'.
+If time is not given, defaults to 0:00.  However, with optional NODEFAULT,
+hour and minute fields will be nil if not given."
+  (if (string-match org-ts-regexp0 s)
+      (list 0
+	    (if (or (match-beginning 8) (not nodefault))
+		(string-to-number (or (match-string 8 s) "0")))
+	    (if (or (match-beginning 7) (not nodefault))
+		(string-to-number (or (match-string 7 s) "0")))
+	    (string-to-number (match-string 4 s))
+	    (string-to-number (match-string 3 s))
+	    (string-to-number (match-string 2 s))
+	    nil nil nil)
+    (error "Not a standard Org-mode time string: %s" s)))
+
+(defun rxx-float-time (&optional time)
+  "Convert time value TIME to a floating point number.
+TIME defaults to the current time."
+  (if (featurep 'xemacs)
+      (time-to-seconds (or time (current-time)))
+    (float-time time)))
+
+(defconst rxx-clock-regexp
+  (rxx (or (seq (named-grp left-bracket "<") (named-grp time (1+ not-newline)) ">")
+	   (seq (named-grp left-bracket "[")
+		(named-grp time (1+ not-newline)) "]"))
+       (rxx-float-time (apply 'encode-time (rxx-parse-time-string time)))))
+
+(assert (equal (rxx-parse rxx-clock-regexp "<2010-09-01 Wed 15:49>") 1283370540.0))
+
+(defconst rxx-clock-range-regexp
+  (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp)) (cons from to)))
+
+(assert (equal (rxx-parse rxx-clock-range-regexp "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '(1283254980.0 . 1283276580.0)))
+(assert (equal (rxx-parse rxx-clock-range-regexp "CLOCK:[2010-08-31 Tue 07:43]--<2010-08-31 Tue 13:43>") '(1283254980.0 . 1283276580.0)))
+
+
+
 
 
 
