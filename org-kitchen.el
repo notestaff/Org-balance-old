@@ -791,3 +791,8 @@ growing the physical representation of the vector as needed."
   (list 'let* (mapcar (lambda (binding) (list (first binding) (list 'rxx (second binding) (third binding) (symbol-name (first binding)))))
 		      bindings)
 	forms))
+
+(let ((rxx-disable-grps '(polarity atleast atmost)))
+  (assert (member 'polarity rxx-disable-grps))
+  (rxx-parse (rxx-to-string (rxx-info-form (get-rxx-info rxx-valu-ratio-goal-regexp))
+			    (rxx-info-parser (get-rxx-info rxx-valu-ratio-goal-regexp))) "at leastttt once a month"))
