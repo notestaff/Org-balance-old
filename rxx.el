@@ -146,17 +146,6 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
   (rx-check form)
   (let* ((grp-name (second form))
 	 (grp-def-raw (third form))
-	 (grp-def
-	  (when grp-def-raw
-	    (cond ((and (symbolp grp-def-raw)
-			(boundp grp-def-raw)
-			(get-rxx-info (symbol-value grp-def-raw))))
-		  ((and (listp grp-def-raw)
-			(eq (first grp-def-raw) 'regexp)
-			(get-rxx-info (second grp-def-raw))))
-		  ((and (listp grp-def-raw)
-			(eq (first grp-def-raw) 'eval-regexp)
-			(get-rxx-info (eval (second grp-def-raw))))))))
 	 (old-grp-defs (rxx-env-lookup grp-name rxx-env))
 	 (equiv-old-grp-defs
 	  (delq nil
@@ -164,13 +153,20 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 			  (when (or (null grp-def-raw)  (equal (rxx-info-form old-grp-def) grp-def-raw))
 			    old-grp-def))
 			old-grp-defs))))
-    (if equiv-old-grp-defs
-      (rxx-info-regexp (first equiv-old-grp-defs))
+    (if equiv-old-grp-defs (rxx-info-regexp (first equiv-old-grp-defs))
       (let* ((grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
 	     (old-rxx-env rxx-env)
 	     (rxx-env (rxx-new-env))  ;; within each named group, a new environment for group names
 	     (grp-def
-	      (or grp-def
+	      (or (and (symbolp grp-def-raw)
+		       (boundp grp-def-raw)
+		       (get-rxx-info (symbol-value grp-def-raw)))
+		  (and (listp grp-def-raw)
+		       (eq (first grp-def-raw) 'regexp)
+		       (get-rxx-info (second grp-def-raw)))
+		  (and (listp grp-def-raw)
+		       (eq (first grp-def-raw) 'eval-regexp)
+		       (get-rxx-info (eval (second grp-def-raw))))
 		  (make-rxx-info :parser 'identity :env (rxx-new-env)
 				 :form (or grp-def-raw (error "Missing named group definition: %s" form)))))
 	     ;; generate the string representation of the regexp inside this named group.   note that any named
