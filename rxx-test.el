@@ -191,9 +191,9 @@ TIME defaults to the current time."
     (float-time time)))
 
 (defconst rxx-clock-regexp
-  (rxx (or (seq (named-grp left-bracket "<") (named-grp time (1+ not-newline)) ">")
+  (rxx (or (seq (named-grp left-bracket "<") (named-grp time (1+ (not (any ">")))) ">")
 	   (seq (named-grp left-bracket "[")
-		(named-grp time (1+ not-newline)) "]"))
+		(named-grp time (1+ (not (any ">"))) "]")))
        (rxx-float-time (apply 'encode-time (rxx-parse-time-string time)))))
 
 (assert (equal (rxx-parse rxx-clock-regexp "<2010-09-01 Wed 15:49>") 1283370540.0))
@@ -210,6 +210,14 @@ TIME defaults to the current time."
        (cons (rxx-match-val '(from time .. .. to time)) to)))
 
 (assert (equal (rxx-parse rxx-clock-range-regexp2 "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '("2010-08-31 Tue 13:43" . 1283276580.0)))
+
+;(defconst rxx-clock-range-regexp3
+;  (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp)
+;	    (optional (one-or-more whitespace) (named-backref (from left-bracket)))
+;	    )
+;       (cons (rxx-match-val '(from time .. .. to time)) to)))
+
+;(rxx-parse rxx-clock-range-regexp2 "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>      2010-08-31 Tue 07:43")
 
 (mapcar 'car (rxx-info-env (first (rxx-env-lookup '(from .. to) (rxx-info-env (get-rxx-info rxx-clock-range-regexp))))))
 
