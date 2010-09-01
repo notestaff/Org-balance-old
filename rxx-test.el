@@ -106,13 +106,13 @@
    ;; But either a number or a unit must be given.
    (or (seq (optional (seq (named-grp range rxx-number-range-regexp) (one-or-more whitespace)))
 	     (named-grp unit rxx-unit-regexp))
-	(seq (named-grp range rxx-number-range-regexp) (optional (one-or-more whitespace)
-								 (named-grp unit rxx-unit-regexp))))
+       (seq (named-grp range rxx-number-range-regexp) (optional (one-or-more whitespace)
+								(named-grp unit rxx-unit-regexp))))
    (let ((number-range (or range (cons 1 1)))
 	 (unit (or unit "item")))
      (cons (cons (car number-range) unit)
 	   (cons (cdr number-range) unit))))
-   "value range")
+  "value range")
 
 (defconst rxx-ratio-words (list "per" "every" "each" "/" "a" "in a"))
 
@@ -157,7 +157,6 @@
 
 (assert (equal (rxx-parse rxx-valu-ratio-goal-regexp "at least once a day +- 5%")
 	       '(:num-min (1 . "item") :num-max (1 . "item") :denom (1 . "day") :polarity atleast :margin 5 :text "at least once a day +- 5%")))
-
 
 
 
