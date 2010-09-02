@@ -227,8 +227,14 @@ TIME defaults to the current time."
 ;(rxx-parse rxx-clock-range-regexp2 "")
 
 
+(assert (equal (rxx-parse (rxx (seq (named-grp para (seq (named-grp cifry (1+ digit)) (named-grp bukvy (1+ alpha))))
+				    (named-backref (para cifry))) (rxx-match-val '(para cifry))) "1b1") "1"))
 
-
+(assert (equal
+	 (rxxlet* (
+		   (re2 (seq "zz" (named-grp hru (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)))) hru))
+		  (rxx-parse re2 "zz1 2 3 ")) '("1 " "2 " "3 ")))
+	 
 
 
 

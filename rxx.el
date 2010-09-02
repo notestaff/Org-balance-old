@@ -136,6 +136,18 @@ The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-ARE
       (or aregexp (when (boundp 'rxx-aregexp) rxx-aregexp)
 	  (error "The annotated regexp must be either passed in explicitly, or scoped in as `rxx-aregexp'.")))))))
 
+(defun rxx-make-shy (re)
+  "Make all groups in re shy"
+  (save-match-data
+    (replace-regexp-in-string
+     (rx (seq "\\(" (group "") (not (any "?"))))
+     "?:" (save-match-data
+	    (replace-regexp-in-string
+	     (rx (seq "\\(?" (group (one-or-more digit) ) ":"))
+	     "" re 'fixedcase 'literal 1))
+     'fixedcase 'literal 1)))
+
+
 (defun rxx-process-named-grp (form)
   "Process the (named-grp GRP-NAME GRP-DEF) form, when called from `rx-to-string'.  GRP-DEF can be an annotated regexp,
 a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an annotated regexp, you can call 
@@ -175,6 +187,35 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 		  (and (listp grp-def-raw)
 		       (eq (first grp-def-raw) 'eval-regexp)
 		       (get-rxx-info (eval (second grp-def-raw))))
+		  (and (listp grp-def-raw)
+		       (eq (first grp-def-raw) 'zero-or-more)
+		       (make-rxx-info
+			:env (rxx-new-env) :form grp-def-raw
+			:parser
+			`(lambda (match)
+			  (let (found result
+				(num-repeats 0)
+				(one-copy
+				 (format "\\(%s\\)"(rxx-make-shy (rxx ,(second grp-def-raw)))))
+				(re ""))
+			    (save-match-data
+			      (while (not found)
+				(if (and (string-match re match)
+					 (= (match-beginning 0) 0)
+					 (= (match-end 0) (length match)))
+				    (progn
+				      (setq found t)
+				      (dotimes (i num-repeats)
+					(let ((ms (match-string (1+ i) match)))
+					  (setq result (append result (list ms)))
+					)
+				      ))
+				  (setq re (concat re one-copy))
+				  (incf num-repeats)
+				  )
+			    ))
+			    result
+			    ))))
 		  (make-rxx-info :parser 'identity :env (rxx-new-env)
 				 :form (or grp-def-raw (error "Missing named group definition: %s" form)))))
 	     ;; generate the string representation of the regexp inside this named group.   note that any named
@@ -316,7 +357,10 @@ For detailed description, see `rxx'.
 	  ;; to rxx-name2grp.
 	  (rx-to-string form))
 	 (rxx-info (make-rxx-info
-		    :form form :parser (if parser parser 'identity)
+		    :form form :parser (or parser
+					   (and (listp form) (eq (first form) 'named-grp)
+						(rxx-info-parser (first (rxx-env-lookup (second form) rxx-env))))
+					   'identity)
 		    :env rxx-env :descr descr
 		    )))
     (put-rxx-info regexp rxx-info)
