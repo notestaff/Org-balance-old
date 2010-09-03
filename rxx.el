@@ -184,15 +184,41 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 		  (and (listp grp-def-raw)
 		       (eq (first grp-def-raw) 'regexp)
 		       (get-rxx-info (second grp-def-raw)))
+
+		  ;;
+		  ;; change handlers for eval-regexp and regexp
+		  ;; to call regexp-opt-depth and increment
+		  ;; our "next grp number" as needed?
+		  ;;
+		  ;; (though, what if it's )
+		  ;;
+
+		  ;;
+		  ;; change form processing code to pass along
+		  ;; any rxx-infos found on inner code.
+		  ;; 
+		  ;; 
+		  ;;
+
+		  ;;
+		  ;; if underlying form has a parser -- i.e. is 
+		  ;; a namegrp or a regexp
+		  ;;
+		  
 		  (and (listp grp-def-raw)
 		       (eq (first grp-def-raw) 'eval-regexp)
 		       (get-rxx-info (eval (second grp-def-raw))))
+
+		  ;; first recursively analyze the repeated form(s)
+		  ;; 
+		  
 		  (and (listp grp-def-raw)
 		       (eq (first grp-def-raw) 'zero-or-more)
 		       (make-rxx-info
 			:env (rxx-new-env) :form grp-def-raw
 			:parser
 			`(lambda (match)
+			   ;; so, you need to 
 			  (let (found result
 				(num-repeats 0)
 				(one-copy
