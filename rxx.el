@@ -407,9 +407,15 @@ For detailed description, see `rxx'.
   (if
       (or (not (boundp (quote rxx-recurs-depth)))
 	  (< rxx-recurs-depth 1))
-      "\\(?:[^[:ascii:][:nonascii:]]\\)"
+      (let ((match-nothing "\\(?:[^[:ascii:][:nonascii:]]\\)"))
+	(rxx-env-bind (second form) (make-rxx-info :form `(regexp ,match-nothing)
+						   :env (rxx-new-env) :num 0
+						   :parser (lambda (match) nil))
+		      rxx-env)
+	match-nothing)
     (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
-      (rxx-process-named-grp (list (first form) (symbol-value (second form)))))))
+      (dbg (symbol-value (third form)))
+      (rxx-process-named-grp `(named-grp ,(second form) (eval-regexp ,(third form)))))))
 
 
 (defmacro rxx (form &optional parser descr)
@@ -451,10 +457,10 @@ DESCR, if given, is used in error messages by `rxx-parse'.
   
   (rxx-to-string form parser descr))
 
-(defmacro rxxlet* (bindings &optional forms)
+(defmacro rxxlet* (bindings &rest forms)
   (list 'let* (mapcar (lambda (binding) (list (first binding) (list 'rxx (second binding) (third binding) (symbol-name (first binding)))))
 		      bindings)
-	(or forms (and bindings (car-safe (car-safe (last bindings)))))))
+	(or (car-safe forms) (and bindings (car-safe (car-safe (last bindings)))))))
 
 (defun rxx-parse (aregexp s &optional partial-match-ok)
   "Match the string against the given extended regexp, and return
