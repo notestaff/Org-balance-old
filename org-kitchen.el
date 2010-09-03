@@ -801,3 +801,23 @@ growing the physical representation of the vector as needed."
 (defconst rxx-clock-range-regexp2
   (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-")
 	    (named-grp to rxx-clock-regexp :replace left-bracket (named-backref (.. from left-bracket)))) (cons from to)))
+
+
+(defun rxx-parse-recurs (aregexp s max-recurs-depth &optional partial-match-ok)
+  (let* ((rxx-recurs-depth max-recurs-depth)
+	 (unwound-aregexp (rxx-to-string `(named-grp top-grp
+						     ,aregexp))))
+    (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)
+  ))
+
+				    (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
+
+(defun rxx-process-named-grp-recurs (form)
+  "Process named-grp-recurs"
+  (if (or (not boundp 'rxx-recurs-depth)
+	  (< rxx-recurs-depth 1))
+      "\\(?:[^[:ascii:][:nonascii:]]\\)"
+    (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
+      (rxx-process-named-grp (list (first form) (symbol-value (second form))))
+    )
+  ))

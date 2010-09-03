@@ -369,6 +369,7 @@ For detailed description, see `rxx'.
 	 (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				    (eval-regexp . (rxx-process-eval-regexp 1 1))
 				    (shy-grp . seq)
+				    (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
 				    (named-group . named-grp) (shy-group . shy-grp)
 				    (named-backref . (rxx-process-named-backref 1 1)))
 				  rx-constituents))
@@ -453,6 +454,13 @@ the parsed result in case of match, or nil in case of mismatch."
 	    (rxx-call-parser rxx-info (match-string 0 s)))
 	(error "Error parsing \`%s\' as %s" s
 	       (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))))
+
+(defun rxx-parse-recurs (aregexp s max-recurs-depth &optional partial-match-ok)
+  (let* ((rxx-recurs-depth max-recurs-depth)
+	 (unwound-aregexp (rxx-to-string `(named-grp top-grp
+						     ,aregexp))))
+    (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)
+  ))
 
 (provide 'rxx)
 

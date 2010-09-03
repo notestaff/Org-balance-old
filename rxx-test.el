@@ -244,5 +244,14 @@ TIME defaults to the current time."
 
 
 	
+(defun rxx-process-named-grp-recurs (form)
+  "Process named-grp-recurs"
+  (if (or (not boundp 'rxx-recurs-depth)
+	  (< rxx-recurs-depth 1))
+      "\\(?:[^[:ascii:][:nonascii:]]\\)"
+    (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
+      (rxx-process-named-grp (list (first form) (symbol-value (second form))))
+    )
+  ))
 
 
