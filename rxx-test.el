@@ -4,10 +4,10 @@
 
 (assert
  (equal (rxxlet* ((number-regexp (one-or-more digit) string-to-number)
-		  (fraction-regexp (seq (named-grp numerator number-regexp) "/" (named-grp denominator number-regexp))
+		  (fraction-regexp (seq (number-regexp numerator) "/" (number-regexp denominator))
 				   (cons numerator denominator))
-		  (paren-regexp (seq "(" (named-grp val fraction-regexp) ")") val)
-		  (range-regexp (seq "[" (named-grp rmin paren-regexp) "]--[" (named-grp rmax paren-regexp) "]")
+		  (paren-regexp (seq "(" (fraction-regexp val) ")") val)
+		  (range-regexp (seq "[" (paren-regexp rmin) "]--[" (paren-regexp rmax) "]")
 				(list rmin rmax)))
 		 (rxx-parse range-regexp "[(1/2)]--[(3/4)]")) '((1 . 2) (3 . 4))))
 

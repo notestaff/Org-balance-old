@@ -1073,8 +1073,8 @@ by whitespace, it throws an error rather than silently returning zero.
 (defconst org-balance-number-range-regexp
   (rxx
    (seq
-    (named-grp range-start org-balance-number-regexp)
-    (optional "-" (named-grp range-end org-balance-number-regexp)))
+    (org-balance-number-regexp range-start)
+    (optional "-" (org-balance-number-regexp range-end)))
    (cons range-start (or range-end range-start))))
 
 (defvar org-balance-parse-valu-hooks nil
@@ -1091,8 +1091,8 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
    ;; But either a number or a unit must be given.
-   (or (seq (optional (named-grp val org-balance-number-regexp))
-	    (named-grp unit org-balance-unit-regexp))
+   (or (seq (optional (org-balance-number-regexp val))
+	    (org-balance-unit-regexp unit))
 	(seq (named-grp val) (optional (named-grp unit))))
    (org-balance-make-valu (or val 1) (or unit "item"))
    "value with unit")
@@ -1111,8 +1111,8 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
    ;; But either a number or a unit must be given.
-   (or (seq (optional (seq (named-grp range org-balance-number-range-regexp) (one-or-more whitespace)))
-	    (named-grp unit org-balance-unit-regexp))
+   (or (seq (optional (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
+	    (org-balance-unit-regexp unit))
 	(seq (named-grp range) (optional (one-or-more whitespace) (named-grp unit))))
    (let ((number-range (or range (cons 1 1)))
 	 (unit (or unit "item")))
@@ -1170,10 +1170,10 @@ changing only the numerator."
 (defconst org-balance-valu-ratio-goal-regexp
   (rxx
    (seq
-    (optional (named-grp polarity org-balance-polarity-regexp))
-    (named-grp numerator org-balance-valu-range-regexp)
+    (optional (org-balance-polarity-regexp polarity))
+    (org-balance-valu-range-regexp numerator)
     (one-or-more whitespace) (eval-regexp (regexp-opt org-balance-ratio-words)) (one-or-more whitespace)
-    (named-grp denominator org-balance-valu-regexp)
+    (org-balance-valu-regexp denominator)
     (optional
      ;; specify margin
      (seq
@@ -1182,10 +1182,10 @@ changing only the numerator."
       (zero-or-more whitespace)
       (seq
        (or
-	(seq (named-grp margin org-balance-number-regexp)
+	(seq (org-balance-number-regexp margin)
 	     (zero-or-more whitespace)
 	     "%")
-	(named-grp margin org-balance-valu-regexp))))))
+	(org-balance-valu-regexp margin))))))
    (lambda (goal-str)
      (make-org-balance-valu-ratio-goal 
       :numer-min (car numerator)

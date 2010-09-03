@@ -157,6 +157,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
   ; if the form is a symbol, and not one of the reserved ones in rx,
   ; evaluate it as a variable.
   ;
+  ;(dbg "namedgrp" form)
   
   (declare (special rxx-next-grp-num rxx-env))
   (rx-check form)
@@ -176,7 +177,6 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
       (let* ((grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
 	     (old-rxx-env rxx-env)
 	     (rxx-env (rxx-new-env old-rxx-env))  ;; within each named group, a new environment for group names
-	     (rxx-path (cons grp-name rxx-path))
 	     (grp-def
 	      (or (and (symbolp grp-def-raw)
 		       (boundp grp-def-raw)
@@ -279,7 +279,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 
 (defun rxx-call-parser (rxx-info match-str)
   (let ((rxx-env (rxx-info-env rxx-info)))
-    (dbg "matching " match-str " in env " (delq nil (mapcar 'car rxx-env)))
+    ;(dbg "matching " match-str " in env " (delq nil (mapcar 'car rxx-env)))
     (let* ((symbols (delq nil (mapcar 'car (rxx-info-env rxx-info))))
 	   (symbol-vals (mapcar
 			 (lambda (symbol)
@@ -287,12 +287,12 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 			 symbols))
 	   (parser (rxx-info-parser rxx-info)))
       (progv symbols symbol-vals
-	(dbg symbols symbol-vals parser match-str)
+	;(dbg symbols symbol-vals parser match-str)
 	(let ((parser-result
 	       (if (functionp parser)
 		   (funcall parser match-str)
 		 (eval parser))))
-	  (dbg parser-result)
+	  ;(dbg parser-result)
 	  parser-result)))))
       
 
@@ -374,7 +374,6 @@ For detailed description, see `rxx'.
   (declare (special rxx-first-grp-num))
   (let* ((rxx-env (rxx-new-env))
 	 (rxx-next-grp-num rxx-first-grp-num)
-	 (rxx-path nil)
 	 ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
 	 (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				    (eval-regexp . (rxx-process-eval-regexp 1 1))
@@ -414,7 +413,7 @@ For detailed description, see `rxx'.
 		      rxx-env)
 	match-nothing)
     (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
-      (dbg (symbol-value (third form)))
+      ;(dbg (symbol-value (third form)))
       (rxx-process-named-grp `(named-grp ,(second form) (eval-regexp ,(third form)))))))
 
 
@@ -486,6 +485,11 @@ the parsed result in case of match, or nil in case of mismatch."
 						     ,aregexp))))
     (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)
   ))
+
+(defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
+  (if (and (listp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
+      (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form))))
+    ad-do-it))
 
 (provide 'rxx)
 
