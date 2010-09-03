@@ -278,13 +278,23 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
     (rx-backref `(backref ,(rxx-info-num (first prev-grp-defs))))))
 
 (defun rxx-call-parser (rxx-info match-str)
-  (let* ((symbols (delq nil (mapcar 'car (rxx-info-env rxx-info))))
-	  (symbol-vals (mapcar 'rxx-match-val symbols))
-	  (parser (rxx-info-parser rxx-info)))
-    (progv symbols symbol-vals
-      (if (functionp parser)
-	    (funcall parser match-str)
-	(eval parser)))))
+  (let ((rxx-env (rxx-info-env rxx-info)))
+    (dbg "matching " match-str " in env " (delq nil (mapcar 'car rxx-env)))
+    (let* ((symbols (delq nil (mapcar 'car (rxx-info-env rxx-info))))
+	   (symbol-vals (mapcar
+			 (lambda (symbol)
+			   (rxx-match-val symbol))
+			 symbols))
+	   (parser (rxx-info-parser rxx-info)))
+      (progv symbols symbol-vals
+	(dbg symbols symbol-vals parser match-str)
+	(let ((parser-result
+	       (if (functionp parser)
+		   (funcall parser match-str)
+		 (eval parser))))
+	  (dbg parser-result)
+	  parser-result)))))
+      
 
 (defun rxx-match-aux (code)
   "Common code of `rxx-match-val', `rxx-match-string', `rxx-match-beginning' and `rxx-match-end'.  Looks up the rxx-info
@@ -385,13 +395,22 @@ For detailed description, see `rxx'.
 	  (rx-to-string form))
 	 (rxx-info (make-rxx-info
 		    :form form :parser (or parser
-					   (and (listp form) (eq (first form) 'named-grp)
-						(rxx-info-parser (first (rxx-env-lookup (second form) rxx-env))))
+					   
 					   'identity)
 		    :env rxx-env :descr descr
 		    )))
     (put-rxx-info regexp rxx-info)
     regexp))
+
+(defun rxx-process-named-grp-recurs (form)
+  "Process named-grp-recurs"
+  (if
+      (or (not (boundp (quote rxx-recurs-depth)))
+	  (< rxx-recurs-depth 1))
+      "\\(?:[^[:ascii:][:nonascii:]]\\)"
+    (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
+      (rxx-process-named-grp (list (first form) (symbol-value (second form)))))))
+
 
 (defmacro rxx (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
@@ -463,4 +482,5 @@ the parsed result in case of match, or nil in case of mismatch."
   ))
 
 (provide 'rxx)
+
 

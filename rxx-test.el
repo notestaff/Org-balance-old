@@ -234,24 +234,8 @@ TIME defaults to the current time."
 	 (rxxlet* (
 		   (re2 (seq "zz" (named-grp hru (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)))) hru))
 		  (rxx-parse re2 "zz1 2 3 ")) '("1 " "2 " "3 ")))
-	 
 
-
-
-
-
-
-
-
-	
-(defun rxx-process-named-grp-recurs (form)
-  "Process named-grp-recurs"
-  (if (or (not boundp 'rxx-recurs-depth)
-	  (< rxx-recurs-depth 1))
-      "\\(?:[^[:ascii:][:nonascii:]]\\)"
-    (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
-      (rxx-process-named-grp (list (first form) (symbol-value (second form))))
-    )
-  ))
-
-
+(let ((rxx-recurs-depth 0))
+  (rxxlet* ((rexp (seq (or (named-grp left rxx-number-regexp) (named-grp-recurs left rexp)) "+" (or (named-grp right rxx-number-regexp) (named-grp-recurs right rexp))) (cons left right)))
+    (rxx-parse rexp "1+2")
+))
