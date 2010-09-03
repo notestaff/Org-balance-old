@@ -235,10 +235,10 @@ TIME defaults to the current time."
 		   (re2 (seq "zz" (named-grp hru (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)))) hru))
 		  (rxx-parse re2 "zz1 2 3 ")) '("1 " "2 " "3 ")))
 
-(let* ((rexp (rxx (or (seq "(" (named-grp-recurs inparen rexp) ")")
-		      digit) inparen))
+(let* ((rexp (rxx (or (seq "(" (named-grp-recurs val rexp) ")")
+		      (rxx-number-regexp val)) val))
        (rxx-recurs-depth 2)
-       (rexp2 (rxx-to-string (rxx-info-form (get-rxx-info rexp)) '(cons inparen nil))))
+       (rexp2 (rxx-to-string (rxx-info-form (get-rxx-info rexp)) '(cons val nil))))
 ;rexp2
    (rxx-parse rexp2 "(1)")
 ;(rxx-info-parser (get-rxx-info rexp))
