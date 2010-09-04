@@ -235,14 +235,24 @@ TIME defaults to the current time."
 		   (re2 (seq "zz" (named-grp hru (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)))) hru))
 		  (rxx-parse re2 "zz1 2 3 ")) '("1 " "2 " "3 ")))
 
-(let* ((rexp (rxx (or (seq "(" (named-grp-recurs val rexp) ")")
-		      (rxx-number-regexp val)) val))
+(assert (equal (let* ((rexp (rxx (or (seq "(" (named-grp-recurs val rexp) ")")
+				     (rxx-number-regexp val)) val))
+		      (rxx-recurs-depth 2)
+		      (rexp2 (rxx-to-string (rxx-info-form (get-rxx-info rexp)) '(cons val nil))))
+		 (rxx-parse rexp2 "(1)")) '(1)))
+
+
+(let* ((op-regexp (rxx (or "+" "-" "*" "/") intern))
+       (rexp (rxx (or (seq "(" (named-grp-recurs val rexp) ")")
+		      (rxx-number-regexp valn)
+		      (seq (named-grp-recurs left rexp) (optional (op-regexp op)  (named-grp-recurs right rexp)))) (or val valn (funcall op left right)))
+	     )
        (rxx-recurs-depth 2)
        (rexp2 (rxx-to-string (rxx-info-form (get-rxx-info rexp)) '(cons val nil))))
-;rexp2
-   (rxx-parse rexp2 "(1)")
-;(rxx-info-parser (get-rxx-info rexp))
-)
+  rexp
+  (rxx-parse rexp2 "(1+2)");
+;   (rxx-parse op-regexp "/")
+  )
 
 ;	 (rxx-parse rexp "1+2")
 ;	 (let ((rxx-recurs-depth 2))
