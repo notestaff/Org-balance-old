@@ -48,8 +48,8 @@
 (defconst rxx-number-range-regexp
   (rxx
    (seq
-    (named-grp range-start rxx-number-regexp)
-    (optional "-" (named-grp range-end rxx-number-regexp)))
+    (rxx-number-regexp range-start)
+    (optional "-" (rxx-number-regexp range-end)))
    (cons range-start (or range-end range-start))))
 
 (defconst rxx-units
@@ -88,15 +88,14 @@
    ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
    ;; But either a number or a unit must be given.
-   (or (seq (optional (named-grp val rxx-number-regexp))
-	    (named-grp unit rxx-unit-regexp))
-	(seq (named-grp val rxx-number-regexp) (optional (named-grp unit rxx-unit-regexp))))
+   (or (seq (optional (rxx-number-regexp val))
+	    (rxx-unit-regexp unit))
+       (seq val (optional unit)))
    (cons (or val 1) (or unit "item"))
    "value with unit")
   "regexp for value with a unit, e.g. '1 day'")
 
 (assert (equal (rxx-parse rxx-valu-regexp "1 day") '(1 . "day")))
-
 
 (defconst
   rxx-valu-range-regexp
