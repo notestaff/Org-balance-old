@@ -1165,10 +1165,9 @@ changing only the numerator."
 (defconst org-balance-polarity-regexp
   (rxx
    (seq (zero-or-more whitespace)
-	(seq
-	 (or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
-	     (named-grp atleast (eval-regexp (regexp-opt (list "at least"))))))
-	 (zero-or-more whitespace))
+	(or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
+	    (named-grp atleast (eval-regexp (regexp-opt (list "at least")))))
+	(zero-or-more whitespace))
      (if atmost 'atmost 'atleast)
    "polarity"))
 
@@ -1182,15 +1181,10 @@ changing only the numerator."
     (optional
      ;; specify margin
      (seq
-      (one-or-more whitespace)
-      "+-"
-      (zero-or-more whitespace)
-      (seq
-       (or
-	(seq (org-balance-number-regexp margin)
-	     (zero-or-more whitespace)
-	     "%")
-	(org-balance-valu-regexp margin))))))
+      (one-or-more whitespace) "+-" (zero-or-more whitespace)
+      (or
+       (seq (org-balance-number-regexp margin) (zero-or-more whitespace) "%")
+       (org-balance-valu-regexp margin)))))
    (lambda (goal-str)
      (make-org-balance-valu-ratio-goal 
       :numer-min (car numerator)
