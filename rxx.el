@@ -517,6 +517,11 @@ the parsed result in case of match, or nil in case of mismatch."
     ;;   - what exactly happens if zero repetitions matched?
   ))
 
+(defadvice rx-or (around rxx-or first (form) activate compile)
+  ad-do-it
+  (setq ad-return-value (concat "\\(?:" ad-return-value "\\)"))
+  )
+
 (provide 'rxx)
 
 
