@@ -1022,6 +1022,10 @@ we convert to the specified multiples of new unit."
     (seven . 7) (eight . 8) (nine . 9)
     (ten . 10)))
 
+(defconst org-balance-number-name-regexp
+  (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
+       (lambda (match) (cdr-safe (assoc-string match org-balance-number-names)))))
+
 (defconst org-balance-number-regexp
   (rxx
    (seq
@@ -1029,7 +1033,7 @@ we convert to the specified multiples of new unit."
      
      (or
       ;; either an english number name
-      (named-grp number-name (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names)))))
+      (org-balance-number-name-regexp named-number)
       
       ;; or a floating-point number, possibly in scientific notation
       (seq
@@ -1045,7 +1049,7 @@ we convert to the specified multiples of new unit."
      
      (zero-or-more whitespace))
    (lambda (match)
-     (if number-name (cdr (assoc-string number-name org-balance-number-names))
+     (or named-number
        (string-to-number match)))
    "number")
    "Regular expression for a floating-point number")
@@ -1093,7 +1097,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; But either a number or a unit must be given.
    (or (seq (optional (org-balance-number-regexp val))
 	    (org-balance-unit-regexp unit))
-	(seq (named-grp val) (optional (named-grp unit))))
+       (seq val (optional unit)))
    (org-balance-make-valu (or val 1) (or unit "item"))
    "value with unit")
   "regexp for value with a unit, e.g. '1 day'")
@@ -1113,7 +1117,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    ;; But either a number or a unit must be given.
    (or (seq (optional (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
 	    (org-balance-unit-regexp unit))
-	(seq (named-grp range) (optional (one-or-more whitespace) (named-grp unit))))
+       (seq range (optional (one-or-more whitespace) unit)))
    (let ((number-range (or range (cons 1 1)))
 	 (unit (or unit "item")))
      (cons (org-balance-make-valu (car number-range) unit)
@@ -1125,6 +1129,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   (rxx-parse org-balance-valu-range-regexp valu-str))
 
 (defconst org-balance-ratio-words (list "per" "every" "each" "/" "a" "in a"))
+(defconst org-balance-ratio-words-regexp (rxx (eval-regexp (regexp-opt org-balance-ratio-words 'words))))
 
 ;; Struct: org-balance-valu-ratio - a ratio of two valu's.
 (defstruct org-balance-valu-ratio num denom
@@ -1172,7 +1177,7 @@ changing only the numerator."
    (seq
     (optional (org-balance-polarity-regexp polarity))
     (org-balance-valu-range-regexp numerator)
-    (one-or-more whitespace) (eval-regexp (regexp-opt org-balance-ratio-words)) (one-or-more whitespace)
+    (one-or-more whitespace) org-balance-ratio-words-regexp (one-or-more whitespace)
     (org-balance-valu-regexp denominator)
     (optional
      ;; specify margin
