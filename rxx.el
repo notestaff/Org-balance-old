@@ -488,38 +488,41 @@ the parsed result in case of match, or nil in case of mismatch."
   ))
 
 (defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
-  (cond ((and (listp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
-	 (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form)))))
-	((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
-	 (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
-	((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
-	 (setq ad-return-value
-	       (rx-group-if (rxx-make-shy
-			     (symbol-value form)) rx-parent)))
-	(t ad-do-it)))
+  (if (not (boundp 'rxx-env))
+      ad-do-it
+    (cond ((and (listp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
+	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form)))))
+	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
+	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
+	  ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
+	   (setq ad-return-value
+		 (rx-group-if (rxx-make-shy
+			       (symbol-value form)) rx-parent)))
+	  (t ad-do-it))))
 
 (defadvice rx-kleene (around rxx-kleene first (form) ;activate compile
 			     )
-  (let* ((parent-rxx-env rxx-env)
-	 (rxx-env (new-rxx-env parent-rxx-env)))
-    (progn ad-do-it)
-    ;; now for each name in rxx-env,
-    ;; put a name into parent-rxx-env with a parser that would:
-    ;;   - for zero-or-one, just leave it.
-    ;;   - determine the number of repetitions that matched
-    ;;     - take the shy version of ad-return
-    ;;     - wrap it into groups, and keep increasing number of copies until matched
-    ;;     - if greedy, keep increasing the number of copies until it stops matching
-    ;;     - now, take each match string, match the regexp against it, and call
-    ;;       
-    ;;
-    ;; notes:
-    ;;   - what exactly happens if zero repetitions matched?
-  ))
+  (if (not (boundp 'rxx-env))
+      ad-do-it
+    (let* ((parent-rxx-env rxx-env)
+	   (rxx-env (new-rxx-env parent-rxx-env)))
+      (progn ad-do-it)
+      ;; now for each name in rxx-env,
+      ;; put a name into parent-rxx-env with a parser that would:
+      ;;   - for zero-or-one, just leave it.
+      ;;   - determine the number of repetitions that matched
+      ;;     - take the shy version of ad-return
+      ;;     - wrap it into groups, and keep increasing number of copies until matched
+      ;;     - if greedy, keep increasing the number of copies until it stops matching
+      ;;     - now, take each match string, match the regexp against it, and call
+      ;;       
+      ;;
+      ;; notes:
+      ;;   - what exactly happens if zero repetitions matched?
+      )))
 
-(defadvice rx-or (around rxx-or first (form) activate compile)
-  ad-do-it
-  (setq ad-return-value (concat "\\(?:" ad-return-value "\\)"))
+(defadvice rx-or (after rxx-or first (form) activate compile)
+  (when (boundp 'rxx-env) (setq ad-return-value (concat "\\(?:" ad-return-value "\\)")))
   )
 
 (provide 'rxx)
