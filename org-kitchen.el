@@ -810,14 +810,4 @@ growing the physical representation of the vector as needed."
     (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)
   ))
 
-				    (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
 
-(defun rxx-process-named-grp-recurs (form)
-  "Process named-grp-recurs"
-  (if (or (not boundp 'rxx-recurs-depth)
-	  (< rxx-recurs-depth 1))
-      "\\(?:[^[:ascii:][:nonascii:]]\\)"
-    (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
-      (rxx-process-named-grp (list (first form) (symbol-value (second form))))
-    )
-  ))
