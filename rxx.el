@@ -137,16 +137,17 @@ The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-ARE
 	  (error "The annotated regexp must be either passed in explicitly, or scoped in as `rxx-aregexp'.")))))))
 
 (defun rxx-make-shy (re)
-  "Make all groups in re shy"
-  (save-match-data
-    (replace-regexp-in-string
-     (rx (seq "\\(" (group "") (not (any "?"))))
-     "?:" (save-match-data
+  "Make all groups in re shy; and wrap a shy group around the re."
+  (concat "\\(?:"
+	  (save-match-data
 	    (replace-regexp-in-string
-	     (rx (seq "\\(?" (group (one-or-more digit) ) ":"))
-	     "" re 'fixedcase 'literal 1))
-     'fixedcase 'literal 1)))
-
+	     (rx (seq "\\(" (group "") (not (any "?"))))
+	     "?:" (save-match-data
+		    (replace-regexp-in-string
+		     (rx (seq "\\(?" (group (one-or-more digit) ) ":"))
+		     "" re 'fixedcase 'literal 1))
+	     'fixedcase 'literal 1))
+	  "\\)"))
 
 (defun rxx-process-named-grp (form)
   "Process the (named-grp GRP-NAME GRP-DEF) form, when called from `rx-to-string'.  GRP-DEF can be an annotated regexp,
@@ -358,7 +359,7 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
   "When generating group numbers for explicitly numbered groups corresponding to named groups in a regexp, start
 with this number.") 
 
-(defun rxx-process-eval-regexp (form)
+(defun rxx-process-eval-regexp (form &optional rx-parent)
   "Parse and produce code from FORM, which is `(eval-regexp FORM)'."
   (rx-check form)
   (rx-group-if (eval (cadr form)) rx-parent))
@@ -396,7 +397,7 @@ For detailed description, see `rxx'.
 		    :form form :parser (or parser
 					   
 					   'identity)
-		    :env rxx-env :descr descr
+		    :env rxx-env :descr descr :regexp regexp
 		    )))
     (put-rxx-info regexp rxx-info)
     regexp))
@@ -487,9 +488,34 @@ the parsed result in case of match, or nil in case of mismatch."
   ))
 
 (defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
-  (if (and (listp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
-      (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form))))
-    ad-do-it))
+  (cond ((and (listp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
+	 (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form)))))
+	((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
+	 (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
+	((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
+	 (setq ad-return-value
+	       (rx-group-if (rxx-make-shy
+			     (symbol-value form)) rx-parent)))
+	(t ad-do-it)))
+
+(defadvice rx-kleene (around rxx-kleene first (form) ;activate compile
+			     )
+  (let* ((parent-rxx-env rxx-env)
+	 (rxx-env (new-rxx-env parent-rxx-env)))
+    (progn ad-do-it)
+    ;; now for each name in rxx-env,
+    ;; put a name into parent-rxx-env with a parser that would:
+    ;;   - for zero-or-one, just leave it.
+    ;;   - determine the number of repetitions that matched
+    ;;     - take the shy version of ad-return
+    ;;     - wrap it into groups, and keep increasing number of copies until matched
+    ;;     - if greedy, keep increasing the number of copies until it stops matching
+    ;;     - now, take each match string, match the regexp against it, and call
+    ;;       
+    ;;
+    ;; notes:
+    ;;   - what exactly happens if zero repetitions matched?
+  ))
 
 (provide 'rxx)
 
