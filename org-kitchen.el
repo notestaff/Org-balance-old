@@ -811,3 +811,4 @@ growing the physical representation of the vector as needed."
   ))
 
 
+(defun show-next () (interactive) (let ((point-now (point))) (save-excursion (forward-line) (outline-flag-region point-now (point-at-eol) nil))))

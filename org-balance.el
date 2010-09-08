@@ -60,6 +60,8 @@
 (require 'org)
 (require 'org-clock)
 (require 'org-agenda)
+(require 'org-compat)
+(require 'org-macs)
 (eval-when-compile (require 'cl))
 (require 'rx)
 (require 'rxx)
@@ -95,7 +97,16 @@ before today."
   :group 'org-balance
   :type '(alist :key-type string :value-type (radio (const :tag "at least" atleast)
 						    (const :tag "at most" atmost))))
-  
+(defgroup org-balance-faces nil
+  "Faces in org-balance"
+  :tag "Org-balance faces"
+  :group 'org-balance)
+
+(defface org-balance-malformed-goal
+  '((((background light)) (:foreground "Firebrick"))
+    (((background dark)) (:foreground "black")))
+  "Face used for showing malformed goals"
+  )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -114,8 +125,8 @@ under each category.  Modeled on org-clock-overalys.")
 (make-variable-buffer-local 'org-balance-overlays)
 
 (defun org-balance-put-overlay (txt &optional level)
-  "Put an overlay on the current line, displaying TIME.
-If LEVEL is given, prefix time with a corresponding number of stars.
+  "Put an overlay on the current line, displaying TXT.
+If LEVEL is given, prefix txt with a corresponding number of stars.
 This creates a new overlay and stores it in `org-balance-overlays', so that it
 will be easy to remove."
   (let* ((c 60)    ;; column in which the overlay starts 
@@ -174,15 +185,17 @@ from the `before-change-functions' in the current buffer."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defmacro dbg (&rest exprs)
-  "Print the values of exprs, so you can write e.g. (dbg a b) to print 'a=1 b=2'."
-  `(progn
-      (message
-       ,(mapconcat (lambda (expr)
-		     (concat (format "%s" expr) "=%s "))
-		  exprs
-		  "")
-       ,@exprs)
-      ,@exprs))
+  "Print the values of exprs, so you can write e.g. (dbg a b) to print 'a=1 b=2'.
+Returns the value of the last expression."
+  `(let ((expr-vals (list ,@exprs)))
+     (apply 'message
+	    (append (list ,(mapconcat (lambda (expr)
+					(concat (format "%s" expr) "=%s "))
+				      exprs
+				      ""))
+		    expr-vals))
+     (car-safe (last expr-vals))))
+      
   
 (defun org-balance-get-property (prop &optional default-val)
   "Get the value of a property, represented either as text property or org property,
@@ -467,12 +480,18 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		     should-call-p
 		     ;; values we pass to the callback that renders the
 		     ;; goal info
-		     cb-goal cb-actual cb-delta-val cb-delta-percent)
+		     cb-goal cb-actual cb-delta-val cb-delta-percent cb-goal-point)
 		(when parsed-goal
 		  ;;
 		  ;; Compute the actual usage under this subtree, and convert to the same
 		  ;; units as the goal, so we can compare them.
 		  ;;
+		  (save-excursion (goto-char (point-at-bol))
+				  (dbg (point) (buffer-substring (point) (1+ (point-at-eol))))
+				  (setq cb-goal-point (point))
+				  
+				  )
+		  
 		  (save-match-data
 		    (save-excursion
 		      (save-restriction
@@ -541,12 +560,12 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta-val delta-val
 				    cb-delta-percent delta-percent)
 			      (save-match-data
-				(when callback1 (apply callback1 nil)))
+				(when (functionp callback1) (funcall callback1)))
 			    )))))))
-		(when (and should-call-p callback2)
+		(when (and should-call-p (functionp callback2))
 		  (save-excursion
 		    (save-match-data
-		      (apply callback2 nil)))))
+		      (funcall callback2)))))
 	      (when (> org-balance-num-warnings 0)
 		(message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings)))))))))
 
@@ -568,7 +587,14 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	   (org-show-following-heading nil)
 	   (org-show-siblings nil))
        (org-back-to-heading 'invis-ok)
-       (org-show-context 'default)))))
+       (org-show-context 'default)
+       (goto-char cb-goal-point)
+       ;(forward-line)
+       ;(org-show-hidden-entry)
+       (outline-flag-region (1- (point)) (1+ (point-at-eol)) nil)
+       ;(re-search-forward org-drawer-regexp)
+       ;(org-flag-drawer nil)
+       ))))
 
 
 
