@@ -577,9 +577,12 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   (org-balance-compute-goal-deltas
    :callback1
    (lambda ()
-     (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
-				      (round cb-delta-percent)
-				      cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual))))
+
+     (goto-char (1+ cb-goal-point))
+     
+	 (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
+					  (round cb-delta-percent)
+					  cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual))))
      )
    :callback2
    (lambda ()
@@ -589,6 +592,11 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
        (org-back-to-heading 'invis-ok)
        (org-show-context 'default)
        (goto-char cb-goal-point)
+       (when nil
+	 (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
+					  (round cb-delta-percent)
+					  cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))))
+       
        ;(forward-line)
        ;(org-show-hidden-entry)
        (outline-flag-region (1- (point)) (1+ (point-at-eol)) nil)
