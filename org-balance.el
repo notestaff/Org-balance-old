@@ -124,11 +124,11 @@ before today."
 under each category.  Modeled on org-clock-overalys.")
 (make-variable-buffer-local 'org-balance-overlays)
 
-(defun org-balance-put-overlay (txt &optional level)
+(defun org-balance-put-overlay (txt &optional error)
   "Put an overlay on the current line, displaying TXT.
-If LEVEL is given, prefix txt with a corresponding number of stars.
 This creates a new overlay and stores it in `org-balance-overlays', so that it
 will be easy to remove."
+  (unless (listp txt) (setq txt (list txt)))
   (let* ((c 60)    ;; column in which the overlay starts 
 	 (off 0)
 	 ov tx)
@@ -138,8 +138,15 @@ will be easy to remove."
     (setq ov (make-overlay (1- (point)) (point-at-eol))
 	  tx (concat (buffer-substring (1- (point)) (point))
 		     (make-string (+ off (max 0 (- c (current-column)))) ?.)
-		     (org-add-props txt
-			 (list 'face 'org-clock-overlay))
+		     (org-add-props (first txt)
+			 (list 'face (if error 'org-balance-malformed-goal 'org-clock-overlay)))
+		     (mapconcat (lambda (tx)
+				  (let* ((result (copy-sequence tx))
+					 (dummy (org-add-props result
+						    (list 'face 'org-clock-overlay))))
+				    (concat "\n" (make-string c (string-to-char " ")) result)))
+				(cdr txt)
+				"")
 		     ""))
     (if (not (featurep 'xemacs))
 	(overlay-put ov 'display tx)
@@ -480,7 +487,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		     should-call-p
 		     ;; values we pass to the callback that renders the
 		     ;; goal info
-		     cb-goal cb-actual cb-delta-val cb-delta-percent cb-goal-point)
+		     cb-goal cb-actual cb-delta-val cb-delta-percent cb-goal-point cb-error)
+		(unless parsed-goal (setq cb-error "Could not parse this goal"))
 		(when parsed-goal
 		  ;;
 		  ;; Compute the actual usage under this subtree, and convert to the same
@@ -569,6 +577,164 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	      (when (> org-balance-num-warnings 0)
 		(message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings)))))))))
 
+;; struct: org-balance-goal-delta - information about how well one goal is being met.
+;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
+;;      presents it in a list.
+(defstruct org-balance-goal-delta goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
+
+(defun* org-balance-compute-goal-deltas2 (&key goals tstart tend callback1 callback2 error-handler)
+  "For each goal, determine the difference between the actual and desired average daily expenditure of
+resource GOAL toward that goal in the period between TSTART and TEND.  Call the callback with the value.
+"
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+
+  (let ((days-in-interval (org-balance-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
+    (save-excursion
+      (save-restriction
+	(save-match-data
+	  (let ((org-balance-num-warnings 0) goal-deltas)
+	    
+	    ;;
+	    ;; Find all entries where one of our goals is set.
+	    ;; (if goals not specified, find all entries where _some_ goal is set).
+	    ;; possibly, make a regexp for parsing goals, and match for that.  though, then,
+	    ;; we won't find the malformed goals and won't be able to warn about them.
+	    ;;
+	    
+					;
+					; loop over agenda files if needed
+					;
+	    
+	    (goto-char (point-min))
+	    (while (re-search-forward
+		    (org-re (concat "^[ \t]*:"
+				    (if goals
+					(regexp-opt
+					 (mapcar
+					  (lambda (goal)
+					    (concat org-balance-goal-prefix goal)) goals) 'words)
+				      "\\(goal_.+\\)")
+				    ":[ \t]*\\(\\S-.*\\)?")) nil t)
+	      ;; here we check that this goal is within a correct properties buffer, is not archived,
+	      ;; and that any other restrictions of this search (such as priority) are respected.
+	      ;; (e.g. using looking-back-at)
+	      ;; then:
+	      
+	      (let* ((save-goal-pos (point-at-bol))
+		     (goal-name-here (org-match-string-no-properties 1))
+		     (goal-prop-here (substring goal-name-here (length org-balance-goal-prefix)))
+		     (goal-def-here (org-match-string-no-properties 2))
+		     (parsed-goal
+		      (condition-case err
+			  (rxx-parse org-balance-valu-ratio-goal-regexp goal-def-here)
+			(error
+			 (incf org-balance-num-warnings)
+			 (message "Error parsing %s" goal-def-here)
+			 (push (make-org-balance-goal-delta :error-msg "Error parsing this goal") goal-deltas)
+			 nil)))
+		     should-call-p
+		     ;; values we pass to the callback that renders the
+		     ;; goal info
+		     cb-goal cb-actual cb-delta-val cb-delta-percent cb-goal-point cb-error save-entry-pos)
+		(unless parsed-goal (setq cb-error "Could not parse this goal"))
+		(when parsed-goal
+		  ;;
+		  ;; Compute the actual usage under this subtree, and convert to the same
+		  ;; units as the goal, so we can compare them.
+		  ;;
+		  (save-excursion (goto-char (point-at-bol))
+				  (dbg (point) (buffer-substring (point) (1+ (point-at-eol))))
+				  (setq cb-goal-point (point))
+				  
+				  )
+		  
+		  (save-match-data
+		    (save-excursion
+		      (save-restriction
+			(org-narrow-to-subtree)
+			(goto-char (point-min))
+			(setq save-entry-pos (point))
+			(let* ((is-time (equal goal-name-here (concat org-balance-goal-prefix "clockedtime")))
+			       (sum-here
+				(if is-time (org-balance-clock-sum tstart tend)
+				  (org-balance-sum-property
+				   goal-prop-here
+				   (org-balance-valu-unit
+				    (org-balance-valu-ratio-goal-numer-min parsed-goal))
+				   tstart tend))))
+					; we only really need to set the text for entries where there is a goal.
+					; but is it faster just to set it?
+			  (let ((actual
+				 (org-balance-convert-valu-ratio
+				  (make-org-balance-valu-ratio
+				   :num
+				   (org-balance-make-valu sum-here
+							  (if is-time 'minutes
+							    (org-balance-valu-unit (org-balance-valu-ratio-goal-numer-min parsed-goal))))
+				   :denom days-in-interval)
+				  (make-org-balance-valu-ratio
+				   :num (org-balance-valu-ratio-goal-numer-min parsed-goal)
+				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
+
+			    (let* ( (polarity (or (org-balance-valu-ratio-goal-polarity parsed-goal)
+						  (cdr (assoc-string goal-prop-here org-balance-default-polarity))))
+				    (margin (or (org-balance-valu-ratio-goal-margin parsed-goal)
+						org-balance-default-margin-percent))
+				    (goal-min (org-balance-valu-val (org-balance-valu-ratio-goal-numer-min parsed-goal)))
+				    (goal-max (org-balance-valu-val (org-balance-valu-ratio-goal-numer-max parsed-goal)))
+				    (range-min (- goal-min
+						  (if (numberp margin)
+						      (* (/ (float margin) 100.0) goal-min)
+						    (org-balance-valu-val margin))))
+				    
+				    (range-max (+ goal-max
+						  (if (numberp margin)
+						     (* (/ (float margin) 100.0) goal-max)
+						    (org-balance-valu-val margin))))
+				    
+				    (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
+				    (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+						     ((< range-max actual-num)
+						      (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
+						     ((< actual-num range-min)
+						      (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min)))))
+				    (delta-percent
+				     (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min))))
+				    )
+
+			      ;(dbg goal-name-here goal-prop-here goal-def-here polarity actual-num range-min range-max goal-min goal-max delta-val delta-percent)
+
+			      ;; so, actually, show delta vs specified range not vs margin;
+			      ;; show it in units of the goal; and show both absolute and relative shift.
+
+			      ;; let's make the sparse tree work well first, including robust error reporting, and handling multiple
+			      ;; goals per entry, before moving on to the more involved issue of agenda.
+
+			      ;; need a way to filter the goals shown, by priority of goal, as well as by arbitrary criterion.
+
+
+			      ;(outline-flag-region line-here (1+ line-here) t)
+			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta-val delta-val
+				    cb-delta-percent delta-percent)
+			      (save-match-data
+				(when (functionp callback1) (funcall callback1)))
+			      (push (make-org-balance-goal-delta :goal parsed-goal :entry-buf (current-buffer) :entry-pos save-entry-pos
+								 :goal-pos save-goal-pos
+								 :actual actual :delta-val delta-val :delta-percent delta-percent)
+				    goal-deltas)
+			      (dbg "goal-deltas-now" goal-deltas)
+			    )))))))
+		(when (and should-call-p (functionp callback2))
+		  (save-excursion
+		    (save-match-data
+		      (funcall callback2))))))
+	      (when (> org-balance-num-warnings 0)
+		(message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings))
+	      goal-deltas
+	      ))))))
+
+
 (defun org-balance-check-sparsetree ()
   "Show missed goals as sparsetree"
   (interactive)
@@ -578,12 +744,25 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
    :callback1
    (lambda ()
 
-     (goto-char (1+ cb-goal-point))
-     
-	 (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
-					  (round cb-delta-percent)
-					  cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual))))
-     )
+     ;(goto-char (1+ cb-goal-point))
+
+     (if cb-error
+	 (org-balance-put-overlay cb-error 'error)
+       ;; so, as the next thing:
+       ;;   - if needed, open up the entry. if still needed,
+       ;;     open up the properties drawer.
+       ;;   - if we do open up the properties drawer, perhaps
+       ;;     show goal results next to corresponding goals?
+       ;;(forward-line)
+       (org-balance-put-overlay
+	(list
+	 (format "%4d%% actual: \"%20s\" %.2f"
+		 (round cb-delta-percent) cb-goal
+		 (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))
+	 "second line"
+	 )
+	)
+     ))
    :callback2
    (lambda ()
      (let ((org-show-hierarchy-above t)
@@ -591,19 +770,27 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	   (org-show-siblings nil))
        (org-back-to-heading 'invis-ok)
        (org-show-context 'default)
-       (goto-char cb-goal-point)
+       ;(goto-char cb-goal-point)
        (when nil
 	 (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
 					  (round cb-delta-percent)
 					  cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))))
        
        ;(forward-line)
+       ;;; ** uncomment
        ;(org-show-hidden-entry)
-       (outline-flag-region (1- (point)) (1+ (point-at-eol)) nil)
-       ;(re-search-forward org-drawer-regexp)
-       ;(org-flag-drawer nil)
-       ))))
+       ;(outline-flag-region (1- (point)) (1+ (point-at-eol)) nil)
+       (save-excursion
+	 (save-match-data
+	   ;(re-search-forward org-drawer-regexp)
+	   ;(goto-char (point-at-bol))
+	   ;(org-flag-drawer nil)))
+       ))))))
 
+(defun org-balance-check2 ()
+  "Check gathering of goal deltas"
+  (interactive)
+  (dbg (org-balance-compute-goal-deltas2 )))
 
 
 (defun show-prefix (x)
