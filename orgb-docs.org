@@ -1,0 +1,41 @@
+
+Org-Balance Documentation
+
+* Introduction
+
+  org-balance is an extension of [[http://orgmode.org][Emacs Org mode]] for balancing your resources (time, money, etc) among your various
+  projects.  It will tell you when you spend too much or too little on some projects.  It is simple to use but
+  flexible.
+
+  In simplest usage, you can put a /goal/ on a subtree, such as:
+
+  goal_clockedtime: at least 3 hours per week
+
+  You can then call org-balance commands to show goals that are not being met -- either as a sparse tree in the
+  current file, or as an agenda.  The agenda can be sorted, putting most-neglected goals first.
+
+  Note that you can put goals on broad categories of things, as well as on more concrete items.
+  You can also give goals relative in terms of other goals, e.g. .3 of parent goal.
+  You can even do .3 of actual time spent.
+
+  But you can also look at goals where you spend more time than needed.  This can help you find time
+  for goals that are shortchanged.   You can also list goals that _are_ being met, just to pat yourself on the back.
+
+  You can view a summary over any period, and it will be recalculated for that period.
+
+  Besides spent time, you can also track done things.
+
+  org-balance treats uniformly various resources, whether clockedtime, time passed, or resources attached to
+  done or closed commands.
+
+  this
+
+* Configuring org-balance preferences
+  
+  
+
+  
+
+  
+  
+  
