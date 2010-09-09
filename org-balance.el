@@ -847,16 +847,10 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 						      (org-balance-goal-delta-actual goal-delta)))))
 		      )
 		     (marker (org-agenda-new-marker)))
-		 (let ((result
-			(org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
+		 (org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
 				       'priority (org-get-priority (org-get-heading)) 'type "tagsmatch")))
-		   (dbg (text-properties-at 0 result) result)
-		 )))
-	     goal-deltas)
-			  ))
-      
-      (org-tags-view)
-      )))
+	     goal-deltas)))
+      (org-tags-view))))
 
 
 (defun show-prefix (x)
