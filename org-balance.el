@@ -817,6 +817,9 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   "Show goal deltas as agenda entries"
   (interactive)
   (let* ((goal-deltas (org-balance-compute-goal-deltas2 ))
+	 (goal-deltas (sort goal-deltas (lambda (gd1 gd2)
+					  (< (org-balance-goal-delta-delta-percent gd1)
+					     (org-balance-goal-delta-delta-percent gd2)))))
 	 (props (list 'face 'default
 		      'done-face 'org-agenda-done
 		      'undone-face 'default
@@ -840,7 +843,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	       (let ((txt
 		      (org-format-agenda-item
 		       nil
-		       (format "%4d%% \"%20s\" actual: %.2f"
+		       (format "|%+4d%% %20s actual: %.2f"
 			       (round (org-balance-goal-delta-delta-percent goal-delta))
 			       (org-balance-valu-ratio-goal-text (org-balance-goal-delta-goal goal-delta))
 			       (org-balance-valu-val (org-balance-valu-ratio-num
