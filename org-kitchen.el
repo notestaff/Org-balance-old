@@ -812,3 +812,20 @@ growing the physical representation of the vector as needed."
 
 
 (defun show-next () (interactive) (let ((point-now (point))) (save-excursion (forward-line) (outline-flag-region point-now (point-at-eol) nil))))
+
+(defconst org-balance-goal-option-regexp (rxx (seq (named-grp name (1+ alphanumeric)) ":" (0+ whitespace) (named-grp val (1+ not-newline))) (cons name val)))
+
+(optional
+ (seq-separated-by (0+ ws)
+  "("
+  (1+-separated-by (seq ";" (0+ ws))
+		   (org-balance-goal-option-regexp props)
+		   )
+  ")"))
+
+so, as long as prop is just priority, can specify that there's optional priority.
+but in general, these would be useful additions: seq-separated-by, and 1+-separated-by (or repeat-separated-by).
+
+or, more generally (separated-by (0+ ws) ... ) where ... is either seq or a repeat command.
+also, would be good if ws denoted whitespace.
+

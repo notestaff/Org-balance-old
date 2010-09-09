@@ -813,6 +813,52 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
       (org-show-context 'default))))
 
 
+(defun org-balance-check3 ()
+  "Show goal deltas as agenda entries"
+  (interactive)
+  (let* ((goal-deltas (org-balance-compute-goal-deltas2 ))
+	 (props (list 'face 'default
+		      'done-face 'org-agenda-done
+		      'undone-face 'default
+		      'mouse-face 'highlight
+		      'org-not-done-regexp org-not-done-regexp
+		      'org-todo-regexp org-todo-regexp
+		      'help-echo
+		      (format "mouse-2 or RET jump to org file %s"
+			      (abbreviate-file-name
+			       (or (buffer-file-name (buffer-base-buffer))
+				   (buffer-name (buffer-base-buffer)))))))
+	 (old-org-prepare-agenda (symbol-function 'org-prepare-agenda)))
+    (flet ((org-make-tags-matcher (match) (cons "org-balance" nil))
+	   (org-prepare-agenda (title) (funcall old-org-prepare-agenda "org-balance"))
+	   ;; set redo command
+	   (org-scan-tags
+	    (&rest args)
+	    (mapcar
+	     (lambda (goal-delta)
+	       (goto-char (org-balance-goal-delta-entry-pos goal-delta))
+	       (let ((txt
+		      (org-format-agenda-item
+		       nil
+		       (format "%4d%% \"%20s\" actual: %.2f"
+			       (round (org-balance-goal-delta-delta-percent goal-delta))
+			       (org-balance-valu-ratio-goal-text (org-balance-goal-delta-goal goal-delta))
+			       (org-balance-valu-val (org-balance-valu-ratio-num
+						      (org-balance-goal-delta-actual goal-delta)))))
+		      )
+		     (marker (org-agenda-new-marker)))
+		 (let ((result
+			(org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
+				       'priority (org-get-priority (org-get-heading)) 'type "tagsmatch")))
+		   (dbg (text-properties-at 0 result) result)
+		 )))
+	     goal-deltas)
+			  ))
+      
+      (org-tags-view)
+      )))
+
+
 (defun show-prefix (x)
   (interactive "P")
   (message "%s" x))
