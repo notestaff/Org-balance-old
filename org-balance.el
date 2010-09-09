@@ -589,7 +589,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 ;; struct: org-balance-goal-delta - information about how well one goal is being met.
 ;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
 ;;      presents it in a list.
-(defstruct org-balance-goal-delta goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
+(defstruct org-balance-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
 
 (defun* org-balance-compute-goal-deltas2 (&key goals tstart tend callback1 callback2 error-handler)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
@@ -662,6 +662,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(org-narrow-to-subtree)
 			(goto-char (point-min))
 			(setq save-entry-pos (point))
+			(setq save-entry-heading (org-get-heading))
 			(let* ((is-time (equal goal-name-here (concat org-balance-goal-prefix "clockedtime")))
 			       (sum-here
 				(if is-time (org-balance-clock-sum tstart tend)
@@ -727,7 +728,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      (save-match-data
 				(when (functionp callback1) (funcall callback1)))
 			      (push (make-org-balance-goal-delta :goal parsed-goal :entry-buf (current-buffer) :entry-pos save-entry-pos
-								 :goal-pos save-goal-pos
+								 :goal-pos save-goal-pos :heading save-entry-heading
 								 :actual actual :delta-val delta-val :delta-percent delta-percent)
 				    goal-deltas)
 			    )))))))
@@ -843,7 +844,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	       (let ((txt
 		      (org-format-agenda-item
 		       nil
-		       (format "|%+4d%% %20s actual: %.2f"
+		       (format "%-40s %+4d%% %20s actual: %.2f"
+			       (org-balance-goal-delta-heading goal-delta)
 			       (round (org-balance-goal-delta-delta-percent goal-delta))
 			       (org-balance-valu-ratio-goal-text (org-balance-goal-delta-goal goal-delta))
 			       (org-balance-valu-val (org-balance-valu-ratio-num
