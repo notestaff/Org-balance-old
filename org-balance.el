@@ -202,6 +202,26 @@ Returns the value of the last expression."
 				      ""))
 		    expr-vals))
      (car-safe (last expr-vals))))
+
+(defun org-balance-groupby (z key-func)
+  "Group items in a list by their key, using the specified key extractor.
+Return an a-list mapping keys to items with that key.  "
+  (dbg z)
+  (setq z (copy-sequence z))
+  (setq z (sort z (lambda (x y) (< (funcall key-func x) (funcall key-func y)))))
+  (dbg "z is now " z)
+  (let (result)
+    (dolist (x z)
+      (dbg "bef" result)
+      (let* ((k (funcall key-func x)))
+	(when (or (null result) (not (equal k (car (first result)))))
+	  (push (cons k nil) result))
+	(push x (cdr (first result))))
+      (dbg "aft" result)
+      )
+
+    (dbg (reverse result))
+  ))
       
   
 (defun org-balance-get-property (prop &optional default-val)
@@ -390,8 +410,6 @@ as you were doing it.
 		    (ts (max tstart cs))
 		    (te (min tend (org-float-time)))
 		    (dt (- te ts)))
-	       (message "tstart is %s tend is %s ts is %s te is %s dt is %s"
-			(- tstart cs) (- tend cs) (- ts cs) (- te cs) dt)
 	       (if (> dt 0) (floor (/ dt 60)) 0))
 	   0)))
     (save-excursion
@@ -723,7 +741,6 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 								 :goal-pos save-goal-pos
 								 :actual actual :delta-val delta-val :delta-percent delta-percent)
 				    goal-deltas)
-			      (dbg "goal-deltas-now" goal-deltas)
 			    )))))))
 		(when (and should-call-p (functionp callback2))
 		  (save-excursion
@@ -790,7 +807,26 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 (defun org-balance-check2 ()
   "Check gathering of goal deltas"
   (interactive)
-  (dbg (org-balance-compute-goal-deltas2 )))
+  (let* ((goal-deltas-orig (org-balance-compute-goal-deltas2 ))
+	 (dummy (dbg (mapcar 'org-balance-goal-delta-entry-pos goal-deltas-orig) goal-deltas-orig))
+	 (goal-deltas (org-balance-groupby goal-deltas-orig 'org-balance-goal-delta-entry-pos)))
+    (dbg (length goal-deltas) goal-deltas)
+    (org-balance-remove-overlays)
+    (org-overview)
+    (dolist (entry-goal-delta goal-deltas)
+      (dbg (car entry-goal-delta) (length (cdr entry-goal-delta)) entry-goal-delta)
+      (goto-char (org-balance-goal-delta-entry-pos (cadr entry-goal-delta)))
+
+      (when t
+	(org-balance-put-overlay
+	 (mapcar
+	  (lambda (goal-delta)
+	    (format "%4d%% \"%20s\" actual: %.2f"
+		    (round (org-balance-goal-delta-delta-percent goal-delta))
+		    (org-balance-valu-ratio-goal-text (org-balance-goal-delta-goal goal-delta))
+		    (org-balance-valu-val (org-balance-valu-ratio-num (org-balance-goal-delta-actual goal-delta)))))
+	  (cdr entry-goal-delta))))
+      (org-show-context 'default))))
 
 
 (defun show-prefix (x)
