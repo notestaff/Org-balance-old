@@ -38,6 +38,14 @@ Org-Balance Documentation
   better for this ratio, and which do worse.  Show agenda sorted by such ratios.
   (and possibly filtered by level.)
 
+
+* Installation
+
+  Copy org-balance.el and rxx.el to your load-path.  Ideally, also byte-compile them.
+  Set or customize some vars.
+
+  That's it.   You can try the sample orgb-example-1.org and get some reports.
+  
 * Configuring org-balance preferences
   
   
