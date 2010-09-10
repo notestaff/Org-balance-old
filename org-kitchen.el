@@ -829,3 +829,144 @@ but in general, these would be useful additions: seq-separated-by, and 1+-separa
 or, more generally (separated-by (0+ ws) ... ) where ... is either seq or a repeat command.
 also, would be good if ws denoted whitespace.
 
+(defun* org-balance-compute-goal-deltas (&key goals tstart tend callback1 callback2 error-handler)
+  "For each goal, determine the difference between the actual and desired average daily expenditure of
+resource GOAL toward that goal in the period between TSTART and TEND.  Call the callback with the value.
+"
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+
+  (let ((days-in-interval (org-balance-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
+    (save-excursion
+      (save-restriction
+	(save-match-data
+	  (let ((org-balance-num-warnings 0))
+	    
+	    ;;
+	    ;; Find all entries where one of our goals is set.
+	    ;; (if goals not specified, find all entries where _some_ goal is set).
+	    ;; possibly, make a regexp for parsing goals, and match for that.  though, then,
+	    ;; we won't find the malformed goals and won't be able to warn about them.
+	    ;;
+	    
+					;
+					; loop over agenda files if needed
+					;
+	    
+	    (goto-char (point-min))
+	    (while (re-search-forward
+		    (org-re (concat "^[ \t]*:"
+				    (if goals
+					(regexp-opt
+					 (mapcar
+					  (lambda (goal)
+					    (concat org-balance-goal-prefix goal)) goals) 'words)
+				      "\\(goal_.+\\)")
+				    ":[ \t]*\\(\\S-.*\\)?")) nil t)
+	      ;; here we check that this goal is within a correct properties buffer, is not archived,
+	      ;; and that any other restrictions of this search (such as priority) are respected.
+	      ;; (e.g. using looking-back-at)
+	      ;; then:
+	      
+	      (let* (
+		     (goal-name-here (org-match-string-no-properties 1))
+		     (goal-prop-here (substring goal-name-here (length org-balance-goal-prefix)))
+		     (goal-def-here (org-match-string-no-properties 2))
+		     (parsed-goal
+		      (condition-case err
+			  ;(rxx-parse org-balance-valu-ratio-goal-regexp goal-def-here)
+			  (org-balance-parse-goal-or-link-at-point goal-name-here)
+			(error
+			 (incf org-balance-num-warnings)
+			 (message "Error parsing %s" goal-def-here)
+			 nil)))
+		     should-call-p
+		     ;; values we pass to the callback that renders the
+		     ;; goal info
+		     cb-goal cb-actual cb-delta-val cb-delta-percent cb-goal-point cb-error)
+		(unless parsed-goal (setq cb-error "Could not parse this goal"))
+		(when parsed-goal
+		  ;;
+		  ;; Compute the actual usage under this subtree, and convert to the same
+		  ;; units as the goal, so we can compare them.
+		  ;;
+		  (save-excursion (goto-char (point-at-bol))
+				  (setq cb-goal-point (point))
+				  
+				  )
+		  
+		  (save-match-data
+		    (save-excursion
+		      (save-restriction
+			(org-narrow-to-subtree)
+			(goto-char (point-min))
+			(let* ((is-time (equal goal-name-here (concat org-balance-goal-prefix "clockedtime")))
+			       (sum-here
+				(if is-time (org-balance-clock-sum tstart tend)
+				  (org-balance-sum-property
+				   goal-prop-here
+				   (org-balance-valu-unit
+				    (org-balance-valu-ratio-goal-numer-min parsed-goal))
+				   tstart tend))))
+					; we only really need to set the text for entries where there is a goal.
+					; but is it faster just to set it?
+			  (let ((actual
+				 (org-balance-convert-valu-ratio
+				  (make-org-balance-valu-ratio
+				   :num
+				   (org-balance-make-valu sum-here
+							  (if is-time 'minutes
+							    (org-balance-valu-unit (org-balance-valu-ratio-goal-numer-min parsed-goal))))
+				   :denom days-in-interval)
+				  (make-org-balance-valu-ratio
+				   :num (org-balance-valu-ratio-goal-numer-min parsed-goal)
+				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
+
+			    (let* ( (polarity (or (org-balance-valu-ratio-goal-polarity parsed-goal)
+						  (cdr (assoc-string goal-prop-here org-balance-default-polarity))))
+				    (margin (or (org-balance-valu-ratio-goal-margin parsed-goal)
+						org-balance-default-margin-percent))
+				    (goal-min (org-balance-valu-val (org-balance-valu-ratio-goal-numer-min parsed-goal)))
+				    (goal-max (org-balance-valu-val (org-balance-valu-ratio-goal-numer-max parsed-goal)))
+				    (range-min (- goal-min
+						  (if (numberp margin)
+						      (* (/ (float margin) 100.0) goal-min)
+						    (org-balance-valu-val margin))))
+				    
+				    (range-max (+ goal-max
+						  (if (numberp margin)
+						     (* (/ (float margin) 100.0) goal-max)
+						    (org-balance-valu-val margin))))
+				    
+				    (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
+				    (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+						     ((< range-max actual-num)
+						      (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
+						     ((< actual-num range-min)
+						      (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min)))))
+				    (delta-percent
+				     (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min))))
+				    )
+
+			      ;(dbg goal-name-here goal-prop-here goal-def-here polarity actual-num range-min range-max goal-min goal-max delta-val delta-percent)
+
+			      ;; so, actually, show delta vs specified range not vs margin;
+			      ;; show it in units of the goal; and show both absolute and relative shift.
+
+			      ;; let's make the sparse tree work well first, including robust error reporting, and handling multiple
+			      ;; goals per entry, before moving on to the more involved issue of agenda.
+
+			      ;; need a way to filter the goals shown, by priority of goal, as well as by arbitrary criterion.
+
+
+			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta-val delta-val
+				    cb-delta-percent delta-percent)
+			      (save-match-data
+				(when (functionp callback1) (funcall callback1)))
+			    )))))))
+		(when (and should-call-p (functionp callback2))
+		  (save-excursion
+		    (save-match-data
+		      (funcall callback2)))))
+	      (when (> org-balance-num-warnings 0)
+		(message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings)))))))))
