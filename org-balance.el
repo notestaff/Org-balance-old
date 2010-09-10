@@ -500,7 +500,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(error
 			 (incf org-balance-num-warnings)
 			 (message "Error parsing %s" goal-def-here)
-			 (push (make-org-balance-goal-delta :error-msg "Error parsing this goal" :delta-percent -10000
+			 (push (make-org-balance-goal-delta :error-msg
+							    (concat "Error parsing goal " goal-def-here) :delta-percent -10000
 							    :delta-val -10000 :goal-pos save-goal-pos
 							    :entry-pos (org-entry-beginning-position)
 							    :goal (make-org-balance-goal
@@ -1138,7 +1139,7 @@ units are measured; for example, for time we use minutes."
 				     (if (stringp unit-name) (intern unit-name) unit-name)))))
 	    val unit)
 
-(defun org-balance-valu-times (factor valu)
+(defun org-balance-scale-valu (factor valu)
   "Return the value scaled by the factor"
   (new-org-balance-valu (* factor (org-balance-valu-val valu)) (org-balance-valu-unit valu)) 
   )
@@ -1322,12 +1323,12 @@ changing only the numerator."
   ratio-word
   text)
 
-(defun org-balance-goal-times (factor goal)
+(defun org-balance-scale-goal (factor goal)
   (let ((result (copy-org-balance-goal goal)))
     (setf (org-balance-goal-numer-min result)
-	  (org-balance-valu-times factor (org-balance-goal-numer-min result)))
+	  (org-balance-scale-valu factor (org-balance-goal-numer-min result)))
     (setf (org-balance-goal-numer-max result)
-	  (org-balance-valu-times factor (org-balance-goal-numer-max result)))
+	  (org-balance-scale-valu factor (org-balance-goal-numer-max result)))
     (setf (org-balance-goal-text result) (format "%.2f * (%s)" factor (org-balance-goal-text goal)))
     result
   ))
@@ -1411,7 +1412,7 @@ changing only the numerator."
 	    (re-search-forward
 	     (rxx (seq bol (0+ blank) ":" (eval goal-name) ":" (0+ blank)))
 	     (org-entry-end-position))
-	    (org-balance-goal-times result (org-balance-parse-goal-or-link-at-point goal-name)))
+	    (org-balance-scale-goal result (org-balance-parse-goal-or-link-at-point goal-name)))
   )))))
 
 (provide 'org-balance)
