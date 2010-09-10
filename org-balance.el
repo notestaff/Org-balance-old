@@ -444,147 +444,6 @@ We will also have a default interval, which can be overriden (or used?) with the
     )
   ))
 
-(defun* org-balance-compute-goal-deltas (&key goals tstart tend callback1 callback2 error-handler)
-  "For each goal, determine the difference between the actual and desired average daily expenditure of
-resource GOAL toward that goal in the period between TSTART and TEND.  Call the callback with the value.
-"
-  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
-  (unless tend (setq tend (org-float-time (org-current-time))))
-
-  (let ((days-in-interval (org-balance-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
-    (save-excursion
-      (save-restriction
-	(save-match-data
-	  (let ((org-balance-num-warnings 0))
-	    
-	    ;;
-	    ;; Find all entries where one of our goals is set.
-	    ;; (if goals not specified, find all entries where _some_ goal is set).
-	    ;; possibly, make a regexp for parsing goals, and match for that.  though, then,
-	    ;; we won't find the malformed goals and won't be able to warn about them.
-	    ;;
-	    
-					;
-					; loop over agenda files if needed
-					;
-	    
-	    (goto-char (point-min))
-	    (while (re-search-forward
-		    (org-re (concat "^[ \t]*:"
-				    (if goals
-					(regexp-opt
-					 (mapcar
-					  (lambda (goal)
-					    (concat org-balance-goal-prefix goal)) goals) 'words)
-				      "\\(goal_.+\\)")
-				    ":[ \t]*\\(\\S-.*\\)?")) nil t)
-	      ;; here we check that this goal is within a correct properties buffer, is not archived,
-	      ;; and that any other restrictions of this search (such as priority) are respected.
-	      ;; (e.g. using looking-back-at)
-	      ;; then:
-	      
-	      (let* ((line-here (org-current-line))
-		     (goal-name-here (org-match-string-no-properties 1))
-		     (goal-prop-here (substring goal-name-here (length org-balance-goal-prefix)))
-		     (goal-def-here (org-match-string-no-properties 2))
-		     (parsed-goal
-		      (condition-case err
-			  (rxx-parse org-balance-valu-ratio-goal-regexp goal-def-here)
-			(error
-			 (incf org-balance-num-warnings)
-			 (message "Error parsing %s" goal-def-here)
-			 nil)))
-		     should-call-p
-		     ;; values we pass to the callback that renders the
-		     ;; goal info
-		     cb-goal cb-actual cb-delta-val cb-delta-percent cb-goal-point cb-error)
-		(unless parsed-goal (setq cb-error "Could not parse this goal"))
-		(when parsed-goal
-		  ;;
-		  ;; Compute the actual usage under this subtree, and convert to the same
-		  ;; units as the goal, so we can compare them.
-		  ;;
-		  (save-excursion (goto-char (point-at-bol))
-				  (setq cb-goal-point (point))
-				  
-				  )
-		  
-		  (save-match-data
-		    (save-excursion
-		      (save-restriction
-			(org-narrow-to-subtree)
-			(goto-char (point-min))
-			(let* ((is-time (equal goal-name-here (concat org-balance-goal-prefix "clockedtime")))
-			       (sum-here
-				(if is-time (org-balance-clock-sum tstart tend)
-				  (org-balance-sum-property
-				   goal-prop-here
-				   (org-balance-valu-unit
-				    (org-balance-valu-ratio-goal-numer-min parsed-goal))
-				   tstart tend))))
-					; we only really need to set the text for entries where there is a goal.
-					; but is it faster just to set it?
-			  (let ((actual
-				 (org-balance-convert-valu-ratio
-				  (make-org-balance-valu-ratio
-				   :num
-				   (org-balance-make-valu sum-here
-							  (if is-time 'minutes
-							    (org-balance-valu-unit (org-balance-valu-ratio-goal-numer-min parsed-goal))))
-				   :denom days-in-interval)
-				  (make-org-balance-valu-ratio
-				   :num (org-balance-valu-ratio-goal-numer-min parsed-goal)
-				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
-
-			    (let* ( (polarity (or (org-balance-valu-ratio-goal-polarity parsed-goal)
-						  (cdr (assoc-string goal-prop-here org-balance-default-polarity))))
-				    (margin (or (org-balance-valu-ratio-goal-margin parsed-goal)
-						org-balance-default-margin-percent))
-				    (goal-min (org-balance-valu-val (org-balance-valu-ratio-goal-numer-min parsed-goal)))
-				    (goal-max (org-balance-valu-val (org-balance-valu-ratio-goal-numer-max parsed-goal)))
-				    (range-min (- goal-min
-						  (if (numberp margin)
-						      (* (/ (float margin) 100.0) goal-min)
-						    (org-balance-valu-val margin))))
-				    
-				    (range-max (+ goal-max
-						  (if (numberp margin)
-						     (* (/ (float margin) 100.0) goal-max)
-						    (org-balance-valu-val margin))))
-				    
-				    (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
-				    (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
-						     ((< range-max actual-num)
-						      (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
-						     ((< actual-num range-min)
-						      (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min)))))
-				    (delta-percent
-				     (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min))))
-				    )
-
-			      ;(dbg goal-name-here goal-prop-here goal-def-here polarity actual-num range-min range-max goal-min goal-max delta-val delta-percent)
-
-			      ;; so, actually, show delta vs specified range not vs margin;
-			      ;; show it in units of the goal; and show both absolute and relative shift.
-
-			      ;; let's make the sparse tree work well first, including robust error reporting, and handling multiple
-			      ;; goals per entry, before moving on to the more involved issue of agenda.
-
-			      ;; need a way to filter the goals shown, by priority of goal, as well as by arbitrary criterion.
-
-
-			      ;(outline-flag-region line-here (1+ line-here) t)
-			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta-val delta-val
-				    cb-delta-percent delta-percent)
-			      (save-match-data
-				(when (functionp callback1) (funcall callback1)))
-			    )))))))
-		(when (and should-call-p (functionp callback2))
-		  (save-excursion
-		    (save-match-data
-		      (funcall callback2)))))
-	      (when (> org-balance-num-warnings 0)
-		(message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings)))))))))
 
 ;; struct: org-balance-goal-delta - information about how well one goal is being met.
 ;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
@@ -624,7 +483,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 					  (lambda (goal)
 					    (concat org-balance-goal-prefix goal)) goals) 'words)
 				      "\\(goal_.+\\)")
-				    ":[ \t]*\\(\\S-.*\\)?")) nil t)
+				    ":[ \t]*")) nil t)
 	      ;; here we check that this goal is within a correct properties buffer, is not archived,
 	      ;; and that any other restrictions of this search (such as priority) are respected.
 	      ;; (e.g. using looking-back-at)
@@ -633,14 +492,19 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	      (let* ((save-goal-pos (point-at-bol))
 		     (goal-name-here (org-match-string-no-properties 1))
 		     (goal-prop-here (substring goal-name-here (length org-balance-goal-prefix)))
-		     (goal-def-here (org-match-string-no-properties 2))
+		     (goal-def-here (buffer-substring (point) (point-at-eol)))
 		     (parsed-goal
 		      (condition-case err
-			  (rxx-parse org-balance-valu-ratio-goal-regexp goal-def-here)
+			  ;(rxx-parse org-balance-goal-regexp goal-def-here)
+			  (org-balance-parse-goal-or-link-at-point goal-name-here)
 			(error
 			 (incf org-balance-num-warnings)
 			 (message "Error parsing %s" goal-def-here)
-			 (push (make-org-balance-goal-delta :error-msg "Error parsing this goal") goal-deltas)
+			 (push (make-org-balance-goal-delta :error-msg "Error parsing this goal" :delta-percent -10000
+							    :delta-val -10000 :goal-pos save-goal-pos
+							    :entry-pos (org-entry-beginning-position)
+							    :goal (make-org-balance-goal
+								   :text goal-def-here) ) goal-deltas)
 			 nil)))
 		     should-call-p
 		     ;; values we pass to the callback that renders the
@@ -669,7 +533,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				  (org-balance-sum-property
 				   goal-prop-here
 				   (org-balance-valu-unit
-				    (org-balance-valu-ratio-goal-numer-min parsed-goal))
+				    (org-balance-goal-numer-min parsed-goal))
 				   tstart tend))))
 					; we only really need to set the text for entries where there is a goal.
 					; but is it faster just to set it?
@@ -679,18 +543,19 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				   :num
 				   (org-balance-make-valu sum-here
 							  (if is-time 'minutes
-							    (org-balance-valu-unit (org-balance-valu-ratio-goal-numer-min parsed-goal))))
+							    (org-balance-valu-unit
+							     (org-balance-goal-numer-min parsed-goal))))
 				   :denom days-in-interval)
 				  (make-org-balance-valu-ratio
-				   :num (org-balance-valu-ratio-goal-numer-min parsed-goal)
-				   :denom (org-balance-valu-ratio-goal-denom parsed-goal)))))
+				   :num (org-balance-goal-numer-min parsed-goal)
+				   :denom (org-balance-goal-denom parsed-goal)))))
 
-			    (let* ( (polarity (or (org-balance-valu-ratio-goal-polarity parsed-goal)
+			    (let* ( (polarity (or (org-balance-goal-polarity parsed-goal)
 						  (cdr (assoc-string goal-prop-here org-balance-default-polarity))))
-				    (margin (or (org-balance-valu-ratio-goal-margin parsed-goal)
+				    (margin (or (org-balance-goal-margin parsed-goal)
 						org-balance-default-margin-percent))
-				    (goal-min (org-balance-valu-val (org-balance-valu-ratio-goal-numer-min parsed-goal)))
-				    (goal-max (org-balance-valu-val (org-balance-valu-ratio-goal-numer-max parsed-goal)))
+				    (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
+				    (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
 				    (range-min (- goal-min
 						  (if (numberp margin)
 						      (* (/ (float margin) 100.0) goal-min)
@@ -808,7 +673,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	(lambda (goal-delta)
 	  (format "%4d%% \"%20s\" actual: %.2f"
 		  (round (org-balance-goal-delta-delta-percent goal-delta))
-		  (org-balance-valu-ratio-goal-text (org-balance-goal-delta-goal goal-delta))
+		  (org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
 		  (org-balance-valu-val (org-balance-valu-ratio-num (org-balance-goal-delta-actual goal-delta)))))
 	(cdr entry-goal-delta)))
       (org-show-context 'default))))
@@ -844,13 +709,15 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	       (let ((txt
 		      (org-format-agenda-item
 		       nil
-		       (format "%-40s %+4d%% %20s actual: %.2f"
-			       (org-balance-goal-delta-heading goal-delta)
-			       (round (org-balance-goal-delta-delta-percent goal-delta))
-			       (org-balance-valu-ratio-goal-text (org-balance-goal-delta-goal goal-delta))
-			       (org-balance-valu-val (org-balance-valu-ratio-num
-						      (org-balance-goal-delta-actual goal-delta)))))
-		      )
+		       (or
+			(org-balance-goal-delta-error-msg goal-delta)
+			(format "%-40s %+4d%% %20s actual: %.2f"
+				(org-balance-goal-delta-heading goal-delta)
+				(round (org-balance-goal-delta-delta-percent goal-delta))
+				(org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
+				(org-balance-valu-val (org-balance-valu-ratio-num
+						       (org-balance-goal-delta-actual goal-delta)))))
+		      ))
 		     (marker (org-agenda-new-marker)))
 		 (org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
 				       'priority (org-get-priority (org-get-heading)) 'type "tagsmatch")))
@@ -1271,6 +1138,11 @@ units are measured; for example, for time we use minutes."
 				     (if (stringp unit-name) (intern unit-name) unit-name)))))
 	    val unit)
 
+(defun org-balance-valu-times (factor valu)
+  "Return the value scaled by the factor"
+  (new-org-balance-valu (* factor (org-balance-valu-val valu)) (org-balance-valu-unit valu)) 
+  )
+
 (defun org-balance-make-valu (val unit)
   (if (and (numberp val) (org-balance-is-unit unit))
       (new-org-balance-valu val unit)
@@ -1439,14 +1311,26 @@ changing only the numerator."
      :denom new-denom :ratio-word (org-balance-valu-ratio-ratio-word new-valu-ratio)))) 
 
 
-;; Struct: org-balance-valu-ratio-goal - the user-specified goal you have for a ratio.
-(defstruct org-balance-valu-ratio-goal
+;; Struct: org-balance-goal - the user-specified goal you have for a ratio.
+(defstruct org-balance-goal
   numer-min
   numer-max
   denom
   polarity
   margin
+  priority
+  ratio-word
   text)
+
+(defun org-balance-goal-times (factor goal)
+  (let ((result (copy-org-balance-goal goal)))
+    (setf (org-balance-goal-numer-min result)
+	  (org-balance-valu-times factor (org-balance-goal-numer-min result)))
+    (setf (org-balance-goal-numer-max result)
+	  (org-balance-valu-times factor (org-balance-goal-numer-max result)))
+    (setf (org-balance-goal-text result) (format "%.2f * (%s)" factor (org-balance-goal-text goal)))
+    result
+  ))
 
 (defconst org-balance-polarity-regexp
   (rxx
@@ -1457,12 +1341,12 @@ changing only the numerator."
      (if atmost 'atmost 'atleast)
    "polarity"))
 
-(defconst org-balance-valu-ratio-goal-regexp
+(defconst org-balance-goal-regexp
   (rxx
    (seq
     (optional (org-balance-polarity-regexp polarity))
     (org-balance-valu-range-regexp numerator)
-    (one-or-more whitespace) org-balance-ratio-words-regexp (one-or-more whitespace)
+    (one-or-more whitespace) (org-balance-ratio-words-regexp ratio-word) (one-or-more whitespace)
     (org-balance-valu-regexp denominator)
     (optional
      ;; specify margin
@@ -1470,17 +1354,65 @@ changing only the numerator."
       (one-or-more whitespace) "+-" (zero-or-more whitespace)
       (or
        (seq (org-balance-number-regexp margin) (zero-or-more whitespace) "%")
-       (org-balance-valu-regexp margin)))))
+       (org-balance-valu-regexp margin))))
+    (optional
+     (seq (0+ whitespace) "(priority: " (named-grp priority upper) ")"))
+    )
+   
    (lambda (goal-str)
-     (make-org-balance-valu-ratio-goal 
+     (make-org-balance-goal 
       :numer-min (car numerator)
       :numer-max (cdr numerator)
       :denom denominator
       :polarity polarity
       :margin margin
-      :text goal-str)))
+      :priority priority
+      :text goal-str
+      :ratio-word ratio-word)))
   "value ratio goal")
 
+(defconst org-balance-link-regexp (rxx (eval-regexp org-any-link-re)))
+
+(defconst org-balance-goal-link-regexp
+  (rxx (seq (org-balance-number-regexp factor)
+	    (1+ whitespace)
+	    "of"
+	    (1+ whitespace)
+	    (org-balance-link-regexp link))
+       factor))
+
+(defconst org-balance-goal-or-link-regexp
+  (rxx (or (org-balance-goal-regexp goal)
+	   (org-balance-goal-link-regexp link))
+       (or goal link)))
+
+(defun org-balance-parse-goal-or-link-at-point (goal-name)
+  "Parse goal or link at point"
+  ;; so, we need to know what the goal was, so that we can look for the same goal at the target entry.
+  ;; and also, need to put in a check for infinite recursion.
+
+  ;;
+  ;; things to do:
+  ;;    - check for infinite recursion
+  ;;    - make sure the link we're following points to a file.  or is an internal link.
+  ;;    - recognize also parent links, and/or paths
+  ;;    - proper error reporting:
+  ;;         - if a goal does not parse
+  ;;         - if following a link fails to get us to an entry in an orgfile
+  ;;         - if that entry does not have the (number'th) requisite goal.
+  ;;    - factor out the follow-a-link code, so that we can use it 
+  (save-match-data
+    (dbg "PARSING " (point) (buffer-substring (point) (point-at-eol)))
+    (let ((result (rxx-parse-fwd org-balance-goal-or-link-regexp (point-at-eol))))
+      (if (org-balance-goal-p result) result
+	(save-excursion
+	  (save-window-excursion
+	    (org-open-at-point 'in-emacs)
+	    (re-search-forward
+	     (rxx (seq bol (0+ blank) ":" (eval goal-name) ":" (0+ blank)))
+	     (org-entry-end-position))
+	    (org-balance-goal-times result (org-balance-parse-goal-or-link-at-point goal-name)))
+  )))))
 
 (provide 'org-balance)
 
