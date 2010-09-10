@@ -7,9 +7,15 @@ Org-Balance Documentation
   projects.  It will tell you when you spend too much or too little on some projects.  It is simple to use but
   flexible.
 
+  It integrates with existing time-tracking and task-closing commands.   The only new thing you need to do is
+  set a few goals, and you can then get all kinds of reports.
+
   In simplest usage, you can put a /goal/ on a subtree, such as:
 
   goal_clockedtime: at least 3 hours per week
+
+  The goal is for a _rate_: how you spend a resource per time.   By expressing goals as rates you make comparisons
+  interchangeable.
 
   You can then call org-balance commands to show goals that are not being met -- either as a sparse tree in the
   current file, or as an agenda.  The agenda can be sorted, putting most-neglected goals first.
@@ -28,7 +34,9 @@ Org-Balance Documentation
   org-balance treats uniformly various resources, whether clockedtime, time passed, or resources attached to
   done or closed commands.
 
-  this
+  this lets you do things like, show time spent per response received.   See which parts of your projects do
+  better for this ratio, and which do worse.  Show agenda sorted by such ratios.
+  (and possibly filtered by level.)
 
 * Configuring org-balance preferences
   
