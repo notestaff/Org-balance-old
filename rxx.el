@@ -233,7 +233,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 				    (progn
 				      (setq found t)
 				      (dotimes (i num-repeats)
-					(let ((ms (match-string (1+ i) match)))
+					(let ((ms (match-string (1+ i) match)))   ;; pass the string if search was on string
 					  (setq result (append result (list ms)))
 					)
 				      ))
@@ -479,6 +479,55 @@ the parsed result in case of match, or nil in case of mismatch."
 	    (rxx-call-parser rxx-info (match-string 0 s)))
 	(error "Error parsing \`%s\' as %s" s
 	       (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))))
+
+
+(defun rxx-parse-fwd (aregexp &optional bound partial-match-ok)
+  "Match the current buffer against the given extended regexp, and return
+the parsed result in case of match, or nil in case of mismatch."
+  ;; add options to:
+  ;;   - work with re-search-forward and re-search-bwd.
+  ;;
+  (save-match-data
+    (save-excursion
+      (let ((old-point (point))
+	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp))))
+	(dbg old-point bound)
+	(if (and (dbg (re-search-forward aregexp bound 'noerror))
+		 (or partial-match-ok
+		     (and (= (match-beginning 0) old-point)
+			  (= (match-end 0) bound))))
+	    (let* ((rxx-env (rxx-info-env rxx-info))
+		   rxx-object)
+	      (rxx-call-parser rxx-info (match-string 0)))
+	  (error "Error parsing \`%s\' as %s" (if (and bound (>= bound old-point) (< (- bound old-point) 100))
+						  (buffer-substring old-point bound)
+						"buffer text")
+		 (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info))))))))
+
+
+
+(defun rxx-parse-bwd (aregexp &optional bound partial-match-ok)
+  "Match the current buffer against the given extended regexp, and return
+the parsed result in case of match, or nil in case of mismatch."
+  ;; add options to:
+  ;;   - work with re-search-forward and re-search-bwd.
+  ;;
+  (save-match-data
+    (save-excursion
+      (let ((old-point (point))
+	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp))))
+	(if (and (dbg (re-search-backward aregexp bound 'noerror))
+		 (or partial-match-ok
+		     (and (= (match-beginning 0) bound)
+			  (= (match-end 0) old-point))))
+	    (let* ((rxx-env (rxx-info-env rxx-info))
+		   rxx-object)
+	      (rxx-call-parser rxx-info (match-string 0)))
+	  (error "Error parsing \`%s\' as %s" (if (and bound (>= bound old-point) (< (- bound old-point) 100))
+						  (buffer-substring old-point bound)
+						"buffer text")
+		 (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info))))))))
+
 
 (defun rxx-parse-recurs (aregexp s max-recurs-depth &optional partial-match-ok)
   (let* ((rxx-recurs-depth max-recurs-depth)
