@@ -1003,3 +1003,23 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   ad-do-it
   (dbg "out rxx-to-string" ad-return-value))
 (ad-deactivate 'rx-to-string)
+
+
+(let* ((exp (rxx (or (named-grp bb (recurse (named-grp sub (seq "(" (named-grp op (or "+" "-" "*" "/")) " " (exp e1) " " (exp e2) ")"))))
+		     (named-grp d digit) ) (list (safe-val sub) (safe-val op) (safe-val e1) (safe-val e2) (safe-val d))))
+       (rxx-recurs-depth 1)
+       (dummy (message "now the recurs part"))
+       (expr (rxx exp (lambda (full) (list full (safe-val bb) (safe-val sub) (safe-val op) (safe-val e1) (safe-val e2) (safe-val d)))))
+       (s "(* 3 4)"))
+(rxx-parse expr s 'part-ok)
+;(message "%s" expr)
+;(rxx-info-form (get-rxx-info exp))
+;expr
+)
+
+(let* ((exp (rxx (or (named-grp sub (recurse (seq "(" exp (named-grp op (or "+" "-" "*" "/")) exp ")"))) (named-grp d digit)) (cons sub d)))
+       (rxx-recurs-depth 2)
+       (expr (rxx exp (lambda (full) (list full sub d (rxx-match-val '(sub sub op)) (rxx-match-val '(sub op))))))
+       (s "(3+(4*5))"))
+  (rxx-parse expr s 'part-ok))
+
