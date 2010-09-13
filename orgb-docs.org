@@ -39,12 +39,24 @@ Org-Balance Documentation
   (and possibly filtered by level.)
 
 
+*** points to make
+
+***** simple examples
+***** that for a given wall-time period, we have length of that period and clockedtime sum and
+		weighted sum of closed/done items in that period; and we can then check these ratios against any goals.
+  	 	
 * Installation
 
-  Copy org-balance.el and rxx.el to your load-path.  Ideally, also byte-compile them.
+  Copy org-balance.el and rxx.el to your load-path.  Ideally, also byte-compile them (important for speed -- much of of cl macros).
   Set or customize some vars.
 
+  Maybe, provide a makefile.
+
+  Maybe, include rxx as org-balance-utils.el .  or as org-balance-elisp-utils.el and org-balance-org-utils.el .
+  Though, rxx.el also makes sense as a standalone module.
+
   That's it.   You can try the sample orgb-example-1.org and get some reports.
+  
   
 * Configuring org-balance preferences
   
