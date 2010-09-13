@@ -970,3 +970,10 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		      (funcall callback2)))))
 	      (when (> org-balance-num-warnings 0)
 		(message "There were %d warnings; check the *Messages* buffer." org-balance-num-warnings)))))))))
+
+
+
+(let* ((exp (rxx (or digit (seq "+" (recurse exp)))))
+       (rxx-recurs-depth 3)
+       (expr (rxx exp)))
+  (rxx-parse expr "+++1"))

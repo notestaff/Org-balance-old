@@ -138,16 +138,16 @@ The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-ARE
 
 (defun rxx-make-shy (re)
   "Make all groups in re shy; and wrap a shy group around the re."
-  (concat "\\(?:"
-	  (save-match-data
-	    (replace-regexp-in-string
-	     (rx (seq "\\(" (group "") (not (any "?"))))
-	     "?:" (save-match-data
-		    (replace-regexp-in-string
-		     (rx (seq "\\(?" (group (one-or-more digit) ) ":"))
-		     "" re 'fixedcase 'literal 1))
-	     'fixedcase 'literal 1))
-	  "\\)"))
+  (rx-group-if
+   (save-match-data
+     (replace-regexp-in-string
+      (rx (seq "\\(" (group "") (not (any "?"))))
+      "?:" (save-match-data
+	     (replace-regexp-in-string
+	      (rx (seq "\\(?" (group (one-or-more digit) ) ":"))
+	      "" re 'fixedcase 'literal 1))
+      'fixedcase 'literal 1))
+   '*))
 
 (defun rxx-process-named-grp (form)
   "Process the (named-grp GRP-NAME GRP-DEF) form, when called from `rx-to-string'.  GRP-DEF can be an annotated regexp,
@@ -158,8 +158,6 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
   ; if the form is a symbol, and not one of the reserved ones in rx,
   ; evaluate it as a variable.
   ;
-  ;(dbg "namedgrp" form)
-  
   (declare (special rxx-next-grp-num rxx-env))
   (rx-check form)
   (or
@@ -259,7 +257,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 					(message "DISABLING %s" grp-name)
 					(rx-to-string (rxx-info-form grp-def))
 					".*")
-				    (rx-to-string (rxx-info-form grp-def))))))
+				    (rx-to-string (rxx-info-form grp-def) 'no-group)))))
 	(rxx-env-bind grp-name (make-rxx-info
 				:num grp-num
 				:parser (rxx-info-parser grp-def)
@@ -280,7 +278,6 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 
 (defun rxx-call-parser (rxx-info match-str)
   (let ((rxx-env (rxx-info-env rxx-info)))
-    ;(dbg "matching " match-str " in env " (delq nil (mapcar 'car rxx-env)))
     (let* ((symbols (delq nil (mapcar 'car (rxx-info-env rxx-info))))
 	   (symbol-vals (mapcar
 			 (lambda (symbol)
@@ -288,12 +285,10 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 			 symbols))
 	   (parser (rxx-info-parser rxx-info)))
       (progv symbols symbol-vals
-	;(dbg symbols symbol-vals parser match-str)
 	(let ((parser-result
 	       (if (functionp parser)
 		   (funcall parser match-str)
 		 (eval parser))))
-	  ;(dbg parser-result)
 	  parser-result)))))
       
 
@@ -373,50 +368,61 @@ in a modular fashion using regular expressions.
 For detailed description, see `rxx'.
 "
   (declare (special rxx-first-grp-num))
-  (let* ((rxx-env (rxx-new-env))
-	 (rxx-next-grp-num rxx-first-grp-num)
-	 ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
-	 (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
-				    (eval-regexp . (rxx-process-eval-regexp 1 1))
-				    (shy-grp . seq)
-				    (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
-				    (named-group . named-grp) (shy-group . shy-grp)
-				    (named-backref . (rxx-process-named-backref 1 1)))
-				  rx-constituents))
-
-	 ;; also allow named-group or ngrp or other names
-    
-	 ;; var: regexp - the string regexp for the form.
-	 (regexp
-	  ;; whenever the rx-to-string call below encounters a (named-grp ) construct
-	  ;; in the form, it calls back to rxx-process-named-grp, which will
-	  ;; add a mapping from the group's name to rxx-grp structure
-	  ;; to rxx-name2grp.
-	  (rx-to-string form))
-	 (rxx-info (make-rxx-info
-		    :form form :parser (or parser
-					   
-					   'identity)
-		    :env rxx-env :descr descr :regexp regexp
-		    )))
-    (put-rxx-info regexp rxx-info)
-    regexp))
+  (rxx-remove-unneeded-shy-grps
+   (let* ((rxx-env (rxx-new-env))
+	  (rxx-next-grp-num rxx-first-grp-num)
+	  ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
+	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
+				     (eval-regexp . (rxx-process-eval-regexp 1 1))
+				     (shy-grp . seq)
+				     (recurse . (rxx-process-recurse 1 nil))
+				     (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
+				     (named-group . named-grp) (shy-group . shy-grp)
+				     (named-backref . (rxx-process-named-backref 1 1)))
+				   rx-constituents))
+	  
+	  ;; also allow named-group or ngrp or other names
+	  
+	  ;; var: regexp - the string regexp for the form.
+	  (regexp
+	   ;; whenever the rx-to-string call below encounters a (named-grp ) construct
+	   ;; in the form, it calls back to rxx-process-named-grp, which will
+	   ;; add a mapping from the group's name to rxx-grp structure
+	   ;; to rxx-name2grp.
+	   (rx-to-string form 'no-group))
+	  (rxx-info (make-rxx-info
+		     :form form :parser (or parser
+					    
+					    'identity)
+		     :env rxx-env :descr descr :regexp regexp
+		     )))
+     (put-rxx-info regexp rxx-info)
+     regexp)))
+  
+(defconst rxx-never-match (rx (not (any ascii nonascii))))
 
 (defun rxx-process-named-grp-recurs (form)
   "Process named-grp-recurs"
   (if
       (or (not (boundp (quote rxx-recurs-depth)))
 	  (< rxx-recurs-depth 1))
-      (let ((match-nothing "\\(?:[^[:ascii:][:nonascii:]]\\)"))
-	(rxx-env-bind (second form) (make-rxx-info :form `(regexp ,match-nothing)
+      (progn
+	(rxx-env-bind (second form) (make-rxx-info :form `(regexp ,rxx-never-match)
 						   :env (rxx-new-env) :num 0
 						   :parser (lambda (match) nil))
 		      rxx-env)
-	match-nothing)
+	rxx-never-match)
     (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
-      ;(dbg (symbol-value (third form)))
       (rxx-process-named-grp `(named-grp ,(second form) (eval-regexp ,(third form)))))))
 
+
+(defun rxx-process-recurse (form)
+  "Process recurse"
+  (if (or (not (boundp 'rxx-recurs-depth))
+	  (< rxx-recurs-depth 1))
+      rxx-never-match
+    (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
+      (rx-group-if (rxx-to-string (cdr form)) '*)))) 
 
 (defmacro rxx (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
@@ -454,11 +460,12 @@ It does not need to pass the regexp to these functions.
 
 DESCR, if given, is used in error messages by `rxx-parse'.
 "
-  
+
   (rxx-to-string form parser descr))
 
 (defmacro rxxlet* (bindings &rest forms)
-  (list 'let* (mapcar (lambda (binding) (list (first binding) (list 'rxx (second binding) (third binding) (symbol-name (first binding)))))
+  (list 'let* (mapcar (lambda (binding) (list (first binding)
+					      (list 'rxx (second binding) (third binding) (symbol-name (first binding)))))
 		      bindings)
 	(or (car-safe forms) (and bindings (car-safe (car-safe (last bindings)))))))
 
@@ -491,8 +498,7 @@ the parsed result in case of match, or nil in case of mismatch."
     (save-excursion
       (let ((old-point (point))
 	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp))))
-	(dbg old-point bound)
-	(if (and (dbg (re-search-forward aregexp bound 'noerror))
+	(if (and (re-search-forward aregexp bound 'noerror)
 		 (or partial-match-ok
 		     (and (= (match-beginning 0) old-point)
 			  (= (match-end 0) bound))))
@@ -516,7 +522,7 @@ the parsed result in case of match, or nil in case of mismatch."
     (save-excursion
       (let ((old-point (point))
 	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp))))
-	(if (and (dbg (re-search-backward aregexp bound 'noerror))
+	(if (and (re-search-backward aregexp bound 'noerror)
 		 (or partial-match-ok
 		     (and (= (match-beginning 0) bound)
 			  (= (match-end 0) old-point))))
@@ -545,8 +551,9 @@ the parsed result in case of match, or nil in case of mismatch."
 	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
 	  ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
 	   (setq ad-return-value
+		 ;; what if recurs is used? need to regenerate from form
 		 (rx-group-if (rxx-make-shy
-			       (symbol-value form)) rx-parent)))
+			       (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))))) '*)))
 	  (t ad-do-it))))
 
 (defadvice rx-kleene (around rxx-kleene first (form) ;activate compile
@@ -570,9 +577,19 @@ the parsed result in case of match, or nil in case of mismatch."
       ;;   - what exactly happens if zero repetitions matched?
       )))
 
-(defadvice rx-or (after rxx-or first (form) activate compile)
-  (when (boundp 'rxx-env) (setq ad-return-value (concat "\\(?:" ad-return-value "\\)")))
+(defadvice rx-or (around rxx-or first (form) activate compile)
+  (unless (<= (length form) 2)  (setq form (delete rxx-never-match form)))
+  ad-do-it
+  (when (boundp 'rxx-env) (not (rx-atomic-p ad-return-value))
+	(setq ad-return-value (rx-group-if ad-return-value '*)))
   )
+
+(defun rxx-remove-unneeded-shy-grps (re)
+  "Remove shy groups that do nothing"
+  (while (and (>= (length re) 10) (string= (substring re 0 8) "\\(?:\\(?:")
+	      (string= (substring re -4) "\\)\\)"))
+    (setq re (substring re 4 -2)))
+  re)
 
 (provide 'rxx)
 

@@ -264,3 +264,8 @@ TIME defaults to the current time."
 				(list rmin rmax)))
    (rxx-parse number-regexp "1")
 )
+
+(assert (equal (let* ((exp (rxx (or digit (seq "+" (recurse exp)))))
+		      (rxx-recurs-depth 3)
+		      (expr (rxx exp)))
+		 (rxx-parse expr "+++1")) "+++1"))
