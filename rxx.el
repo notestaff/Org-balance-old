@@ -257,7 +257,8 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 					(message "DISABLING %s" grp-name)
 					(rx-to-string (rxx-info-form grp-def))
 					".*")
-				    (rx-to-string (rxx-info-form grp-def) 'no-group)))))
+				    ;; here remove -any- shy groups around the whole thing.
+				    (rxx-remove-outer-shy-grps (rx-to-string (rxx-info-form grp-def) 'no-group))))))
 	(rxx-env-bind grp-name (make-rxx-info
 				:num grp-num
 				:parser (rxx-info-parser grp-def)
@@ -422,7 +423,7 @@ For detailed description, see `rxx'.
 	  (< rxx-recurs-depth 1))
       rxx-never-match
     (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
-      (rx-group-if (rxx-to-string (cdr form)) '*)))) 
+      (rx-group-if (rxx-remove-unneeded-shy-grps (rxx-to-string (cdr form))) '*)))) 
 
 (defmacro rxx (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
@@ -588,6 +589,13 @@ the parsed result in case of match, or nil in case of mismatch."
   "Remove shy groups that do nothing"
   (while (and (>= (length re) 10) (string= (substring re 0 8) "\\(?:\\(?:")
 	      (string= (substring re -4) "\\)\\)"))
+    (setq re (substring re 4 -2)))
+  re)
+
+(defun rxx-remove-outer-shy-grps (re)
+  "Remove any outer shy groups."
+  (while (and (>= (length re) 6) (string= (substring re 0 4) "\\(?:")
+	      (string= (substring re -2) "\\)"))
     (setq re (substring re 4 -2)))
   re)
 

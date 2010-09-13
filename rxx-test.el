@@ -1,6 +1,6 @@
 
-(require 'rxx)
-(eval-when-compile (require 'cl))
+
+(eval-when-compile (require 'cl) (require 'rxx))
 
 (assert
  (equal (rxxlet* ((number-regexp (one-or-more digit) string-to-number)

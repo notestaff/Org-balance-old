@@ -974,6 +974,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 
 (let* ((exp (rxx (or digit (seq "+" (recurse exp)))))
-       (rxx-recurs-depth 3)
+       (rxx-recurs-depth 1)
        (expr (rxx exp)))
-  (rxx-parse expr "+++1"))
+(message "%s" expr)
+)
