@@ -201,7 +201,9 @@ Returns the value of the last expression."
 				      exprs
 				      ""))
 		    expr-vals))
-     (car-safe (last expr-vals))))
+     (car-safe (with-no-warnings (last expr-vals)))))
+
+(defmacro safe-val (x) `(if (boundp (quote ,x)) ,x nil))
 
 (defun org-balance-groupby (z key-func)
   "Group items in a list by their key, using the specified key extractor.
