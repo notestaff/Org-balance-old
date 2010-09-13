@@ -577,7 +577,9 @@ the parsed result in case of match, or nil in case of mismatch."
   (unless (or (not (boundp 'rxx-env))
 	      (and (boundp 'rxx-recurs-depth) (> rxx-recurs-depth 0))
 	      (<= (length form) 2))
-    (setq form (remove-if (lambda (elem) (eq (car-safe elem) 'recurse)) form)))
+    (setq form (remove-if (lambda (elem) (or (eq (car-safe elem) 'recurse)
+					     (and (eq (car-safe elem) 'named-grp)
+						  (eq (car-safe (car-safe (cdr-safe (cdr-safe elem)))) 'recurse)))) form)))
   ad-do-it
   (when (boundp 'rxx-env) (not (rx-atomic-p ad-return-value))
 	(setq ad-return-value (rx-group-if ad-return-value '*)))
