@@ -973,10 +973,11 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 
 
-(let* ((exp (rxx (or (named-grp d digit) (recurse (seq (or "+" "-" "*" "/") (exp e1) (exp e2)))) (if d (string-to-number d) (cons e1 e2))))
+(let* ((exp (rxx (or (recurse (seq (named-grp op (or "+" "-" "*" "/")) (exp e1) (exp e2)))
+		     (named-grp d digit) ) (list (safe-val op) (safe-val e1) (safe-val e2) (safe-val d))))
        (rxx-recurs-depth 3)
        (dummy (message "now the recurs part"))
-       (expr (rxx exp (or (and d (string-to-number d)) (cons e1 e2)))))
+       (expr (rxx exp (list (safe-val op) (safe-val e1) (safe-val e2) (safe-val d)))))
 (rxx-parse expr "*3+12")
 ;(message "%s" expr)
 ;(rxx-info-form (get-rxx-info exp))
