@@ -1030,3 +1030,10 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
        (s "(30+(42*57))"))
   (rxx-parse expr s 'part-ok))
 
+
+(let* ((num (rxx (1+ digit) string-to-number))
+       (exp (rxx (or (named-grp sub (recurse (seq "(" (exp a) (named-grp op (or "+" "-" "*" "/")) (exp b) ")"))) (num d)) (if (boundp 'a) (list a b d) (list d))))
+       (rxx-recurs-depth 3)
+       (expr (rxx exp (lambda (full) (list full sub d  (rxx-match-val '(sub op))))))
+       (s "(1/(30+(42*57)))"))
+  (rxx-parse expr s 'part-ok))
