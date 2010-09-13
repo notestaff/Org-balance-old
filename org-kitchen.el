@@ -973,8 +973,32 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 
 
-(let* ((exp (rxx (or digit (seq "+" (recurse exp)))))
-       (rxx-recurs-depth 1)
-       (expr (rxx exp)))
-(message "%s" expr)
+(let* ((exp (rxx (or (named-grp d digit) (recurse (seq (or "+" "-" "*" "/") (exp e1) (exp e2)))) (if d (string-to-number d) (cons e1 e2))))
+       (rxx-recurs-depth 3)
+       (dummy (message "now the recurs part"))
+       (expr (rxx exp (or (and d (string-to-number d)) (cons e1 e2)))))
+(rxx-parse expr "*3+12")
+;(message "%s" expr)
+;(rxx-info-form (get-rxx-info exp))
 )
+(rxx (or "hi" (eval-regexp rxx-never-match)))
+(string-match "\\(?:[[:digit:]]\\|\\(?:\\(?:[[:digit:]]\\)[*+/-]\\(?:[[:digit:]]\\)\\)\\)" "")
+
+(string-match "\(?:[[:digit:]]\|\(?:\(?:[[:digit:]]\)[*+/-]\(?:[[:digit:]]\)\)\)\)\)\)[*+/-]\(?:\(?:\(?:\(?:[[:digit:]]\|\(?:\(?:[[:digit:]]\)[*+/-]\(?:[[:digit:]]\)\)\)" 
+
+
+(defadvice rx-to-string (around rx-show-args last (form &optional no-group) activate compile)
+  (dbg "in  rx-to-string" form (safe-val rxx-recurs-depth) (safe-val rxx-env))
+  ad-do-it
+  (dbg "out rx-to-string" ad-return-value)) 
+
+(defadvice rxx-process-named-grp (around rx-show-proc-named last (form) activate compile)
+  (dbg "in  rxx-process-named-grp" form (safe-val rxx-recurs-depth) (safe-val rxx-env))
+  ad-do-it
+  (dbg "out rxx-process-named-grp" ad-return-value (safe-val rxx-recurs-depth) (safe-val rxx-env))) 
+
+(defadvice rxx-to-string (around rxx-show (form &optional parser descr) activate compile)
+  (dbg "in  rxx-to-string" form)
+  ad-do-it
+  (dbg "out rxx-to-string" ad-return-value))
+(ad-deactivate 'rx-to-string)
