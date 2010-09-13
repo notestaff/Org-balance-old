@@ -314,7 +314,7 @@ to `match-string', `match-beginning' or `match-end'."
 		       (when match (cons match grp-info))))
 		   grp-infos))))
       (when matches-here
-	(unless (= (length matches-here) 1) (error "More than one match to group %s" grp-name))
+	(unless (= (length matches-here) 1) (error "More than one match to group %s: %s" grp-name matches-here))
 	(let* ((match-info-here (first matches-here))
 	       (match-here (car match-info-here))
 	       (grp-info (cdr match-info-here))
