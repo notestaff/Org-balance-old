@@ -180,8 +180,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 	      (or (and (symbolp grp-def-raw)
 		       (boundp grp-def-raw)
 		       (get-rxx-info (symbol-value grp-def-raw)))
-		  (and (listp grp-def-raw)
-		       (eq (first grp-def-raw) 'regexp)
+		  (and (eq (car-safe grp-def-raw) 'regexp)
 		       (get-rxx-info (second grp-def-raw)))
 
 		  ;;
@@ -204,15 +203,13 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 		  ;; a namegrp or a regexp
 		  ;;
 		  
-		  (and (listp grp-def-raw)
-		       (eq (first grp-def-raw) 'eval-regexp)
+		  (and (eq (car-safe grp-def-raw) 'eval-regexp)
 		       (get-rxx-info (eval (second grp-def-raw))))
 
 		  ;; first recursively analyze the repeated form(s)
 		  ;; 
 		  
-		  (and (listp grp-def-raw)
-		       (eq (first grp-def-raw) 'zero-or-more)
+		  (and (eq (car-safe grp-def-raw) 'zero-or-more)
 		       (make-rxx-info
 			:env (rxx-new-env) :form grp-def-raw
 			:parser
@@ -383,7 +380,6 @@ For detailed description, see `rxx'.
 				   rx-constituents))
 	  
 	  ;; also allow named-group or ngrp or other names
-	  
 	  ;; var: regexp - the string regexp for the form.
 	  (regexp
 	   ;; whenever the rx-to-string call below encounters a (named-grp ) construct
@@ -423,7 +419,7 @@ For detailed description, see `rxx'.
 	  (< rxx-recurs-depth 1))
       rxx-never-match
     (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
-      (rx-group-if (rxx-remove-unneeded-shy-grps (rxx-to-string (cdr form))) '*)))) 
+      (rx-group-if (rxx-remove-unneeded-shy-grps (rx-to-string (second form) 'no-group)) '*)))) 
 
 (defmacro rxx (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
@@ -546,15 +542,14 @@ the parsed result in case of match, or nil in case of mismatch."
 (defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
   (if (not (boundp 'rxx-env))
       ad-do-it
-    (cond ((and (listp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
+    (cond ((and (consp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
 	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form)))))
 	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
 	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
 	  ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
 	   (setq ad-return-value
 		 ;; what if recurs is used? need to regenerate from form
-		 (rx-group-if (rxx-make-shy
-			       (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))))) '*)))
+		 (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))) 'no-group) '*)))
 	  (t ad-do-it))))
 
 (defadvice rx-kleene (around rxx-kleene first (form) ;activate compile
@@ -579,7 +574,10 @@ the parsed result in case of match, or nil in case of mismatch."
       )))
 
 (defadvice rx-or (around rxx-or first (form) activate compile)
-  (unless (<= (length form) 2)  (setq form (delete rxx-never-match form)))
+  (unless (or (not (boundp 'rxx-env))
+	      (and (boundp 'rxx-recurs-depth) (> rxx-recurs-depth 0))
+	      (<= (length form) 2))
+    (setq form (remove-if (lambda (elem) (eq (car-safe elem) 'recurse)) form)))
   ad-do-it
   (when (boundp 'rxx-env) (not (rx-atomic-p ad-return-value))
 	(setq ad-return-value (rx-group-if ad-return-value '*)))
