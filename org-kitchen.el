@@ -1,3 +1,7 @@
+;;
+;; Random bits of code -- not meant to be evaluatable as a buffer.
+;;
+
 (defun org-balance-show-here ()
   (interactive)
   (let ((org-balance-neglect-val (get-text-property (point) :org-balance-neglect)))
@@ -1069,3 +1073,20 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 (let ((x 1))
   (message "%s" x)
   )
+
+(defadvice org-entries-lessp (around rxx-lessp (a b) activate compile)
+  (dbg "LESSP" a b org-agenda-sorting-strategy-selected)
+  ad-do-it
+  (dbg "LESSP" ad-return-value))
+
+(let (org-agenda-sorting-strategy-selected
+      (org-agenda-sorting-strategy '((tags user-defined-up))))
+  (org-set-sorting-strategy 'tags)
+  org-agenda-sorting-strategy-selected
+
+
+(defun show-prefix (x)
+  (interactive "P")
+  (message "%s" x))
+
+)
