@@ -1079,14 +1079,24 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   ad-do-it
   (dbg "LESSP" ad-return-value))
 
+(defadvice org-cmp-priority (around rxx-lessp (a b) activate compile)
+  (dbg "cmp-priority" a b)
+  ad-do-it
+  (dbg "cmp-priority" ad-return-value))
+
+
+
 (let (org-agenda-sorting-strategy-selected
       (org-agenda-sorting-strategy '((tags user-defined-up))))
   (org-set-sorting-strategy 'tags)
   org-agenda-sorting-strategy-selected
 
 
+(ad-disable-advice 'org-entries-lessp 'around 'rxx-lessp)
+
 (defun show-prefix (x)
   (interactive "P")
   (message "%s" x))
 
 )
+
