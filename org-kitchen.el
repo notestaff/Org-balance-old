@@ -1039,7 +1039,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   (rxx-parse expr s 'part-ok))
 
 
-(defun ppp (x) (message "hi: %s" x))
+(defun ppp (x) "my func" (message "hi: %s" x))
 
 (let ((orig-pp (symbol-function 'ppp)))
   (flet ((ppp (x) (funcall orig-pp (format "bye -- %s" x))))
@@ -1052,13 +1052,16 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   "Temporarily replace functions, making previous definitions available."
   `(let 
        ,(mapcar (lambda (binding) (list (intern (concat (symbol-name (first binding)) "-orig")) (list 'symbol-function (list 'quote (first binding))))) bindings)
-     (flet ,bindings ,@body))
-  )
+     (flet ,(append bindings (mapcar
+			      (lambda (binding)
+				(let ((orig-fn (intern (concat (symbol-name (first binding)) "-orig"))))
+				  (list orig-fn '(&rest args) `(apply (symbol-value (quote ,orig-fn)) args))))
+			      bindings))
+       ,@body)))
 
-(cl-prettyexpand '(rxx-flet ( (ppp (x) (+ x x)))
-		4
-		 ))
+
 
 (rxx-flet ( (ppp (x) (+ x x)) )
-	  (funcall (symbol-value 'ppp-orig) 4)
-		 )
+	  (ppp-orig 4)
+	  (ppp 4)
+	  )

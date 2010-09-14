@@ -55,8 +55,20 @@
 
 ;; user-callable functions: rxx-named-grp-num, rxx, rxx-match-val, rxx-match-string, rxx-parse
 
-(require 'rx)
-(eval-when-compile (require 'cl))
+(eval-when-compile
+  (require 'cl)
+  (require 'rx))
+
+(defmacro rxx-flet (bindings &rest body)
+  "Temporarily replace functions, making previous definitions available."
+  `(let 
+       ,(mapcar (lambda (binding) (list (intern (concat (symbol-name (first binding)) "-orig")) (list 'symbol-function (list 'quote (first binding))))) bindings)
+     (flet ,(append bindings (mapcar
+			      (lambda (binding)
+				(let ((orig-fn (intern (concat (symbol-name (first binding)) "-orig"))))
+				  (list orig-fn '(&rest args) `(apply (symbol-value (quote ,orig-fn)) args))))
+			      bindings))
+       ,@body)))
 
 ;; struct: rxx-info - information about a regexp or one named group within it.  when the former, it is attached to a regexp
 ;;    as a text property by `put-rxx-info'; the resulting annotated regexp is referred to as an aregexp in this module.

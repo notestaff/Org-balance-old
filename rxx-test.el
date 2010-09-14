@@ -284,3 +284,8 @@ TIME defaults to the current time."
 		      (expr (rxx exp (lambda (full) (list full sub d  (rxx-match-val '(sub op))))))
 		      (s "(1/(30+(42*57)))"))
 		 (rxx-parse expr s 'part-ok)) '("(1/(30+(42*57)))" "(1/(30+(42*57)))" nil "/")))
+
+(assert (equal (rxx-flet ( (ppp (x) (+ x x)) )
+			 (ppp-orig 4)
+			 (ppp 4)
+			 ) 8))
