@@ -1037,3 +1037,28 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
        (expr (rxx exp (lambda (full) (list full sub d  (rxx-match-val '(sub op))))))
        (s "(1/(30+(42*57)))"))
   (rxx-parse expr s 'part-ok))
+
+
+(defun ppp (x) (message "hi: %s" x))
+
+(let ((orig-pp (symbol-function 'ppp)))
+  (flet ((ppp (x) (funcall orig-pp (format "bye -- %s" x))))
+    (ppp 3))
+  (ppp 4))
+
+(bindings &rest body)
+
+(defmacro rxx-flet (bindings &rest body)
+  "Temporarily replace functions, making previous definitions available."
+  `(let 
+       ,(mapcar (lambda (binding) (list (intern (concat (symbol-name (first binding)) "-orig")) (list 'symbol-function (list 'quote (first binding))))) bindings)
+     (flet ,bindings ,@body))
+  )
+
+(cl-prettyexpand '(rxx-flet ( (ppp (x) (+ x x)))
+		4
+		 ))
+
+(rxx-flet ( (ppp (x) (+ x x)) )
+	  (funcall (symbol-value 'ppp-orig) 4)
+		 )
