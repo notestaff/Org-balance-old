@@ -97,6 +97,14 @@ before today."
   :group 'org-balance
   :type '(alist :key-type string :value-type (radio (const :tag "at least" atleast)
 						    (const :tag "at most" atmost))))
+
+(defcustom org-balance-agenda-sorting-strategy
+  '(priority-down category-keep user-defined-down)
+  "Sorting rules for sorting org-balance agenda views."
+  :group 'org-balance
+  :link '(variable-link org-agenda-sorting-strategy)
+  :type `(repeat ,org-sorting-choice))
+
 (defgroup org-balance-faces nil
   "Faces in org-balance"
   :tag "Org-balance faces"
@@ -484,7 +492,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 					 (mapcar
 					  (lambda (goal)
 					    (concat org-balance-goal-prefix goal)) goals) 'words)
-				      "\\(goal_.+\\)")
+				      (rxx (group "goal_" (+? alnum))))
 				    ":[ \t]*")) nil t)
 	      ;; here we check that this goal is within a correct properties buffer, is not archived,
 	      ;; and that any other restrictions of this search (such as priority) are respected.
@@ -529,7 +537,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(org-narrow-to-subtree)
 			(goto-char (point-min))
 			(setq save-entry-pos (point))
-			(setq save-entry-heading (org-get-heading))
+			(setq save-entry-heading (concat (nth 4 (org-heading-components))))
 			(let* ((is-time (equal goal-name-here (concat org-balance-goal-prefix "clockedtime")))
 			       (sum-here
 				(if is-time (org-balance-clock-sum tstart tend)
@@ -721,8 +729,11 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			   ))
 			 (marker (org-agenda-new-marker)))
 		     (org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
-				    'priority (org-get-priority (org-get-heading)) 'type "tagsmatch"
-				    'org-balance-goal-delta goal-delta)))
+				    'priority (org-get-priority
+					       (or
+						(org-balance-goal-priority (org-balance-goal-delta-goal goal-delta))
+						(org-get-heading))) 'type "org-balance"
+						'org-balance-goal-delta goal-delta)))
 		 (org-balance-compute-goal-deltas2 :tstart tstart :tend tend)))
 	       )
       (let (org-agenda-before-sorting-filter-function
@@ -733,7 +744,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(vb (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta b))))
 		    (if (< va vb) -1 +1)
 		    )))
-	    (org-agenda-sorting-strategy '((tags user-defined-up))))
+	    (org-agenda-sorting-strategy `((tags ,@org-balance-agenda-sorting-strategy))))
 	(org-tags-view)))))
 
 (defun org-balance-show-neglected-time (&optional tstart tend)
@@ -1371,7 +1382,7 @@ changing only the numerator."
       :denom denominator
       :polarity polarity
       :margin margin
-      :priority priority
+      :priority (when priority (format "[#%s]" (upcase priority)))
       :text goal-str
       :ratio-word ratio-word)))
   "value ratio goal")
