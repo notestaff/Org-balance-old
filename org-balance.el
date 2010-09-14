@@ -682,14 +682,12 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
       (org-show-context 'default))))
 
 
-(defun org-balance-check3 ()
+(defun org-balance-check3 (&optional tstart tend)
   "Show goal deltas as agenda entries"
   (interactive)
-  (let* ((goal-deltas (org-balance-compute-goal-deltas2 ))
-	 (goal-deltas (sort goal-deltas (lambda (gd1 gd2)
-					  (< (org-balance-goal-delta-delta-percent gd1)
-					     (org-balance-goal-delta-delta-percent gd2)))))
-	 (props (list 'face 'default
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+  (let* ((props (list 'face 'default
 		      'done-face 'org-agenda-done
 		      'undone-face 'default
 		      'mouse-face 'highlight
@@ -700,38 +698,43 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      (abbreviate-file-name
 			       (or (buffer-file-name (buffer-base-buffer))
 				   (buffer-name (buffer-base-buffer)))))))
-	 (old-org-prepare-agenda (symbol-function 'org-prepare-agenda)))
-    (flet ((org-make-tags-matcher (match) (cons "org-balance" nil))
-	   (org-prepare-agenda (title) (funcall old-org-prepare-agenda "org-balance"))
-	   ;; set redo command
-	   (org-scan-tags
-	    (&rest args)
-	    (mapcar
-	     (lambda (goal-delta)
-	       (goto-char (org-balance-goal-delta-entry-pos goal-delta))
-	       (let ((txt
-		      (org-format-agenda-item
-		       nil
-		       (or
-			(org-balance-goal-delta-error-msg goal-delta)
-			(format "%-40s %+4d%% %20s actual: %.2f"
-				(org-balance-goal-delta-heading goal-delta)
-				(round (org-balance-goal-delta-delta-percent goal-delta))
-				(org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
-				(org-balance-valu-val (org-balance-valu-ratio-num
-						       (org-balance-goal-delta-actual goal-delta)))))
-		      ))
-		     (marker (org-agenda-new-marker)))
-		 (org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
-				       'priority (org-get-priority (org-get-heading)) 'type "tagsmatch")))
-	     goal-deltas)))
-      (org-tags-view))))
-
-
-(defun show-prefix (x)
-  (interactive "P")
-  (message "%s" x))
-
+	 )
+    (rxx-flet ((org-make-tags-matcher (match) (cons "org-balance" nil))
+	       (org-prepare-agenda (title) (org-prepare-agenda-orig "org-balance"))
+	       ;; set redo command
+	       (org-scan-tags
+		(&rest args)
+		(mapcar
+		 (lambda (goal-delta)
+		   (goto-char (org-balance-goal-delta-entry-pos goal-delta))
+		   (let ((txt
+			  (org-format-agenda-item
+			   nil
+			   (or
+			    (org-balance-goal-delta-error-msg goal-delta)
+			    (format "%-40s %+4d%% %20s actual: %.2f"
+				    (org-balance-goal-delta-heading goal-delta)
+				    (round (org-balance-goal-delta-delta-percent goal-delta))
+				    (org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
+				    (org-balance-valu-val (org-balance-valu-ratio-num
+							   (org-balance-goal-delta-actual goal-delta)))))
+			   ))
+			 (marker (org-agenda-new-marker)))
+		     (org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
+				    'priority (org-get-priority (org-get-heading)) 'type "tagsmatch"
+				    'org-balance-goal-delta goal-delta)))
+		 (org-balance-compute-goal-deltas2 :tstart tstart :tend tend)))
+	       )
+      (let (org-agenda-before-sorting-filter-function
+	    org-agenda-sorting-strategy-selected
+	    (org-agenda-cmp-user-defined
+		(lambda (a b)
+		  (let ((va (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta a)))
+			(vb (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta b))))
+		    (if (< va vb) -1 +1)
+		    )))
+	    (org-agenda-sorting-strategy '((tags user-defined-up))))
+	(org-tags-view)))))
 
 (defun org-balance-show-neglected-time (&optional tstart tend)
   (interactive)
@@ -754,7 +757,6 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      (org-balance-put-overlay (format "Error: %s" (error-message-string err))))
 			      
 			    ))))))
-
 
 (defun org-balance-show-neglected-val (&optional tstart tend)
   (interactive)
@@ -1405,7 +1407,6 @@ changing only the numerator."
   ;;         - if that entry does not have the (number'th) requisite goal.
   ;;    - factor out the follow-a-link code, so that we can use it 
   (save-match-data
-    (dbg "PARSING " (point) (buffer-substring (point) (point-at-eol)))
     (let ((result (rxx-parse-fwd org-balance-goal-or-link-regexp (point-at-eol))))
       (if (org-balance-goal-p result) result
 	(save-excursion
