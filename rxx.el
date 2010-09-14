@@ -61,6 +61,7 @@
 
 (defmacro rxx-flet (bindings &rest body)
   "Temporarily replace functions, making previous definitions available."
+  (declare (indent 1))
   `(let 
        ,(mapcar (lambda (binding) (list (intern (concat (symbol-name (first binding)) "-orig")) (list 'symbol-function (list 'quote (first binding))))) bindings)
      (flet ,(append bindings (mapcar

@@ -1061,7 +1061,11 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 
 
-(rxx-flet ( (ppp (x) (+ x x)) )
-	  (ppp-orig 4)
-	  (ppp 4)
-	  )
+(rxx-flet ((ppp (x) (+ x x)))
+  (ppp-orig 4)
+  (ppp 4)
+  )
+
+(let ((x 1))
+  (message "%s" x)
+  )
