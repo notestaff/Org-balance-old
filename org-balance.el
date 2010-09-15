@@ -1360,19 +1360,21 @@ changing only the numerator."
 (defconst org-balance-goal-regexp
   (rxx
    (seq
+    (0+ blank)
+    (optional
+     (seq (named-grp priority (regexp "\\[#[A-Z0-9]\\]")) (0+ blank)))
     (optional (org-balance-polarity-regexp polarity))
     (org-balance-valu-range-regexp numerator)
-    (one-or-more whitespace) (org-balance-ratio-words-regexp ratio-word) (one-or-more whitespace)
+    (1+ blank) (org-balance-ratio-words-regexp ratio-word) (1+ blank)
     (org-balance-valu-regexp denominator)
     (optional
      ;; specify margin
      (seq
-      (one-or-more whitespace) "+-" (zero-or-more whitespace)
+      (1+ blank) "+-" (0+ blank)
       (or
-       (seq (org-balance-number-regexp margin) (zero-or-more whitespace) "%")
+       (seq (org-balance-number-regexp margin) (0+ blank) "%")
        (org-balance-valu-regexp margin))))
-    (optional
-     (seq (0+ whitespace) (named-grp priority (regexp "\\[#[A-Z0-9]\\]"))))
+    (0+ blank)
     )
    
    (lambda (goal-str)
