@@ -1372,7 +1372,7 @@ changing only the numerator."
        (seq (org-balance-number-regexp margin) (zero-or-more whitespace) "%")
        (org-balance-valu-regexp margin))))
     (optional
-     (seq (0+ whitespace) "(priority: " (named-grp priority upper) ")"))
+     (seq (0+ whitespace) (named-grp priority (regexp "\\[#[A-Z0-9]\\]"))))
     )
    
    (lambda (goal-str)
@@ -1382,7 +1382,7 @@ changing only the numerator."
       :denom denominator
       :polarity polarity
       :margin margin
-      :priority (when priority (format "[#%s]" (upcase priority)))
+      :priority priority
       :text goal-str
       :ratio-word ratio-word)))
   "value ratio goal")
