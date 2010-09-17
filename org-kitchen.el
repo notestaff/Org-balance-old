@@ -1100,3 +1100,13 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 )
 
+(defun org-make-tags-matcher2 (match)
+  (rxx-let*
+   ((tagname-re (1+ (any alnum "_")))
+    (tagcond-re (seq (optional "+-") tagname-re))
+    (propname-re (1+ (any alnum "_-")))
+    (prop-cond-re (or (seq propname-re op-re val-re)
+		      (seq propname-re "={" regexp-re "}")))
+    (matcher-re (separated-by "|" (0+ or-clause-re)))
+  )
+   ))
