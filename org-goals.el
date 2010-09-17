@@ -398,7 +398,7 @@ as you were doing it.
       (insert " => " (format "%2d:%02d" h m)))))
 
 
-(defconst org-goals-goal-prefix "goal_")
+(defconst org-goals-goal-todo-keyword "GOAL")
 
 (defun org-goals-clock-sum (tstart tend)
   "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
@@ -460,7 +460,10 @@ We will also have a default interval, which can be overriden (or used?) with the
 ;;      presents it in a list.
 (defstruct org-goals-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
 
-(defun* org-goals-compute-goal-deltas2 (&key goals tstart tend callback1 callback2 error-handler)
+(defconst org-goals-goal-prefix-regexp (rxx (seq bol (1+ "*") (1+ blank) (eval org-goals-goal-todo-keyword) (1+ blank)
+						 (named-group goal-name (1+ alnum)) (1+ blank)) goal-name))
+
+(defun* org-goals-compute-goal-deltas2 (&key goals tstart tend)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
 resource GOAL toward that goal in the period between TSTART and TEND.  Call the callback with the value.
 "
@@ -469,6 +472,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
   (let ((days-in-interval (org-goals-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
     (save-excursion
+      (goto-char (point-min))
       (save-restriction
 	(save-match-data
 	  (let ((org-goals-num-warnings 0) goal-deltas)
@@ -484,139 +488,82 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 					; loop over agenda files if needed
 					;
 	    
-	    (goto-char (point-min))
-	    (while (re-search-forward
-		    (org-re (concat "^[ \t]*:"
-				    (if goals
-					(regexp-opt
-					 (mapcar
-					  (lambda (goal)
-					    (concat org-goals-goal-prefix goal)) goals) 'words)
-				      (rxx (group "goal_" (+? alnum))))
-				    ":[ \t]*")) nil t)
-	      ;; here we check that this goal is within a correct properties buffer, is not archived,
-	      ;; and that any other restrictions of this search (such as priority) are respected.
-	      ;; (e.g. using looking-back-at)
-	      ;; then:
-	      
-	      (let* ((save-goal-pos (point-at-bol))
-		     (goal-name-here (org-match-string-no-properties 1))
-		     (goal-prop-here (substring goal-name-here (length org-goals-goal-prefix)))
-		     (goal-def-here (buffer-substring (point) (point-at-eol)))
-		     (parsed-goal
-		      (condition-case err
-			  ;(rxx-parse org-goals-goal-regexp goal-def-here)
-			  (org-goals-parse-goal-or-link-at-point goal-name-here)
+	    ;; FIXME if goals specified, make regexp for them	    (goto-char (point-min))
+	    (let (goal-name-here)
+	      (while (setq goal-name-here
+			   (rxx-search-fwd
+			    org-goals-goal-prefix-regexp (not 'bound) 'no-error))
+		(let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
+		       (parsed-goal
+			(condition-case err
+			    (org-goals-parse-goal-or-link-at-point)
 			(error
 			 (incf org-goals-num-warnings)
 			 (message "Error parsing %s" goal-def-here)
-			 (push (make-org-goals-goal-delta :error-msg
-							    (concat "Error parsing goal " goal-def-here) :delta-percent -10000
-							    :delta-val -10000 :goal-pos save-goal-pos
-							    :entry-pos (org-entry-beginning-position)
-							    :goal (make-org-goals-goal
-								   :text goal-def-here) ) goal-deltas)
-			 nil)))
-		     should-call-p
-		     ;; values we pass to the callback that renders the
-		     ;; goal info
-		     cb-goal cb-actual cb-delta-val cb-delta-percent cb-goal-point cb-error save-entry-pos)
-		(unless parsed-goal (setq cb-error "Could not parse this goal"))
-		(when parsed-goal
-		  ;;
-		  ;; Compute the actual usage under this subtree, and convert to the same
-		  ;; units as the goal, so we can compare them.
-		  ;;
-		  (save-excursion (goto-char (point-at-bol))
-				  (setq cb-goal-point (point))
-				  )
-		  
-		  (save-match-data
-		    (save-excursion
-		      (save-restriction
-			(org-narrow-to-subtree)
-			(goto-char (point-min))
-			(setq save-entry-pos (point))
-			(setq save-entry-heading (concat (nth 4 (org-heading-components))))
-			(let* ((is-time (equal goal-name-here (concat org-goals-goal-prefix "clockedtime")))
-			       (sum-here
-				(if is-time (org-goals-clock-sum tstart tend)
-				  (org-goals-sum-property
-				   goal-prop-here
-				   (org-goals-valu-unit
-				    (org-goals-goal-numer-min parsed-goal))
-				   tstart tend))))
-					; we only really need to set the text for entries where there is a goal.
-					; but is it faster just to set it?
-			  (let ((actual
-				 (org-goals-convert-valu-ratio
-				  (make-org-goals-valu-ratio
-				   :num
-				   (org-goals-make-valu sum-here
-							  (if is-time 'minutes
-							    (org-goals-valu-unit
-							     (org-goals-goal-numer-min parsed-goal))))
-				   :denom days-in-interval)
-				  (make-org-goals-valu-ratio
-				   :num (org-goals-goal-numer-min parsed-goal)
-				   :denom (org-goals-goal-denom parsed-goal)))))
-
-			    (let* ( (polarity (or (org-goals-goal-polarity parsed-goal)
-						  (cdr (assoc-string goal-prop-here org-goals-default-polarity))))
-				    (margin (or (org-goals-goal-margin parsed-goal)
-						org-goals-default-margin-percent))
-				    (goal-min (org-goals-valu-val (org-goals-goal-numer-min parsed-goal)))
-				    (goal-max (org-goals-valu-val (org-goals-goal-numer-max parsed-goal)))
-				    (range-min (- goal-min
-						  (if (numberp margin)
-						      (* (/ (float margin) 100.0) goal-min)
-						    (org-goals-valu-val margin))))
-				    
-				    (range-max (+ goal-max
-						  (if (numberp margin)
-						     (* (/ (float margin) 100.0) goal-max)
-						    (org-goals-valu-val margin))))
-				    
-				    (actual-num (org-goals-valu-val (org-goals-valu-ratio-num actual)))
-				    (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
-						     ((< range-max actual-num)
-						      (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
-						     ((< actual-num range-min)
-						      (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min)))))
-				    (delta-percent
-				     (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min))))
-				    )
-
-			      ;(dbg goal-name-here goal-prop-here goal-def-here polarity actual-num range-min range-max goal-min goal-max delta-val delta-percent)
-
-			      ;; so, actually, show delta vs specified range not vs margin;
-			      ;; show it in units of the goal; and show both absolute and relative shift.
-
-			      ;; let's make the sparse tree work well first, including robust error reporting, and handling multiple
-			      ;; goals per entry, before moving on to the more involved issue of agenda.
-
-			      ;; need a way to filter the goals shown, by priority of goal, as well as by arbitrary criterion.
-
-
-			      ;(outline-flag-region line-here (1+ line-here) t)
-			      (setq should-call-p t cb-goal goal-def-here cb-actual actual cb-delta-val delta-val
-				    cb-delta-percent delta-percent)
-			      (save-match-data
-				(when (functionp callback1) (funcall callback1)))
-			      (push (make-org-goals-goal-delta :goal parsed-goal :entry-buf (current-buffer) :entry-pos save-entry-pos
-								 :goal-pos save-goal-pos :heading save-entry-heading
-								 :actual actual :delta-val delta-val :delta-percent delta-percent)
-				    goal-deltas)
-			    )))))))
-		(when (and should-call-p (functionp callback2))
-		  (save-excursion
-		    (save-match-data
-		      (funcall callback2))))))
-	      (when (> org-goals-num-warnings 0)
-		(message "There were %d warnings; check the *Messages* buffer." org-goals-num-warnings))
-	      goal-deltas
-	      ))))))
-
+			 (save-match-data (org-toggle-tag "goal-error" 'on))
+			 nil))))
+		  (when parsed-goal
+		    (org-toggle-tag "goal-error" 'off)
+		    ;;
+		    ;; Compute the actual usage under this subtree, and convert to the same
+		    ;; units as the goal, so we can compare them.
+		    ;;
+		    (let (delta-val delta-percent)
+		      (save-match-data
+			(save-excursion
+			  (save-restriction
+			    (outline-up-heading 1 'invisible-ok)
+			    (org-narrow-to-subtree)
+			    (goto-char (point-min))
+			    (let* ((is-time (equal goal-name-here "clockedtime"))
+				   (to-unit (if is-time 'minutes
+					      (org-goals-valu-unit
+					       (org-goals-goal-numer-min parsed-goal))))
+				   (sum-here
+				    (if is-time (org-goals-clock-sum tstart tend)
+				      (message "we are here")
+				      (org-goals-sum-property
+				       goal-name-here
+				       to-unit
+				       tstart tend))))
+			      (let ((actual
+				     (org-goals-convert-valu-ratio
+				      (make-org-goals-valu-ratio
+				       :num
+				       (org-goals-make-valu sum-here to-unit)
+				       :denom days-in-interval)
+				      (make-org-goals-valu-ratio
+				       :num (org-goals-goal-numer-min parsed-goal)
+				       :denom (org-goals-goal-denom parsed-goal)))))
+				
+				(let* ( (polarity (or (org-goals-goal-polarity parsed-goal)
+						      (cdr (assoc-string goal-name-here org-goals-default-polarity))))
+					(margin (or (org-goals-goal-margin parsed-goal)
+						    org-goals-default-margin-percent))
+					(goal-min (org-goals-valu-val (org-goals-goal-numer-min parsed-goal)))
+					(goal-max (org-goals-valu-val (org-goals-goal-numer-max parsed-goal)))
+					(range-min (- goal-min
+						      (if (numberp margin)
+							  (* (/ (float margin) 100.0) goal-min)
+							(org-goals-valu-val margin))))
+					
+					(range-max (+ goal-max
+						      (if (numberp margin)
+							  (* (/ (float margin) 100.0) goal-max)
+							(org-goals-valu-val margin))))
+					
+					(actual-num (org-goals-valu-val (org-goals-valu-ratio-num actual))))
+				  
+				  (setq delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+							((< range-max actual-num)
+							 (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
+							((< actual-num range-min)
+							 (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min))))
+					delta-percent
+					(* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min)))))))))
+			(org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
+			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))))))))))))))
+  
 
 (defun org-goals-check-sparsetree ()
   "Show missed goals as sparsetree"
@@ -1389,22 +1336,20 @@ changing only the numerator."
       :ratio-word ratio-word)))
   "value ratio goal")
 
-(defconst org-goals-link-regexp (rxx (eval-regexp org-any-link-re)))
-
 (defconst org-goals-goal-link-regexp
   (rxx (seq (org-goals-number-regexp factor)
-	    (1+ whitespace)
+	    (1+ blank)
 	    "of"
-	    (1+ whitespace)
-	    (org-goals-link-regexp link))
-       factor))
+	    (1+ blank)
+	    (eval-regexp org-any-link-re)
+       factor)))
 
 (defconst org-goals-goal-or-link-regexp
   (rxx (or (org-goals-goal-regexp goal)
 	   (org-goals-goal-link-regexp link))
        (or goal link)))
 
-(defun org-goals-parse-goal-or-link-at-point (goal-name)
+(defun org-goals-parse-goal-or-link-at-point ()
   "Parse goal or link at point"
   ;; so, we need to know what the goal was, so that we can look for the same goal at the target entry.
   ;; and also, need to put in a check for infinite recursion.
@@ -1425,10 +1370,9 @@ changing only the numerator."
 	(save-excursion
 	  (save-window-excursion
 	    (org-open-at-point 'in-emacs)
-	    (re-search-forward
-	     (rxx (seq bol (0+ blank) ":" (eval goal-name) ":" (0+ blank)))
-	     (org-entry-end-position))
-	    (org-goals-scale-goal result (org-goals-parse-goal-or-link-at-point goal-name)))
+	    (unless (rxx-search-fwd org-goals-goal-prefix-regexp (point-at-eol))
+	      (error "No goal found at link taget"))
+	    (org-goals-scale-goal result (org-goals-parse-goal-or-link-at-point)))
   )))))
 
 (provide 'org-goals)
