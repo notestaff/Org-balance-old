@@ -516,7 +516,7 @@ the parsed result in case of match, or nil in case of mismatch."
 		 (rxx-object s))
 	    (rxx-call-parser rxx-info (match-string 0 s)))))))
 
-(defun* rxx-search-fwd (aregexp &optional bound (partial-match-ok t))
+(defun* rxx-search-fwd (aregexp &optional bound noerror (partial-match-ok t))
   "Match the current buffer against the given extended regexp, and return
 the parsed result in case of match, or nil in case of mismatch."
   ;; add options to:
@@ -529,8 +529,8 @@ the parsed result in case of match, or nil in case of mismatch."
 				   (buffer-substring old-point bound)
 				 "buffer text") aregexp)))
 	(if (not (re-search-forward aregexp bound 'noerror))
-	    (error "%s" error-msg)
-	  (unless partial-match-ok
+	    (unless noerror (error "%s" error-msg))
+	  (unless (or noerror partial-match-ok)
 	    (unless (= (match-beginning 0) old-point) (error "%s: match starts at %d" error-msg (match-beginning 0)))
 	    (unless (= (match-end 0) bound) (error "%s: match ends at %d" error-msg (match-end 0))))
 	  (let* ((rxx-env (rxx-info-env rxx-info))
@@ -540,7 +540,7 @@ the parsed result in case of match, or nil in case of mismatch."
 (defun rxx-parse-fwd (aregexp &optional bound partial-match-ok)
   (save-match-data
     (save-excursion
-      (rxx-search-fwd aregexp bound partial-match-ok))))
+      (rxx-search-fwd aregexp bound (not 'noerror) partial-match-ok))))
 
 
 (defun rxx-parse-bwd (aregexp &optional bound partial-match-ok)
