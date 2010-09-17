@@ -372,6 +372,23 @@ with this number.")
   (rx-group-if (eval (cadr form)) rx-parent))
 
 
+(defmacro rxx-replace-posix (s)
+  "Replace posix classes in regular expression.  Taken from `org-re' in `org-macs.el'."
+  (if (featurep 'xemacs)
+      (let ((ss s))
+	(save-match-data
+	  (while (string-match "\\[:alnum:\\]" ss)
+	    (setq ss (replace-match "a-zA-Z0-9" t t ss)))
+	  (while (string-match "\\[:word:\\]" ss)
+	    (setq ss (replace-match "a-zA-Z0-9" t t ss)))
+	  (while (string-match "\\[:alpha:\\]" ss)
+	    (setq ss (replace-match "a-zA-Z" t t ss)))
+	  (while (string-match "\\[:punct:\\]" ss)
+	    (setq ss (replace-match "\001-@[-`{-~" t t ss)))
+	  ss))
+    s))
+
+
 (defun rxx-to-string (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions, taken together, allow specifying simple grammars
@@ -408,7 +425,7 @@ For detailed description, see `rxx'.
 		     :env rxx-env :descr descr :regexp regexp
 		     )))
      (put-rxx-info regexp rxx-info)
-     regexp)))
+     (rxx-replace-posix regexp))))
   
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
 
@@ -487,40 +504,43 @@ the parsed result in case of match, or nil in case of mismatch."
   ;;   - work with re-search-forward and re-search-bwd.
   ;;
   (save-match-data
-    (let ((rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp))))
-      (if (and (string-match aregexp s)
-	       (or partial-match-ok
-		   (and (= (match-beginning 0) 0)
-			(= (match-end 0) (length s)))))
+    (let* ((rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp)))
+	   (error-msg (format "Error parsing \`%s\' as %s" s
+			      (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))
+      (if (not (string-match aregexp s))
+	  (error "%s" error-msg)
+	  (unless partial-match-ok
+	    (unless (= (match-beginning 0) 0) (error "%s: match starts at %d" error-msg (match-beginning 0)))
+	    (unless (= (match-end 0) (length s)) (error "%s: match ends at %d" error-msg (match-end 0))))
 	  (let* ((rxx-env (rxx-info-env rxx-info))
 		 (rxx-object s))
-	    (rxx-call-parser rxx-info (match-string 0 s)))
-	(error "Error parsing \`%s\' as %s" s
-	       (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))))
+	    (rxx-call-parser rxx-info (match-string 0 s)))))))
 
-
-(defun rxx-parse-fwd (aregexp &optional bound partial-match-ok)
+(defun* rxx-search-fwd (aregexp &optional bound (partial-match-ok t))
   "Match the current buffer against the given extended regexp, and return
 the parsed result in case of match, or nil in case of mismatch."
   ;; add options to:
   ;;   - work with re-search-forward and re-search-bwd.
   ;;
+      (let* ((old-point (point))
+	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp)))
+	    (error-msg (format "Error parsing \`%s\' as %s"
+			       (if (and bound (>= bound old-point) (< (- bound old-point) 100))
+				   (buffer-substring old-point bound)
+				 "buffer text") aregexp)))
+	(if (not (re-search-forward aregexp bound 'noerror))
+	    (error "%s" error-msg)
+	  (unless partial-match-ok
+	    (unless (= (match-beginning 0) old-point) (error "%s: match starts at %d" error-msg (match-beginning 0)))
+	    (unless (= (match-end 0) bound) (error "%s: match ends at %d" error-msg (match-end 0))))
+	  (let* ((rxx-env (rxx-info-env rxx-info))
+		 rxx-object)
+	    (rxx-call-parser rxx-info (match-string 0))))))
+
+(defun rxx-parse-fwd (aregexp &optional bound partial-match-ok)
   (save-match-data
     (save-excursion
-      (let ((old-point (point))
-	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp))))
-	(if (and (re-search-forward aregexp bound 'noerror)
-		 (or partial-match-ok
-		     (and (= (match-beginning 0) old-point)
-			  (= (match-end 0) bound))))
-	    (let* ((rxx-env (rxx-info-env rxx-info))
-		   rxx-object)
-	      (rxx-call-parser rxx-info (match-string 0)))
-	  (error "Error parsing \`%s\' as %s" (if (and bound (>= bound old-point) (< (- bound old-point) 100))
-						  (buffer-substring old-point bound)
-						"buffer text")
-		 (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info))))))))
-
+      (rxx-search-fwd aregexp bound partial-match-ok))))
 
 
 (defun rxx-parse-bwd (aregexp &optional bound partial-match-ok)
