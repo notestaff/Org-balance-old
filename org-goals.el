@@ -460,8 +460,9 @@ We will also have a default interval, which can be overriden (or used?) with the
 ;;      presents it in a list.
 (defstruct org-goals-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
 
-(defconst org-goals-goal-prefix-regexp (rxx (seq bol (1+ "*") (1+ blank) (eval org-goals-goal-todo-keyword) (1+ blank)
-						 (named-group goal-name (1+ alnum)) (1+ blank)) goal-name))
+(defconst org-goals-goal-prefix-regexp
+  (rxx (seq bol (1+ "*") (1+ blank) (optional "[#" upper "]" (1+ blank)) (eval org-goals-goal-todo-keyword) (1+ blank)
+	    (named-group goal-name (1+ alnum)) (1+ blank)) goal-name))
 
 (defun* org-goals-compute-goal-deltas2 (&key goals tstart tend)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
@@ -470,25 +471,14 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
   (unless tend (setq tend (org-float-time (org-current-time))))
 
-  (let ((days-in-interval (org-goals-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
+  (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0)
+	(days-in-interval (org-goals-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
     (save-excursion
       (goto-char (point-min))
       (save-restriction
 	(save-match-data
 	  (let ((org-goals-num-warnings 0) goal-deltas)
-	    
-	    ;;
-	    ;; Find all entries where one of our goals is set.
-	    ;; (if goals not specified, find all entries where _some_ goal is set).
-	    ;; possibly, make a regexp for parsing goals, and match for that.  though, then,
-	    ;; we won't find the malformed goals and won't be able to warn about them.
-	    ;;
-	    
-					;
-					; loop over agenda files if needed
-					;
-	    
-	    ;; FIXME if goals specified, make regexp for them	    (goto-char (point-min))
+	    ;; FIXME if goals specified, make regexp for them
 	    (let (goal-name-here)
 	      (while (setq goal-name-here
 			   (rxx-search-fwd
@@ -498,12 +488,12 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(condition-case err
 			    (org-goals-parse-goal-or-link-at-point)
 			(error
-			 (incf org-goals-num-warnings)
+			 (incf num-errors)
 			 (message "Error parsing %s" goal-def-here)
-			 (save-match-data (org-toggle-tag "goal-error" 'on))
+			 (save-match-data (org-toggle-tag "goal_error" 'on))
 			 nil))))
 		  (when parsed-goal
-		    (org-toggle-tag "goal-error" 'off)
+		    (org-toggle-tag "goal_error" 'off)
 		    ;;
 		    ;; Compute the actual usage under this subtree, and convert to the same
 		    ;; units as the goal, so we can compare them.
@@ -521,7 +511,6 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 					       (org-goals-goal-numer-min parsed-goal))))
 				   (sum-here
 				    (if is-time (org-goals-clock-sum tstart tend)
-				      (message "we are here")
 				      (org-goals-sum-property
 				       goal-name-here
 				       to-unit
@@ -556,13 +545,21 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				  
 				  (setq delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
 							((< range-max actual-num)
-							 (if (eq polarity 'atleast) (- actual-num goal-max) (- goal-max actual-num)))
+							 (if (eq polarity 'atleast)
+							     (- actual-num goal-max)
+							   (- goal-max actual-num)))
 							((< actual-num range-min)
-							 (if (eq polarity 'atmost) (- goal-min actual-num) (- actual-num goal-min))))
+							 (if (eq polarity 'atmost)
+							     (- goal-min actual-num)
+							   (- actual-num goal-min))))
 					delta-percent
 					(* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min)))))))))
+			(cond ((< delta-val 0) (incf num-under))
+			      ((> delta-val 0) (incf num-over))
+			      ((= delta-val 0) (incf num-met)))
 			(org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
-			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))))))))))))))
+			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))))))))))))
+    (message "err %d under %d met %d over %d" num-errors num-under num-met num-over)))
   
 
 (defun org-goals-check-sparsetree ()
@@ -1341,8 +1338,8 @@ changing only the numerator."
 	    (1+ blank)
 	    "of"
 	    (1+ blank)
-	    (eval-regexp org-any-link-re)
-       factor)))
+	    (eval-regexp org-any-link-re))
+       factor))
 
 (defconst org-goals-goal-or-link-regexp
   (rxx (or (org-goals-goal-regexp goal)
@@ -1365,7 +1362,8 @@ changing only the numerator."
   ;;         - if that entry does not have the (number'th) requisite goal.
   ;;    - factor out the follow-a-link code, so that we can use it 
   (save-match-data
-    (let ((result (rxx-parse-fwd org-goals-goal-or-link-regexp (point-at-eol))))
+    (let ((result (rxx-parse-fwd org-goals-goal-or-link-regexp (point-at-eol) 'partial-match-ok)))
+      (dbg result)
       (if (org-goals-goal-p result) result
 	(save-excursion
 	  (save-window-excursion
