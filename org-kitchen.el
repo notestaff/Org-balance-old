@@ -1110,3 +1110,43 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
     (matcher-re (separated-by "|" (0+ or-clause-re)))
   )
    ))
+
+
+(custom-set-variables
+  ;; custom-set-variables was added by Custom.
+  ;; If you edit it by hand, you could mess it up, so be careful.
+  ;; Your init file should contain only one such instance.
+  ;; If there is more than one, they won't work right.
+ '(debug-on-error t)
+ '(delete-selection-mode nil nil (delsel))
+ '(doc-view-cache-directory "/wga/scr1/ilya/tmp/doc-view/")
+ '(edebug-all-defs t)
+ '(edebug-all-forms t)
+ '(fill-column 123)
+ '(message-log-max 10000)
+ '(org-agenda-custom-commands (quote (("g" . "Org-goals commands") ("gn" "Neglected items" tags "goal_delta_val<0/!GOAL" ((org-agenda-sorting-strategy (quote (priority-down category-keep user-defined-up))) (org-agenda-cmp-user-defined (quote org-goals-cmp)) (org-agenda-before-sorting-filter-function (quote org-goals-save-amt-neglected)) (org-show-hierarchy-above (quote ((agenda . t)))))))))
+ '(org-agenda-dim-blocked-tasks (quote invisible))
+ '(org-agenda-files (quote ("/cvar/sabeti-dav/ilya/ilya/new/mythings.org")))
+ '(org-agenda-start-with-follow-mode t)
+ '(org-agenda-window-frame-fractions (quote (0.5 . 0.6)))
+ '(org-balance-agenda-sorting-strategy (quote (priority-down category-keep user-defined-down)))
+ '(org-balance-default-polarity (quote (("clockedtime" . atleast) ("done" . atleast) ("spend" . atmost))))
+ '(org-clock-into-drawer 2)
+ '(org-clock-report-include-clocking-task t)
+ '(org-drawers (quote ("PROPERTIES" "CLOCK" "NOTES" "LOGBOOK")))
+ '(org-log-done (quote time))
+ '(org-sparse-tree-open-archived-trees t)
+ '(org-todo-keywords (quote ((sequence "TODO" "DONE") (sequence "GOAL" "|" "DONE"))))
+ '(scroll-bar-mode (quote right))
+ '(tab-width 3)
+ '(visible-bell t)
+ '(w3m-content-type-alist (quote (("application/x-gzip" "\\.gz\\'" ("/usr/bin/zcat" file) nil) ("text/plain" "\\.\\(txt\\|tex\\|el\\)\\'" nil nil) ("text/html" "\\.s?html?\\'" browse-url-default-browser nil) ("text/xml" "\\.xml\\'" nil "text/plain") ("image/jpeg" "\\.jpe?g\\'" ("/usr/bin/display" file) nil) ("image/png" "\\.png\\'" ("/usr/bin/display" file) nil) ("image/gif" "\\.gif\\'" ("/usr/bin/display" file) nil) ("image/tiff" "\\.tif?f\\'" ("/usr/bin/display" file) nil) ("image/x-xwd" "\\.xwd\\'" ("/usr/bin/display" file) nil) ("image/x-xbm" "\\.xbm\\'" ("/usr/bin/display" file) nil) ("image/x-xpm" "\\.xpm\\'" ("/usr/bin/display" file) nil) ("image/x-bmp" "\\.bmp\\'" ("/usr/bin/display" file) nil) ("video/mpeg" "\\.mpe?g\\'" nil nil) ("video/quicktime" "\\.mov\\'" nil nil) ("application/postscript" "\\.e?ps\\'" ("gv" file) nil) ("application/pdf" "\\.pdf\\'" ("acroread" file) nil) ("application/xml" "\\.xml\\'" nil "text/plain") ("application/rdf+xml" "\\.rdf\\'" nil "text/plain") ("application/rss+xml" "\\.rss\\'" nil "text/plain") ("application/xhtml+xml" nil nil "text/html"))))
+ '(w3m-cookie-accept-domains (quote ("livejournal.com"))))
+(custom-set-faces
+  ;; custom-set-faces was added by Custom.
+  ;; If you edit it by hand, you could mess it up, so be careful.
+  ;; Your init file should contain only one such instance.
+  ;; If there is more than one, they won't work right.
+ '(font-lock-comment-face ((nil (:foreground "yellow"))))
+ '(font-lock-string-face ((nil (:foreground "MediumSeaGreen"))))
+ '(org-hide ((t (:foreground "white")))))

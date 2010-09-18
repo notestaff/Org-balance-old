@@ -801,10 +801,10 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	   ,body)
        (fset ,fname old-func))))
 
-(defsubst org-goals-cmp (a b)
+(defun org-goals-cmp (a b)
   "Compare agenda entries by the amount of neglect, with the most-neglected at the top."
-  (let ((pa (or (get-text-property 0 :org-goals-neglect a) 0))
-	(pb (or (get-text-property 0 :org-goals-neglect b) 0)))
+  (let ((pa (or (get-text-property 0 :org-goals-delta a) 0))
+	(pb (or (get-text-property 0 :org-goals-delta b) 0)))
     (cond ((> pa pb) +1)
 	  ((< pa pb) -1)
 	  (t nil))))
@@ -815,19 +815,17 @@ as a text property, for later use by org-goals-cmp.  Also, add the neglect amoun
 to the agenda line.
 "
   (let ((orig-entry (get-text-property 0 'org-hd-marker agenda-line)) cur-buf)
-    (if orig-entry
-	(save-excursion
-	  (setq cur-buf (current-buffer))
-	  (switch-to-buffer (marker-buffer orig-entry))
-	  (goto-char (marker-position orig-entry))
-	  (let ((org-goals-neglect-val (get-text-property (point) :org-goals-neglect)))
-	    (if (and org-goals-neglect-val (> org-goals-neglect-val 0.01)) 
-		(progn
-		  (put-text-property 0 1 :org-goals-neglect org-goals-neglect-val agenda-line)
-		  (let ((r (concat agenda-line "::: " (number-to-string org-goals-neglect-val))))
-		    r))
-	      nil)))
-      nil)))
+    (when orig-entry
+      (save-excursion
+	(setq cur-buf (current-buffer))
+	(switch-to-buffer (marker-buffer orig-entry))
+	(goto-char (marker-position orig-entry))
+	(let ((org-goals-delta-val (string-to-number (or (org-entry-get (point) "goal_delta_val") "0")))
+	      (org-goals-delta-percent (string-to-number (or (org-entry-get (point) "goal_delta_percent") "0")))
+	      )
+	  (progn
+	    (put-text-property 0 1 :org-goals-delta org-goals-delta-val agenda-line)
+	    (concat agenda-line "::: " (number-to-string org-goals-delta-val))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -1006,6 +1004,9 @@ When called repeatedly, scroll the window that is displaying the buffer."
       (recenter)
       (setq org-agenda-show-window (selected-window))
       (select-window win)))
+
+(defadvice org-agenda-do-context-action (after org-goals-after-agenda last () activate compile)
+  (org-agenda-show-path))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
