@@ -313,6 +313,8 @@ Adapted from `org-closed-in-range' from org.el."
 Originally adapted from `org-closed-in-range'.
 "
 
+  ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set.
+  ;; FIXME: find also state changes to DONE, or to any done state.
   (save-excursion
     (save-match-data
       (goto-char (point-min))
@@ -434,27 +436,6 @@ as you were doing it.
     total-minutes))
     
 
-(defun org-goals-read-date (s)
-  "Parse a date/time point.   The point is always in the past, since the user is entering a past interval
-during which they want to measure their adherence to their goals.  This differs from `org-read-date', which assumes
-its input is in the future (as when entering a future appointment).  So we interpret the input here differently.
-
-A time interval such as '3h' is assumed to go from 3h back up to the present.
-
-We will also have a default interval, which can be overriden (or used?) with the prefix argument.
-"
-
-  ; temporarily change org-read-date-analyze to additionally recognize relative time strings such as
-  ; -3h or -03:04 relative to current time.
-  ;
-  
-  (save-match-data
-    (when (string-match (concat "\\(" org-goals-number-regexp "\\)" "[hH]") s)
-      (org-goals-string-to-number (match-string 1 s))
-    )
-  ))
-
-
 ;; struct: org-goals-goal-delta - information about how well one goal is being met.
 ;;      `org-goals-compute-goal-deltas' gathers this information from various entries and
 ;;      presents it in a list.
@@ -503,6 +484,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(save-excursion
 			  (save-restriction
 			    (outline-up-heading 1 'invisible-ok)
+			    (when (string= (upcase (org-get-heading)) "GOALS")
+			      (outline-up-heading 1 'invisible-ok))
 			    (org-narrow-to-subtree)
 			    (goto-char (point-min))
 			    (let* ((is-time (equal goal-name-here "clockedtime"))
