@@ -1150,3 +1150,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
  '(font-lock-comment-face ((nil (:foreground "yellow"))))
  '(font-lock-string-face ((nil (:foreground "MediumSeaGreen"))))
  '(org-hide ((t (:foreground "white")))))
+
+(let ((s "privet vsem"))
+
+  )
