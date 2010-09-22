@@ -7,36 +7,74 @@ Org-Balance Documentation
   projects.  It will tell you when you spend too much or too little on some projects.  It is simple to use but
   flexible.
 
-  It integrates with existing time-tracking and task-closing commands.   The only new thing you need to do is
-  set a few goals, and you can then get all kinds of reports.
+  It integrates with existing Org-mode facilities for [[http://orgmode.org/org.html#Clocking-work-time][clocking work time]], [[http://orgmode.org/org.html#Tracking-TODO-state-changes][tracking TODO state changes]], [[http://orgmode.org/org.html#Closing-items][closing items]], and
+  [[http://orgmode.org/org.html#Properties-and-Columns][assigning values to items]].  The only new thing you need to do is set, on some subtrees, /goals/ of the form "spend at
+  least 3 hours a week" or "complete at least one task per day" or "spend at most $100 per month".  Goals are set by adding
+  a special child node to a subtree, like this:
 
-  In simplest usage, you can put a /goal/ on a subtree, such as:
+#+BEGIN_HTML
+<pre>
+  * work
+    * open-source work
+      * GOAL at least 3 hours a week
+      * Project A
+      * Project B
+        * ...
+</pre>
+#+END_HTML
 
-  goal_clockedtime: at least 3 hours per week
+  You can then easily generate reports showing how well you are meeting your goals; e.g., an agenda showing your neglected
+  goals, highest-priority most-neglected goals first.
 
-  The goal is for a _rate_: how you spend a resource per time.   By expressing goals as rates you make comparisons
-  interchangeable.
+  Note that "meeting a goal" here means not achieving some aim ("learn Chinese"), but consistently spending the desired amount
+  of time/money or consistently making measurable progress (completing tasks) towards that aim [fn:: Other possible terms
+  for "goals" as used here might be "spending targets", "resource allocations" or "constraints".].
+  In that sense, goals are like [[http://orgmode.org/org.html#Tracking-your-habits][Habits]].  However, goals are more
+  general: rather than being specific TODO items, goals are spending targets that you set for entire subtrees.
+  They can then be satisfied by any combination of items under a subtree, which gives you a lot of flexibility.
+  For example, you could have a goal of "spend five hours per week working on open-source projects".
+  You could have several different open-source projects under that headline, and time clocked working on any of them --
+  in any combination -- would count towards the goal.  You can then set more specific goals such as "work at least two
+  hours per week on project A".  Goals can also be specified in terms of other goals: you could say "out of the time alloted to
+  open-source, spend 40% of it on project A".
 
-  You can then call org-balance commands to show goals that are not being met -- either as a sparse tree in the
-  current file, or as an agenda.  The agenda can be sorted, putting most-neglected goals first.
+* Usage
 
-  Note that you can put goals on broad categories of things, as well as on more concrete items.
-  You can also give goals relative in terms of other goals, e.g. .3 of parent goal.
-  You can even do .3 of actual time spent.
+*** Specifying your goals
 
-  But you can also look at goals where you spend more time than needed.  This can help you find time
-  for goals that are shortchanged.   You can also list goals that _are_ being met, just to pat yourself on the back.
+*** Checking your goals
+	 
+  	 Or you could have a node for list of new poets and new musicians you want to try.   And a goal to take one a week.
 
-  You can view a summary over any period, and it will be recalculated for that period.
+  	 Or unpleasant things.
 
-  Besides spent time, you can also track done things.
+  	 In simplest usage, you can put a /goal/ on a subtree, such as:
 
-  org-balance treats uniformly various resources, whether clockedtime, time passed, or resources attached to
-  done or closed commands.
+  	 goal_clockedtime: at least 3 hours per week
 
-  this lets you do things like, show time spent per response received.   See which parts of your projects do
-  better for this ratio, and which do worse.  Show agenda sorted by such ratios.
-  (and possibly filtered by level.)
+  	 The goal is for a _rate_: how you spend a resource per time.   By expressing goals as rates you make comparisons
+  	 interchangeable.
+
+  	 You can then call org-balance commands to show goals that are not being met -- either as a sparse tree in the
+  	 current file, or as an agenda.  The agenda can be sorted, putting most-neglected goals first.
+
+  	 Note that you can put goals on broad categories of things, as well as on more concrete items.
+  	 You can also give goals relative in terms of other goals, e.g. .3 of parent goal.
+  	 You can even do .3 of actual time spent.
+
+  	 But you can also look at goals where you spend more time than needed.  This can help you find time
+  	 for goals that are shortchanged.   You can also list goals that _are_ being met, just to pat yourself on the back.
+
+  	 You can view a summary over any period, and it will be recalculated for that period.
+
+  	 Besides spent time, you can also track done things.
+
+  	 org-balance treats uniformly various resources, whether clockedtime, time passed, or resources attached to
+  	 done or closed commands.
+
+  	 this lets you do things like, show time spent per response received.   See which parts of your projects do
+  	 better for this ratio, and which do worse.  Show agenda sorted by such ratios.
+  	 (and possibly filtered by level.)
 
 
 *** points to make

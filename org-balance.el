@@ -873,14 +873,6 @@ appropriate parameters.
   ))
 
 
-(defun org-balance-make-agenda-custom-commands ()
-       '(("b" "org-balance: neglected items" tags "val_goal>=0"
-	  ((org-agenda-sorting-strategy '(user-defined-down))
-	   (org-agenda-cmp-user-defined 'org-balance-cmp)
-	   (org-agenda-before-sorting-filter-function 'org-balance-save-amt-neglected)))))
-
-(setq org-agenda-custom-commands (org-balance-make-agenda-custom-commands))
-	
 (require 'widget)
 
 (eval-when-compile
