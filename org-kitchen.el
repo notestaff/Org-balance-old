@@ -1124,7 +1124,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
  '(edebug-all-forms t)
  '(fill-column 123)
  '(message-log-max 10000)
- '(org-agenda-custom-commands (quote (("g" . "Org-goals commands") ("gn" "Neglected items" tags "goal_delta_val<0/!GOAL" ((org-agenda-sorting-strategy (quote (priority-down category-keep user-defined-up))) (org-agenda-cmp-user-defined (quote org-goals-cmp)) (org-agenda-before-sorting-filter-function (quote org-goals-save-amt-neglected)) (org-show-hierarchy-above (quote ((agenda . t)))))))))
+ '(org-agenda-custom-commands (quote (("g" . "org-balance commands") ("gn" "Neglected items" tags "goal_delta_val<0/!GOAL" ((org-agenda-sorting-strategy (quote (priority-down category-keep user-defined-up))) (org-agenda-cmp-user-defined (quote org-balance-cmp)) (org-agenda-before-sorting-filter-function (quote org-balance-save-amt-neglected)) (org-show-hierarchy-above (quote ((agenda . t)))))))))
  '(org-agenda-dim-blocked-tasks (quote invisible))
  '(org-agenda-files (quote ("/cvar/sabeti-dav/ilya/ilya/new/mythings.org")))
  '(org-agenda-start-with-follow-mode t)
@@ -1151,6 +1151,369 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
  '(font-lock-string-face ((nil (:foreground "MediumSeaGreen"))))
  '(org-hide ((t (:foreground "white")))))
 
-(let ((s "privet vsem"))
-
+(let ((s (make-string 100 ?.)))
+  (put-text-property 2 15 'a 1 s)
+  (put-text-property 9 20 'b 3 s)
+  (text-properties-at 10 s)
   )
+
+
+(defstruct org-balance-intervals intervals sums str seen seen-id imin imax chunk-size)
+
+(defun new-org-balance-interval-set (intervals)
+  "Construct an interval set"
+  (let* ((str (make-string 1024 ?.))
+	 (imin (apply 'min (mapcar 'car intervals)))
+	 (imax (apply 'max (mapcar 'cdr intervals)))
+	 (chunk-size (/ (- imax imin) (length str)))
+	 (interval-id 0))
+    (dolist (interval intervals)
+      (put-text-property (floor (- (car interval) imin) chunk-size)
+			 (ceiling (- (cdr interval) imin) chunk-size)
+			 (intern (format "i%d" interval-id))
+			 interval-id str)
+			 
+      )
+    (make-org-balance-intervals :intervals intervals :sums (make-vector (length intervals) 0) :str str
+			      :seen (make-vector (length intervals) 0) :seen-id 0 :imin imin :imax imax
+			      :chunk-size chunk-size)
+  ))
+
+(defun org-balance-add-to-intervals (intervals tmin tmax val)
+  "Add value VAL to running sums for intervals intersecting the range [TMIN,TMAX] in INTERVAL-SET"
+  (incf (seen-id interval-set))
+  (let* ((pos-min (floor (- tmin (org-balance-intervals-imin intervals) (org-balance-intervals-chunk-size intervals))))
+	 (pos-max (ceiling (- tmax (org-balance-intervals-imin intervals) (org-balance-intervals-chunk-size intervals))))
+	 (tpos tmin)
+	 (tps (text-properties-at tmin (org-balance-intervals-str intervals))))
+    (while (<= tpos tmax)
+      (
+      )
+  ))
+
+
+(defun bsearch-impl (vec target left right)
+  (let ((mid (/ (+ left right) 2)))
+    (cond ((eq left right)
+           (if (eq target (elt vec left))
+               left
+             -1))
+          ((<= target (elt vec mid))
+           (bsearch-impl vec target left mid))
+          (t ; target > (elt vec mid)
+           (bsearch-impl vec target (+ 1 mid) right)))))
+
+(defun bsearch (vec elt)
+  "binary search VEC for ELT, returning index, or -1 if not found"
+  (bsearch-impl vec elt 0 (1- (length vec))))
+
+(let ((v (make-vector 10 0)))
+  (aset v 5 3)
+  (sort* v '<)
+  (message "%s" v)
+  (bsearch v 3)
+  )
+
+
+(defun org-balance-check-sparsetree ()
+  "Show missed goals as sparsetree"
+  (interactive)
+  (org-balance-remove-overlays)
+  (org-overview)
+  (org-balance-compute-goal-deltas
+   :callback1
+   (lambda ()
+
+     ;(goto-char (1+ cb-goal-point))
+
+     (if cb-error
+	 (org-balance-put-overlay cb-error 'error)
+       ;; so, as the next thing:
+       ;;   - if needed, open up the entry. if still needed,
+       ;;     open up the properties drawer.
+       ;;   - if we do open up the properties drawer, perhaps
+       ;;     show goal results next to corresponding goals?
+       ;;(forward-line)
+       (org-balance-put-overlay
+	(list
+	 (format "%4d%% actual: \"%20s\" %.2f"
+		 (round cb-delta-percent) cb-goal
+		 (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))
+	 "second line"
+	 )
+	)
+     ))
+   :callback2
+   (lambda ()
+     (let ((org-show-hierarchy-above t)
+	   (org-show-following-heading nil)
+	   (org-show-siblings nil))
+       (org-back-to-heading 'invis-ok)
+       (org-show-context 'default)
+       ;(goto-char cb-goal-point)
+       (when nil
+	 (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
+					  (round cb-delta-percent)
+					  cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))))
+       
+       ;(forward-line)
+       ;;; ** uncomment
+       ;(org-show-hidden-entry)
+       ;(outline-flag-region (1- (point)) (1+ (point-at-eol)) nil)
+       (save-excursion
+	 (save-match-data
+	   ;(re-search-forward org-drawer-regexp)
+	   ;(goto-char (point-at-bol))
+	   ;(org-flag-drawer nil)))
+       ))))))
+
+(defun org-balance-check2 ()
+  "Check gathering of goal deltas"
+  (interactive)
+  (let* ((goal-deltas-orig (org-balance-compute-goal-deltas2 ))
+	 (goal-deltas (org-balance-groupby goal-deltas-orig 'org-balance-goal-delta-entry-pos)))
+    (org-balance-remove-overlays)
+    (org-overview)
+    (dolist (entry-goal-delta goal-deltas)
+      (goto-char (org-balance-goal-delta-entry-pos (cadr entry-goal-delta)))
+      (org-balance-put-overlay
+       (mapcar
+	(lambda (goal-delta)
+	  (format "%4d%% \"%20s\" actual: %.2f"
+		  (round (org-balance-goal-delta-delta-percent goal-delta))
+		  (org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
+		  (org-balance-valu-val (org-balance-valu-ratio-num (org-balance-goal-delta-actual goal-delta)))))
+	(cdr entry-goal-delta)))
+      (org-show-context 'default))))
+
+
+(defun org-balance-check3 (&optional tstart tend)
+  "Show goal deltas as agenda entries"
+  (interactive)
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+  (let* ((props (list 'face 'default
+		      'done-face 'org-agenda-done
+		      'undone-face 'default
+		      'mouse-face 'highlight
+		      'org-not-done-regexp org-not-done-regexp
+		      'org-todo-regexp org-todo-regexp
+		      'help-echo
+		      (format "mouse-2 or RET jump to org file %s"
+			      (abbreviate-file-name
+			       (or (buffer-file-name (buffer-base-buffer))
+				   (buffer-name (buffer-base-buffer)))))))
+	 )
+    (rxx-flet ((org-make-tags-matcher (match) (cons "org-balance" nil))
+	       (org-prepare-agenda (title) (org-prepare-agenda-orig "org-balance"))
+	       ;; set redo command
+	       (org-scan-tags
+		(&rest args)
+		(mapcar
+		 (lambda (goal-delta)
+		   (goto-char (org-balance-goal-delta-entry-pos goal-delta))
+		   (let ((txt
+			  (org-format-agenda-item
+			   nil
+			   (or
+			    (org-balance-goal-delta-error-msg goal-delta)
+			    (format "%-40s %+4d%% %20s actual: %.2f"
+				    (org-balance-goal-delta-heading goal-delta)
+				    (round (org-balance-goal-delta-delta-percent goal-delta))
+				    (org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
+				    (org-balance-valu-val (org-balance-valu-ratio-num
+							   (org-balance-goal-delta-actual goal-delta)))))
+			   ))
+			 (marker (org-agenda-new-marker)))
+		     (org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
+				    'priority (org-get-priority
+					       (or
+						(org-balance-goal-priority (org-balance-goal-delta-goal goal-delta))
+						(org-get-heading))) 'type "org-balance"
+						'org-balance-goal-delta goal-delta)))
+		 (org-balance-compute-goal-deltas2 :tstart tstart :tend tend)))
+	       )
+      (let (org-agenda-before-sorting-filter-function
+	    org-agenda-sorting-strategy-selected
+	    (org-agenda-cmp-user-defined
+		(lambda (a b)
+		  (let ((va (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta a)))
+			(vb (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta b))))
+		    (if (< va vb) -1 +1)
+		    )))
+	    (org-agenda-sorting-strategy `((tags ,@org-balance-agenda-sorting-strategy))))
+	(org-tags-view)))))
+
+(defun org-balance-show-neglected-time (&optional tstart tend)
+  (interactive)
+  (org-balance-reset-overlays)
+  (let (org-balance-result-list)
+    (message "got %d"
+	     (length (delq nil 
+			   (org-balance-compute-goal-deltas
+			    :goal "time" :tstart tstart :tend tend
+			    :callback
+			    (lambda (goal-delta total-here per-day-here per-day-goal-here)
+			       (when 
+				 (org-show-context)
+				 (org-balance-put-overlay (format "goal-delta %s total %s per-day %s per-day-goal %s"
+								  goal-delta total-here per-day-here per-day-goal-here)))
+			       t)
+			    :error-handler
+			    (lambda (err)
+			      (org-show-context)
+			      (org-balance-put-overlay (format "Error: %s" (error-message-string err))))
+			      
+			    ))))))
+
+(defun org-balance-show-neglected-val (&optional tstart tend)
+  (interactive)
+  (org-balance-reset-overlays)
+  (org-balance-compute-goal-deltas :goal "done" :tstart tstart :tend tend
+				   :callback
+				   (lambda (goal-delta total-here per-day-here per-day-goal-here)
+				     (when (< goal-delta 0)
+				       (org-show-context)
+				       (org-balance-put-overlay (format "goal-delta %s total %s per-day %s per-day-goal %s" goal-delta total-here per-day-here per-day-goal-here))))))
+
+
+(defun org-balance-show-non-neglected-val (&optional tstart tend)
+  (interactive)
+  (org-balance-reset-overlays)
+  (org-balance-compute-goal-deltas :goal "done" :tstart tstart :tend tend
+				   :callback
+				   (lambda (goal-delta total-here per-day-here per-day-goal-here)
+				     (when (>= goal-delta 0)
+				       (org-show-context)
+				       (org-balance-put-overlay
+					(format "goal-delta %s total %s per-day %s per-day-goal %s" goal-delta total-here per-day-here per-day-goal-here))))))
+
+
+
+(defun org-balance-show-non-neglected-time (&optional tstart tend)
+  (interactive)
+  (org-balance-check-goals :goal "time" :tstart tstart :tend tend
+			   :neglect-tolerance 30 :show-if-too-much-p t :show-if-just-right t))
+
+(defun* org-balance-compute-goal-deltas (&key goals tstart tend)
+  "For each goal, determine the difference between the actual and desired average daily expenditure of
+resource GOAL toward that goal in the period between TSTART and TEND.  Call the callback with the value.
+"
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+
+  (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0)
+	(days-in-interval (org-balance-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
+    (save-excursion
+      (goto-char (point-min))
+      (save-restriction
+	(save-match-data
+	  (let ((org-balance-num-warnings 0) goal-deltas)
+	    ;; FIXME if goals specified, make regexp for them
+	    (let (goal-name-here)
+	      (while (setq goal-name-here
+			   (rxx-search-fwd
+			    org-balance-goal-prefix-regexp (not 'bound) 'no-error))
+		(let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
+		       (parsed-goal
+			(condition-case err
+			    (org-balance-parse-goal-or-link-at-point)
+			(error
+			 (incf num-errors)
+			 (message "Error parsing %s" goal-def-here)
+			 (save-match-data (org-toggle-tag "goal_error" 'on))
+			 nil))))
+		  (when parsed-goal
+		    (org-toggle-tag "goal_error" 'off)
+		    ;;
+		    ;; Compute the actual usage under this subtree, and convert to the same
+		    ;; units as the goal, so we can compare them.
+		    ;;
+		    (let (delta-val delta-percent)
+		      (save-match-data
+			(save-excursion
+			  (save-restriction
+			    (outline-up-heading 1 'invisible-ok)
+			    (when (string= (upcase (org-get-heading)) "GOALS")
+			      (outline-up-heading 1 'invisible-ok))
+			    (org-narrow-to-subtree)
+			    (goto-char (point-min))
+			    (let* ((is-time (equal goal-name-here "clockedtime"))
+				   (to-unit (if is-time 'minutes
+					      (org-balance-valu-unit
+					       (org-balance-goal-numer-min parsed-goal))))
+				   (sum-here
+				    (if is-time (org-balance-clock-sum tstart tend)
+				      (org-balance-sum-property
+				       goal-name-here
+				       to-unit
+				       tstart tend))))
+			      (let ((actual
+				     (org-balance-convert-valu-ratio
+				      (make-org-balance-valu-ratio
+				       :num
+				       (org-balance-make-valu sum-here to-unit)
+				       :denom days-in-interval)
+				      (make-org-balance-valu-ratio
+				       :num (org-balance-goal-numer-min parsed-goal)
+				       :denom (org-balance-goal-denom parsed-goal)))))
+				
+				(let* ( (polarity (or (org-balance-goal-polarity parsed-goal)
+						      (cdr (assoc-string goal-name-here org-balance-default-polarity))))
+					(margin (or (org-balance-goal-margin parsed-goal)
+						    org-balance-default-margin-percent))
+					(goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
+					(goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
+					(range-min (- goal-min
+						      (if (numberp margin)
+							  (* (/ (float margin) 100.0) goal-min)
+							(org-balance-valu-val margin))))
+					
+					(range-max (+ goal-max
+						      (if (numberp margin)
+							  (* (/ (float margin) 100.0) goal-max)
+							(org-balance-valu-val margin))))
+					
+					(actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual))))
+				  
+				  (setq delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+							((< range-max actual-num)
+							 (if (eq polarity 'atleast)
+							     (- actual-num goal-max)
+							   (- goal-max actual-num)))
+							((< actual-num range-min)
+							 (if (eq polarity 'atmost)
+							     (- goal-min actual-num)
+							   (- actual-num goal-min))))
+					delta-percent
+					(* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min)))))))))
+			(cond ((< delta-val 0) (incf num-under))
+			      ((> delta-val 0) (incf num-over))
+			      ((= delta-val 0) (incf num-met)))
+			(org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
+			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))))))))))))
+    (message "err %d under %d met %d over %d" num-errors num-under num-met num-over)))
+  
+;; struct: org-balance-goal-delta - information about how well one goal is being met.
+;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
+;;      presents it in a list.
+(defstruct org-balance-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
+
+(defmacro org-balance-replacing-function (fname new-func body)
+  ;; Execute code, temporarily replacing a given function with a new one
+  `(let ((old-func (symbol-function ,fname)))
+     (unwind-protect
+	 (progn
+	   (fset ,fname ,new-func)
+	   ,body)
+       (fset ,fname old-func))))
+
+
+(defun org-balance-make-agenda-custom-commands ()
+       '(("b" "org-balance: neglected items" tags "val_goal>=0"
+	  ((org-agenda-sorting-strategy '(user-defined-down))
+	   (org-agenda-cmp-user-defined 'org-balance-cmp)
+	   (org-agenda-before-sorting-filter-function 'org-balance-save-amt-neglected)))))
+
+(setq org-agenda-custom-commands (org-balance-make-agenda-custom-commands))
+	
