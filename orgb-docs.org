@@ -16,7 +16,7 @@ Org-Balance Documentation
 <pre>
   * work
     * open-source work
-      * GOAL at least 3 hours a week
+      * GOAL clockedtime at least 3 hours a week
       * Project A
       * Project B
         * ...
@@ -38,11 +38,61 @@ Org-Balance Documentation
   hours per week on project A".  Goals can also be specified in terms of other goals: you could say "out of the time alloted to
   open-source, spend 40% of it on project A".
 
+* Installation
+
+  Download the files =org-balance.el= and =rxx.el=; put them into your =load-path=.   Put =(require 'org-balance)= in your =.emacs=.
+  
 * Usage
 
 *** Specifying your goals
 
+	 A goal is specified as a child of a subtree root.   It specifies a goal for its parent.  In that sense, it is like a
+	 [[http://orgmode.org/org.html#Properties-and-Columns][property]] of the parent.  However, representing goals as full headlines lets you have multiple goals for a subtree
+	 (e.g. for time and for money spent), and let each goal have separate priorities and appear as separate entries
+	 in the agenda.
+
+***** Basic syntax
+	 	
+	 	The basic syntax is: =GOAL [variable] [at least|at most] valu [per] time-period.
+
+	 	Variable can be "clockedtime"; then valu specifies the amount of clocked time intersecting the given time period.
+	 	Any other variable's value is computed from the sum of entries CLOSED in that time period or for each change to
+	 	a DONE state in that period.   By default, each entry's value is 1, so the valu specifies the number of tasks
+	 	done in the period.   However, some tasks may be much more valuable than others.
+	 	So, if a task had a "done" property, that value is used instead of 1.
+	 	You can also change the default value by setting the property =default_done= and making it [[http://orgmode.org/org.html#Property-inheritance][heritable]].
+	 	Most commonly, you would set this to zero, and then give distinct values to individual tasks, where a default
+	 	value does not make sense.  For example, you could have a "spend" property for budgeting; make its default zero.
+	 	Whenever you spend an amount under a headline, make a task for it with the "spend" property set to the amount,
+	 	and close it.  This will record spending this much at this time.  The value can be in units such as dollars.
+		Or you could have unpleasantness of tasks, measured in frogs, and have a default of zero and mark some tasks as
+		unpleasant.
+
+	 	You can also include in the goal sum only tasks matching a certain condition.   E.g. tasks tagged unpleasant.
+	 	You could then also have an unpleasantness value.  E.g. in frogs (after "Eat a frog every day" book).
+
+***** More complex syntax
+
+******* Polarity
+******* Margins
+		  
+******* Goal dependencies
+
+		  - as fraction of other goal
+		  - setting the numerator and denominator from another goal
+		  - counting things from a subtree
+
+******* Balancing the children
+		  
 *** Checking your goals
+
+	 Each goal can be met, under-met or over-met.  You can use the agenda to show the list of goals in some or all of these
+	 states.
+
+	 The state is recorded as a property under the goal, then you can use normal tags/properties search, with custom
+	 sorting.
+
+	 
 	 
   	 Or you could have a node for list of new poets and new musicians you want to try.   And a goal to take one a week.
 
