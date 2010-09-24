@@ -55,9 +55,10 @@
 
 ;; user-callable functions: rxx-named-grp-num, rxx, rxx-match-val, rxx-match-string, rxx-parse
 
+(require 'rx)
 (eval-when-compile
   (require 'cl)
-  (require 'rx))
+)
 
 (defmacro rxx-flet (bindings &rest body)
   "Temporarily replace functions, making previous definitions available.  Also, lets you use a function symbol
@@ -294,12 +295,47 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 
 (defun rxx-process-named-backref (form)
   "Process the (named-backref GRP-NAME) form, when called from `rx-to-string'."
+  (declare (special rxx-env))
   (rx-check form)
   (let* ((grp-name (second form))
 	 (prev-grp-defs (rxx-env-lookup grp-name rxx-env)))
     (unless prev-grp-defs (error "Group in backref not yet seen: %s" grp-name))
     (unless (= (length prev-grp-defs) 1) (error "Ambiguous backref to group %s" grp-name))
     (rx-backref `(backref ,(rxx-info-num (first prev-grp-defs))))))
+
+
+
+;;; Support for `progv': copied from `cl' package to avoid runtime dependence on it.
+(defvar rxx-progv-save)
+;;;###autoload
+(defun rxx-progv-before (syms values)
+  (while syms
+    (push (if (boundp (car syms))
+		 (cons (car syms) (symbol-value (car syms)))
+	       (car syms)) rxx-progv-save)
+    (if values
+	(set (pop syms) (pop values))
+      (makunbound (pop syms)))))
+
+(defun rxx-progv-after ()
+  (while rxx-progv-save
+    (if (consp (car rxx-progv-save))
+	(set (car (car rxx-progv-save)) (cdr (car rxx-progv-save)))
+      (makunbound (car rxx-progv-save)))
+    (pop rxx-progv-save)))
+
+(defmacro rxx-progv (symbols values &rest body)
+  "Bind SYMBOLS to VALUES dynamically in BODY.
+The forms SYMBOLS and VALUES are evaluated, and must evaluate to lists.
+Each symbol in the first list is bound to the corresponding value in the
+second list (or made unbound if VALUES is shorter than SYMBOLS); then the
+BODY forms are executed and their result is returned.  This is much like
+a `let' form, except that the list of symbols can be computed at run-time."
+  (list 'let '((rxx-progv-save nil))
+	(list 'unwind-protect
+	      (list* 'progn (list 'rxx-progv-before symbols values) body)
+	      '(rxx-progv-after))))
+
 
 (defun rxx-call-parser (rxx-info match-str)
   (let ((rxx-env (rxx-info-env rxx-info)))
@@ -309,7 +345,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 			   (rxx-match-val symbol))
 			 symbols))
 	   (parser (rxx-info-parser rxx-info)))
-      (progv symbols symbol-vals
+      (rxx-progv symbols symbol-vals
 	(let ((parser-result
 	       (if (functionp parser)
 		   (funcall parser match-str)
@@ -351,7 +387,7 @@ to `match-string', `match-beginning' or `match-end'."
 (defun rxx-match-val (grp-name &optional object aregexp)
   "Return the parsed object matched by named group GRP-NAME.  OBJECT, if given, is the string or buffer we last searched;
 may be scoped in via RXX-OBJECT.  The annotated regexp must either be passed in via AREGEXP or scoped in via RXX-AREGEXP."
-  (declare (special rxx-object rxx-aregexp))
+  (declare (special rxx-object rxx-aregexp grp-info match-here))
   (rxx-match-aux
    (lambda ()
        (let ((rxx-env (rxx-info-env grp-info))) 
@@ -360,19 +396,19 @@ may be scoped in via RXX-OBJECT.  The annotated regexp must either be passed in 
 (defun rxx-match-string (grp-name &optional object aregexp)
   "Return the substring matched by named group GRP-NAME.  OBJECT, if given, is the string or buffer we last searched;
 may be scoped in via RXX-OBJECT.  The annotated regexp must either be passed in via AREGEXP or scoped in via RXX-AREGEXP."
-  (declare (special rxx-object rxx-aregexp))
+  (declare (special rxx-object rxx-aregexp match-here))
   (rxx-match-aux (lambda () match-here)))
 
 (defun rxx-match-beginning (grp-name &optional object aregexp)
   "Return the beginning position of the substring matched by named group GRP-NAME.  The annotated regexp must either be
 passed in via AREGEXP or scoped in via RXX-AREGEXP."
-  (declare (special rxx-aregexp))
+  (declare (special grp-num))
   (rxx-match-aux (lambda () (match-beginning grp-num))))
 
 (defun rxx-match-end (grp-name &optional object aregexp)
   "Return the end position of the substring matched by named group GRP-NAME.  The annotated regexp must either be
 passed in via AREGEXP or scoped in via RXX-AREGEXP."
-  (declare (special rxx-aregexp))
+  (declare (special grp-num))
   (rxx-match-aux (lambda () (match-end grp-num))))
 
 (defconst rxx-first-grp-num 1
@@ -402,17 +438,33 @@ with this number.")
     s))
 
 
-(defun rxx-form (form &optional rx-parent)
+(defmacro rxx-dbg (&rest exprs)
+  "Print the values of exprs, so you can write e.g. (dbg a b) to print 'a=1 b=2'.
+Returns the value of the last expression."
+  `(let ((expr-vals (list ,@exprs)))
+     (apply 'message
+	    (append (list ,(mapconcat (lambda (expr)
+					(concat (format "%s" expr) "=%s "))
+				      exprs
+				      ""))
+		    expr-vals))
+     (car-safe (with-no-warnings (last expr-vals)))))
+
+(defmacro rxx-safe-val (x) `(if (boundp (quote ,x)) ,x 'unbound))
+
+
+(defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
   (if (not (boundp 'rxx-env))
-      (funcall rx-form-orig form rx-parent)
+      ad-do-it
     (cond ((and (consp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
-	   (rxx-process-named-grp (list 'named-grp (second form) (first form))))
-	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
-	   (rxx-process-named-grp (list 'named-grp form)))
-	  ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
-	   ;; what if recurs is used? need to regenerate from form
-	   (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))) 'no-group) '*))
-	  (t (funcall rx-form-orig form rx-parent)))))
+	      (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form)))))
+	    ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
+	        (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
+	      ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
+	          (setq ad-return-value
+			 ;; what if recurs is used? need to regenerate from form
+			 (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))) 'no-group) '*)))
+	        (t ad-do-it))))
 
 (defun rxx-to-string (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
@@ -422,41 +474,41 @@ in a modular fashion using regular expressions.
 For detailed description, see `rxx'.
 "
   (declare (special rxx-first-grp-num))
-  (rxx-flet ((rx-form rxx-form))
-    (rxx-remove-unneeded-shy-grps
-     (let* ((rxx-env (rxx-new-env))
-	    (rxx-next-grp-num rxx-first-grp-num)
-	    ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
-	    (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
-				       (eval-regexp . (rxx-process-eval-regexp 1 1))
-				       (shy-grp . seq)
-				       (recurse . (rxx-process-recurse 1 nil))
-				       (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
-				       (named-group . named-grp) (shy-group . shy-grp)
-				       (named-backref . (rxx-process-named-backref 1 1)))
-				     rx-constituents))
-	    
-	    ;; also allow named-group or ngrp or other names
-	    ;; var: regexp - the string regexp for the form.
-	    (regexp
-	     ;; whenever the rx-to-string call below encounters a (named-grp ) construct
-	     ;; in the form, it calls back to rxx-process-named-grp, which will
-	     ;; add a mapping from the group's name to rxx-grp structure
-	     ;; to rxx-name2grp.
-	     (rx-to-string form 'no-group))
-	    (rxx-info (make-rxx-info
-		       :form form :parser (or parser
-					      
-					      'identity)
-		       :env rxx-env :descr descr :regexp regexp
-		       )))
-       (put-rxx-info regexp rxx-info)
-       (rxx-replace-posix regexp)))))
+  (rxx-remove-unneeded-shy-grps
+   (let* ((rxx-env (rxx-new-env))
+	  (rxx-next-grp-num rxx-first-grp-num)
+	  ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
+	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
+				     (eval-regexp . (rxx-process-eval-regexp 1 1))
+				     (shy-grp . seq)
+				     (recurse . (rxx-process-recurse 1 nil))
+				     (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
+				     (named-group . named-grp) (shy-group . shy-grp)
+				     (named-backref . (rxx-process-named-backref 1 1)))
+				   rx-constituents))
+	  
+	  ;; also allow named-group or ngrp or other names
+	  ;; var: regexp - the string regexp for the form.
+	  (regexp
+	   ;; whenever the rx-to-string call below encounters a (named-grp ) construct
+	   ;; in the form, it calls back to rxx-process-named-grp, which will
+	   ;; add a mapping from the group's name to rxx-grp structure
+	   ;; to rxx-name2grp.
+	   (rx-to-string form 'no-group))
+	  (rxx-info (make-rxx-info
+		     :form form :parser (or parser
+					    
+					    'identity)
+		     :env rxx-env :descr descr :regexp regexp
+		     )))
+     (put-rxx-info regexp rxx-info)
+     (rxx-replace-posix regexp))))
 
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
 
 (defun rxx-process-named-grp-recurs (form)
   "Process named-grp-recurs"
+  (declare (special rxx-recurs-depth rxx-env))
   (if
       (or (not (boundp (quote rxx-recurs-depth)))
 	  (< rxx-recurs-depth 1))
@@ -472,6 +524,7 @@ For detailed description, see `rxx'.
 
 (defun rxx-process-recurse (form)
   "Process recurse"
+  (declare (special rxx-recurs-depth))
   (if (or (not (boundp 'rxx-recurs-depth))
 	  (< rxx-recurs-depth 1))
       rxx-never-match
