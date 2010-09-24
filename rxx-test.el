@@ -285,9 +285,15 @@ TIME defaults to the current time."
 		      (s "(1/(30+(42*57)))"))
 		 (rxx-parse expr s 'part-ok)) '("(1/(30+(42*57)))" "(1/(30+(42*57)))" nil "/")))
 
-(defun ppp (x) (message "x=%s" x))
+(defun rxx-ppp (x) x)
+(defun rxx-qqq (x) (* 3 x))
 
-(assert (equal (rxx-flet ( (ppp (x) (+ x x)) )
-			 (ppp-orig 4)
-			 (ppp 4)
+(assert (equal (rxx-flet ( (rxx-ppp (x) (+ x x)) )
+			 (rxx-ppp-orig 4)
+			 (rxx-ppp 4)
 			 ) 8))
+
+(assert (equal (rxx-flet ((rxx-ppp rxx-qqq))
+		 (rxx-ppp 33)) 99))
+
+(message "All rxx tests seem to have passed")
