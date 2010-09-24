@@ -1,4 +1,4 @@
-;;; rxx.el --- Create recursive grammars using nested regexps.
+;;; rxx.el --- Tools for building complex regexps from simpler ones
 ;; Copyright (C) 2010 Free Software Foundation, Inc.
 ;;
 ;; Author: Ilya Shlyakhter <ilya_shl at alum dot mit dot edu>
