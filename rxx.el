@@ -537,6 +537,12 @@ the parsed result in case of match, or nil in case of mismatch."
 		 rxx-object)
 	    (rxx-call-parser rxx-info (match-string 0))))))
 
+(defmacro rxx-do-search-fwd (aregexp var forms)
+  "Search forward while matches"
+  (declare (indent 2))
+  `(let (,var) (while (setq ,var (rxx-search-fwd ,aregexp (not 'boundary) 'no-error))
+		 ,forms)))
+
 (defun rxx-parse-fwd (aregexp &optional bound partial-match-ok)
   (save-match-data
     (save-excursion
