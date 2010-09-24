@@ -179,6 +179,10 @@ from the `before-change-functions' in the current buffer."
 
 (add-hook 'org-ctrl-c-ctrl-c-hook 'org-balance-remove-overlays)
 
+(defun org-balance-unload-function ()
+  "Remove any hooks pointing to org-balance functions"
+  (remove-hook 'org-ctrl-c-ctrl-c-hook 'org-balance-remove-overlays))
+
 (defun org-balance-reset-overlays ()
   "Reset org-balance overlays if present, preparing to put on new ones"
   (org-overview)
