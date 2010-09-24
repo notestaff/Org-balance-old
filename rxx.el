@@ -64,7 +64,8 @@
   (declare (indent 1))
   `(let 
        ,(mapcar (lambda (binding) (list (intern (concat (symbol-name (first binding)) "-orig"))
-					(list 'when (list 'fboundp (list 'quote (first binding))) (list 'symbol-function (list 'quote (first binding)))))) bindings)
+					(list 'when (list 'fboundp (list 'quote (first binding)))
+					      (list 'symbol-function (list 'quote (first binding)))))) bindings)
      (flet ,(append bindings (mapcar
 			      (lambda (binding)
 				(let ((orig-fn (intern (concat (symbol-name (first binding)) "-orig"))))
