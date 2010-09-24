@@ -307,45 +307,85 @@ Adapted from `org-closed-in-range' from org.el."
     ;; make tree, check each match with the callback
     (message "%s matches here" (org-occur "CLOSED: +\\[\\(.*?\\)\\]" nil callback))) )
 
-(defun org-balance-sum-property (prop unit tstart tend)
+(defconst org-balance-inactive-timestamp-regexp (rxx (seq "[" (named-grp time (1+ nonl)) "]" )
+						     (org-float-time (apply 'encode-time (org-parse-time-string time)))))
+(defconst org-balance-clock-regexp (rxx (seq bol (0+ blank) (eval org-clock-string) (0+ blank)
+					     (org-balance-inactive-timestamp-regexp from) (1+ "-")
+					     (org-balance-inactive-timestamp-regexp to)
+					     " => " (1+ nonl))
+					(cons from to)))
+
+(defun org-balance-clock-sum (tstart tend)
+  "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
+  (let ((total-minutes 0))
+    (when (and
+	   org-clock-report-include-clocking-task
+	   (equal (org-clocking-buffer) (current-buffer))
+	   (<= (point-min) (marker-position org-clock-hd-marker))
+	   (<= (marker-position org-clock-hd-marker) (point-max)))
+      (let* ((cs (org-float-time org-clock-start-time))
+	     (ts (max tstart cs))
+	     (te (min tend (org-float-time)))
+	     (dt (- te ts)))
+	(when (> dt 0) (setq total-minutes (floor (/ dt 60))))))
+    (save-excursion
+      (save-match-data
+	(goto-char (point-min))
+	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
+	  (setq ts (car clock-interval) te (cdr clock-interval)
+		ts (if tstart (max ts tstart) ts)
+		te (if tend (min te tend) te)
+		dt (- te ts)
+		total-minutes (if (> dt 0) (+ total-minutes (floor (/ dt 60))) total-minutes)))))
+    total-minutes))
+
+(defconst org-balance-closed-regexp (rxx (seq bol (0+ blank) (eval org-closed-string) (1+ blank)
+					      (org-balance-inactive-timestamp-regexp time))
+					 time))
+
+(defun org-balance-sum-org-property (prop tstart tend)
   "Fast summing of property.  Returns the sum of the property under the current restriction.
 
 Originally adapted from `org-closed-in-range'.
 "
 
-  ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set.
+  ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (optional (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (save-excursion
     (save-match-data
       (goto-char (point-min))
-      (let ((prop-sum 0)
+      (let (prop-sum
 	    (prop-default (concat "default_" prop)))
-	(while (re-search-forward (concat "^[ \t]*" org-closed-string " +\\[\\(.*?\\)\\]") nil t)
-	  (let ((closed-time (org-float-time (apply 'encode-time (org-parse-time-string (match-string 1))))))
-	    (when (and (<= tstart closed-time) (<= closed-time tend))
-	      (save-excursion
-		(save-match-data
-		  (org-back-to-heading 'invis-ok)
-		  (let ((prop-here
-			 (or (org-entry-get nil prop)
-			     (org-entry-get nil prop-default 'inherit)
-			     "1")))
-		    (setq prop-sum
-			  (+ prop-sum
-			     (condition-case err
-				 (org-balance-valu-val
-				  (org-balance-convert-valu
-				   (org-balance-parse-valu prop-here)
-				    unit))
-				  (error
-				   (message
-				    "Warning: at line %d of file %s, could not add %s to sum for goal %s; sum-so-far is %s unit is %s"
-					    (line-number-at-pos (point)) (buffer-file-name (current-buffer))
-					    prop-here prop prop-sum unit)
-				   (setq org-balance-num-warnings (1+ org-balance-num-warnings))
-				   0))))))))))
-		
+	(rxx-do-search-fwd org-balance-closed-regexp closed-time
+	  (when (and (<= tstart closed-time) (<= closed-time tend))
+	    (save-excursion
+	      (save-match-data
+		(org-back-to-heading 'invis-ok)
+		(let*
+		    ((prop-here
+		      (or (org-entry-get nil prop)
+			  (org-entry-get nil prop-default 'inherit)
+			  "1"))
+		     (prop-valu-here
+		      (condition-case err
+			  (org-balance-parse-valu prop-here)
+			(error
+			 (message
+			  "Warning: at line %d of file %s, could not add %s to sum for goal %s; sum-so-far is %s"
+			  (line-number-at-pos (point)) (buffer-file-name (current-buffer)) prop-here prop prop-sum)
+			 (incf org-balance-num-warnings)
+			 nil))))
+		  (when prop-valu-here
+		    (setq prop-sum (if (not prop-sum) prop-valu-here (org-balance-add-valu prop-sum prop-valu-here)))))))))
 	prop-sum))))
+
+(defun org-balance-sum-property (prop tstart tend)
+  "Sum a property in the specified period, within the current file restriction."
+  (cond ((string= prop "clockedtime")
+	 (org-balance-make-valu (org-balance-clock-sum tstart tend) 'minutes))
+	((string= prop "actualtime")
+	 (org-balance-make-valu (- tend tstart) 'seconds))
+	(t (org-balance-sum-org-property prop tstart tend))))
 
 (defun org-balance-record-time (&optional hours ago)
   "Record the given amount of time as time spent under the current org entry.
@@ -402,39 +442,6 @@ as you were doing it.
 
 (defconst org-balance-goal-todo-keyword "GOAL")
 
-(defun org-balance-clock-sum (tstart tend)
-  "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
-  (let ((total-minutes
-	 (if (and
-	      org-clock-report-include-clocking-task
-	      (equal (org-clocking-buffer) (current-buffer))
-	      (<= (point-min) (marker-position org-clock-hd-marker))
-	      (<= (marker-position org-clock-hd-marker) (point-max)))
-	     (let* ((cs (org-float-time org-clock-start-time))
-		    (ts (max tstart cs))
-		    (te (min tend (org-float-time)))
-		    (dt (- te ts)))
-	       (if (> dt 0) (floor (/ dt 60)) 0))
-	   0)))
-    (save-excursion
-      (save-match-data
-	(goto-char (point-min))
-	(while (re-search-forward
-		(concat "^[ \t]*" org-clock-string
-			"[ \t]*\\(?:\\(\\[.*?\\]\\)-+\\(\\[.*?\\]\\)\\)")
-		nil t)
-	  (setq ts (match-string 1)
-		te (match-string 2)
-		ts (org-float-time
-		    (apply 'encode-time (org-parse-time-string ts)))
-		te (org-float-time
-		    (apply 'encode-time (org-parse-time-string te)))
-		ts (if tstart (max ts tstart) ts)
-		te (if tend (min te tend) te)
-		dt (- te ts)
-		total-minutes (if (> dt 0) (+ total-minutes (floor (/ dt 60))) total-minutes)))))
-    total-minutes))
-    
 
 ;; struct: org-balance-goal-delta - information about how well one goal is being met.
 ;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
@@ -460,19 +467,16 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	(save-match-data
 	  (let ((org-balance-num-warnings 0) goal-deltas)
 	    ;; FIXME if goals specified, make regexp for them
-	    (let (goal-name-here)
-	      (while (setq goal-name-here
-			   (rxx-search-fwd
-			    org-balance-goal-prefix-regexp (not 'bound) 'no-error))
+	      (rxx-do-search-fwd org-balance-goal-prefix-regexp goal-name-here
 		(let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
 		       (parsed-goal
 			(condition-case err
 			    (org-balance-parse-goal-or-link-at-point)
-			(error
-			 (incf num-errors)
-			 (message "Error parsing %s" goal-def-here)
-			 (save-match-data (org-toggle-tag "goal_error" 'on))
-			 nil))))
+			  (error
+			   (incf num-errors)
+			   (message "Error parsing %s" goal-def-here)
+			   (save-match-data (org-toggle-tag "goal_error" 'on))
+			   nil))))
 		  (when parsed-goal
 		    (org-toggle-tag "goal_error" 'off)
 		    ;;
@@ -488,21 +492,13 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      (outline-up-heading 1 'invisible-ok))
 			    (org-narrow-to-subtree)
 			    (goto-char (point-min))
-			    (let* ((is-time (equal goal-name-here "clockedtime"))
-				   (to-unit (if is-time 'minutes
-					      (org-balance-valu-unit
-					       (org-balance-goal-numer-min parsed-goal))))
-				   (sum-here
-				    (if is-time (org-balance-clock-sum tstart tend)
-				      (org-balance-sum-property
-				       goal-name-here
-				       to-unit
-				       tstart tend))))
+			    (let* ((sum-here
+				    (org-balance-sum-property goal-name-here tstart tend)))
 			      (let ((actual
 				     (org-balance-convert-valu-ratio
 				      (make-org-balance-valu-ratio
 				       :num
-				       (org-balance-make-valu sum-here to-unit)
+				       sum-here
 				       :denom days-in-interval)
 				      (make-org-balance-valu-ratio
 				       :num (org-balance-goal-numer-min parsed-goal)
@@ -541,7 +537,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      ((> delta-val 0) (incf num-over))
 			      ((= delta-val 0) (incf num-met)))
 			(org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
-			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))))))))))))
+			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent)))))))))))
     (message "err %d under %d met %d over %d" num-errors num-under num-met num-over)))
   
 
