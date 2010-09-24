@@ -980,9 +980,6 @@ When called repeatedly, scroll the window that is displaying the buffer."
       (setq org-agenda-show-window (selected-window))
       (select-window win)))
 
-(defadvice org-agenda-do-context-action (after org-balance-after-agenda last () activate compile)
-  (org-agenda-show-path))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; Section: Values with units
