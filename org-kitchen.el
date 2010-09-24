@@ -1519,3 +1519,448 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	
 (rxx-parse org-balance-clock-regexp "			 CLOCK: [2010-09-21 Tue 11:38]--[2010-09-22 Wed 00:13] => 12:35")
 
+(defun rxx-qqq (x) (message "y=%s" x))
+
+
+(let ((rxx-ppp-orig (when (fboundp (quote rxx-ppp)) (symbol-function (quote rxx-ppp)))))
+  (flet ((rxx-ppp (&rest args) (apply rxx-qqq args))
+	 (rxx-ppp-orig (&rest args) (apply (symbol-value (quote rxx-ppp-orig)) args))) (rxx-ppp 44)))
+
+
+(let ((rxx-ppp-orig
+       (when (fboundp (quote
+		       rxx-ppp))
+	 (symbol-function (quote rxx-ppp)))))
+  (flet ((rxx-ppp
+	  rxx-qqq)
+	 (rxx-ppp-orig (&rest args) (apply (symbol-value (quote
+							  rxx-ppp-orig)) args))) (rxx-ppp 44)))
+
+
+(let ((rxx-ppp-orig (when (fboundp (quote rxx-ppp)) (symbol-function (quote rxx-ppp))))) (flet ((rxx-ppp (&rest args) (apply (quote rxx-qqq) args)) (rxx-ppp-orig (&rest args) (apply (symbol-value (quote rxx-ppp-orig)) args))) (rxx-ppp 44)))
+
+
+(defun rx-check-any (arg)
+   "Check arg ARG for Rx `any'."
+   (cond
+    ((integerp arg) (list arg))
+    ((symbolp arg)
+     (let ((translation (condition-case nil
+			    (rx-form arg)
+			  (error nil))))
+       (message "translation is %s" translation)
+
+       (if (or (null translation)
+	       (null (string-match "\\`\\[\\[:[-a-z]+:\\]\\]\\'" translation)))
+	   (error "Invalid char class `%s' in Rx `any'" arg))
+       (list (substring translation 1 -1)))) ; strip outer brackets
+    ((and (integerp (car-safe arg)) (integerp (cdr-safe arg)))
+     (list arg))
+    ((stringp arg) (rx-check-any-string arg))
+    ((error
+      "rx `any' requires string, character, char pair or char class args"))))
+
+
+
+
+
+(defun org-balance-check-sparsetree ()
+  "Show missed goals as sparsetree"
+  (interactive)
+  (org-balance-remove-overlays)
+  (org-overview)
+  (org-balance-compute-goal-deltas
+   :callback1
+   (lambda ()
+
+     ;(goto-char (1+ cb-goal-point))
+
+     (if cb-error
+	 (org-balance-put-overlay cb-error 'error)
+       ;; so, as the next thing:
+       ;;   - if needed, open up the entry. if still needed,
+       ;;     open up the properties drawer.
+       ;;   - if we do open up the properties drawer, perhaps
+       ;;     show goal results next to corresponding goals?
+       ;;(forward-line)
+       (org-balance-put-overlay
+	(list
+	 (format "%4d%% actual: \"%20s\" %.2f"
+		 (round cb-delta-percent) cb-goal
+		 (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))
+	 "second line"
+	 )
+	)
+     ))
+   :callback2
+   (lambda ()
+     (let ((org-show-hierarchy-above t)
+	   (org-show-following-heading nil)
+	   (org-show-siblings nil))
+       (org-back-to-heading 'invis-ok)
+       (org-show-context 'default)
+       ;(goto-char cb-goal-point)
+       (when nil
+	 (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
+					  (round cb-delta-percent)
+					  cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))))
+       
+       ;(forward-line)
+       ;;; ** uncomment
+       ;(org-show-hidden-entry)
+       ;(outline-flag-region (1- (point)) (1+ (point-at-eol)) nil)
+       (save-excursion
+	 (save-match-data
+	   ;(re-search-forward org-drawer-regexp)
+	   ;(goto-char (point-at-bol))
+	   ;(org-flag-drawer nil)))
+       ))))))
+
+(defun org-balance-check2 ()
+  "Check gathering of goal deltas"
+  (interactive)
+  (let* ((goal-deltas-orig (org-balance-compute-goal-deltas2 ))
+	 (goal-deltas (org-balance-groupby goal-deltas-orig 'org-balance-goal-delta-entry-pos)))
+    (org-balance-remove-overlays)
+    (org-overview)
+    (dolist (entry-goal-delta goal-deltas)
+      (goto-char (org-balance-goal-delta-entry-pos (cadr entry-goal-delta)))
+      (org-balance-put-overlay
+       (mapcar
+	(lambda (goal-delta)
+	  (format "%4d%% \"%20s\" actual: %.2f"
+		  (round (org-balance-goal-delta-delta-percent goal-delta))
+		  (org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
+		  (org-balance-valu-val (org-balance-valu-ratio-num (org-balance-goal-delta-actual goal-delta)))))
+	(cdr entry-goal-delta)))
+      (org-show-context 'default))))
+
+
+(defun org-balance-check3 (&optional tstart tend)
+  "Show goal deltas as agenda entries"
+  (interactive)
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+  (let* ((props (list 'face 'default
+		      'done-face 'org-agenda-done
+		      'undone-face 'default
+		      'mouse-face 'highlight
+		      'org-not-done-regexp org-not-done-regexp
+		      'org-todo-regexp org-todo-regexp
+		      'help-echo
+		      (format "mouse-2 or RET jump to org file %s"
+			      (abbreviate-file-name
+			       (or (buffer-file-name (buffer-base-buffer))
+				   (buffer-name (buffer-base-buffer)))))))
+	 )
+    (rxx-flet ((org-make-tags-matcher (match) (cons "org-balance" nil))
+	       (org-prepare-agenda (title) (org-prepare-agenda-orig "org-balance"))
+	       ;; set redo command
+	       (org-scan-tags
+		(&rest args)
+		(mapcar
+		 (lambda (goal-delta)
+		   (goto-char (org-balance-goal-delta-entry-pos goal-delta))
+		   (let ((txt
+			  (org-format-agenda-item
+			   nil
+			   (or
+			    (org-balance-goal-delta-error-msg goal-delta)
+			    (format "%-40s %+4d%% %20s actual: %.2f"
+				    (org-balance-goal-delta-heading goal-delta)
+				    (round (org-balance-goal-delta-delta-percent goal-delta))
+				    (org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
+				    (org-balance-valu-val (org-balance-valu-ratio-num
+							   (org-balance-goal-delta-actual goal-delta)))))
+			   ))
+			 (marker (org-agenda-new-marker)))
+		     (org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
+				    'priority (org-get-priority
+					       (or
+						(org-balance-goal-priority (org-balance-goal-delta-goal goal-delta))
+						(org-get-heading))) 'type "org-balance"
+						'org-balance-goal-delta goal-delta)))
+		 (org-balance-compute-goal-deltas2 :tstart tstart :tend tend)))
+	       )
+      (let (org-agenda-before-sorting-filter-function
+	    org-agenda-sorting-strategy-selected
+	    (org-agenda-cmp-user-defined
+		(lambda (a b)
+		  (let ((va (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta a)))
+			(vb (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta b))))
+		    (if (< va vb) -1 +1)
+		    )))
+	    (org-agenda-sorting-strategy `((tags ,@org-balance-agenda-sorting-strategy))))
+	(org-tags-view)))))
+
+(defun org-balance-show-neglected-time (&optional tstart tend)
+  (interactive)
+  (org-balance-reset-overlays)
+  (let (org-balance-result-list)
+    (message "got %d"
+	     (length (delq nil 
+			   (org-balance-compute-goal-deltas
+			    :goal "time" :tstart tstart :tend tend
+			    :callback
+			    (lambda (goal-delta total-here per-day-here per-day-goal-here)
+			       (when 
+				 (org-show-context)
+				 (org-balance-put-overlay (format "goal-delta %s total %s per-day %s per-day-goal %s"
+								  goal-delta total-here per-day-here per-day-goal-here)))
+			       t)
+			    :error-handler
+			    (lambda (err)
+			      (org-show-context)
+			      (org-balance-put-overlay (format "Error: %s" (error-message-string err))))
+			      
+			    ))))))
+
+(defun org-balance-show-neglected-val (&optional tstart tend)
+  (interactive)
+  (org-balance-reset-overlays)
+  (org-balance-compute-goal-deltas :goal "done" :tstart tstart :tend tend
+				   :callback
+				   (lambda (goal-delta total-here per-day-here per-day-goal-here)
+				     (when (< goal-delta 0)
+				       (org-show-context)
+				       (org-balance-put-overlay (format "goal-delta %s total %s per-day %s per-day-goal %s" goal-delta total-here per-day-here per-day-goal-here))))))
+
+
+(defun org-balance-show-non-neglected-val (&optional tstart tend)
+  (interactive)
+  (org-balance-reset-overlays)
+  (org-balance-compute-goal-deltas :goal "done" :tstart tstart :tend tend
+				   :callback
+				   (lambda (goal-delta total-here per-day-here per-day-goal-here)
+				     (when (>= goal-delta 0)
+				       (org-show-context)
+				       (org-balance-put-overlay
+					(format "goal-delta %s total %s per-day %s per-day-goal %s" goal-delta total-here per-day-here per-day-goal-here))))))
+
+
+
+(defun org-balance-show-non-neglected-time (&optional tstart tend)
+  (interactive)
+  (org-balance-check-goals :goal "time" :tstart tstart :tend tend
+			   :neglect-tolerance 30 :show-if-too-much-p t :show-if-just-right t))
+
+
+(defun org-balance-show-clocked-time (&optional tstart tend)
+  "Show entries that have at least some clocked time in the given interval"
+  (interactive)
+
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Start date: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+  
+  (org-clock-sum tstart tend)
+  (message "finished clock sum")
+
+  (org-overview)
+  (org-balance-remove-overlays)
+  (when org-remove-highlights-with-change
+    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
+		  nil 'local))
+  
+  (org-map-entries
+   (lambda ()
+     (let* ((total-minutes-here (get-text-property (point) :org-clock-minutes)))
+       (when (and total-minutes-here (> total-minutes-here 0))
+	 (org-show-context)
+	 (org-balance-put-overlay (format "tot: %s" (org-minutes-to-hh:mm-string (round total-minutes-here))))
+	 )))))
+
+
+(defun org-balance-show-val (&optional tstart tend)
+  "Show entries that have at least some clocked time in the given interval"
+  (interactive)
+
+  (when (not tstart) (setq tstart (org-float-time (org-read-date nil 'to-time nil "Start date: "))))
+  (when (not tend) (setq tend (org-float-time (org-current-time))))
+  
+  (org-balance-sum-property "val" :val-sum 1 tstart tend)
+  (message "finished clock sum")
+
+  (org-overview)
+  (org-balance-remove-overlays)
+  (when org-remove-highlights-with-change
+    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
+		  nil 'local))
+  
+  (org-map-entries
+   (lambda ()
+     (let* ((total-minutes-here (get-text-property (point) :val-sum)))
+       (when (and total-minutes-here (> total-minutes-here 0))
+	 (org-show-context)
+	 (org-balance-put-overlay (format "tot: %.1f" total-minutes-here))
+	 )))))
+
+
+(defmacro org-balance-replacing-function (fname new-func body)
+  ;; Execute code, temporarily replacing a given function with a new one
+  `(let ((old-func (symbol-function ,fname)))
+     (unwind-protect
+	 (progn
+	   (fset ,fname ,new-func)
+	   ,body)
+       (fset ,fname old-func))))
+
+
+(progn (or (equal (rxxlet* ((number-regexp (one-or-more digit) string-to-number) (fraction-regexp (seq (number-regexp numerator) / (number-regexp denominator)) (cons numerator denominator)) (paren-regexp (seq ( (fraction-regexp val) )) val) (range-regexp (seq [ (paren-regexp rmin) ]--[ (paren-regexp rmax) ]) (list rmin rmax))) (rxx-parse range-regexp [(1/2)]--[(3/4)])) (quote ((1 . 2) (3 . 4)))) (signal (quote cl-assertion-failed) (list (quote (equal (rxxlet* ((number-regexp (one-or-more digit) string-to-number) (fraction-regexp (seq (number-regexp numerator) / (number-regexp denominator)) (cons numerator denominator)) (paren-regexp (seq ( (fraction-regexp val) )) val) (range-regexp (seq [ (paren-regexp rmin) ]--[ (paren-regexp rmax) ]) (list rmin rmax))) (rxx-parse range-regexp [(1/2)]--[(3/4)])) (quote ((1 . 2) (3 . 4)))))))) nil)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Section: User interaction
+;;
+;; Interactive commands callable by the user
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun org-balance-set-goal ()
+  "Set a goal property on the current entry.
+Offer completion for the goal.  Optionally show help screen with goal examples.
+"
+  (interactive)
+  )
+
+(defun org-balance-check-goals ()
+  "Run a check of compliance with goals."
+  (interactive)
+  )
+
+
+(defun* org-balance-dispatcher-api (&key (action 'tree) tstart tend (goal "time")
+					 (goal-delta-relative-p t) (goal-delta-max .05)
+					 (show-goals-under t) show-goals-over show-goals-within
+					 )
+  "Top-level dispatcher for the org-balance package: all user functions can be invoked by calling this routine with
+appropriate parameters.
+"
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+
+  (cond ((eq action 'tree)
+	 (org-balance-reset-overlays)
+	 (org-balance-compute-goal-deltas
+	  :goal goal :goal-delta-relative-p goal-delta-relative-p :tstart tstart :tend tend
+	  :callback
+	  (lambda (goal-delta total-here per-day-here per-day-goal-here per-day-here-in-their-units
+			      per-day-goal-in-their-units their-units)
+	    (when (or (and show-goals-under (< goal-delta (- goal-delta-max)))
+		      (and show-goals-over (> goal-delta goal-delta-max))
+		      (and show-goals-within (<= (- goal-delta-max) goal-delta goal-delta-max)))
+	      (org-show-context)
+	      (org-balance-put-overlay (format "%s%d%%: %.2f (not %s) %s"
+					       (if (>= goal-delta 0) "+" "")
+					       (round (* goal-delta 100.0)) 
+					       per-day-here-in-their-units per-day-goal-in-their-units
+					       their-units
+					       ))))
+	  :error-handler
+	  (lambda (err)
+	    (org-show-context)
+	    (org-balance-put-overlay (format "Error: %s" (error-message-string err))))	  
+	  ))))
+
+
+(defun orgb-test ()
+  (interactive)
+  (let ((displayed-month 8)
+	(displayed-year 2010))
+    (org-balance-dispatcher-api :show-goals-within nil :show-goals-over nil )
+  ))
+
+
+(require 'widget)
+
+(eval-when-compile
+  (require 'wid-edit)
+  (require 'cl)
+  (require 'cl-19))
+
+(defun org-balance-hide-menu ()
+  "Hides the org-balance menu"
+  (interactive)
+  (org-unhighlight)
+  (when (string= (buffer-name (current-buffer))
+		 "*Org-Balance Menu*")
+    (org-balance-remove-overlays)
+    (kill-buffer (current-buffer))
+    (delete-window)
+    ))
+
+
+
+(defun org-balance-menu ()
+  "Show a menu of org-balance functions"
+  (interactive)
+  (if (not (eq major-mode 'org-mode))
+      (message "This function only works in org-mode buffers")
+    (let* ((orig-window-config (current-window-configuration))
+	   (restore-func `(lambda (&rest ignore)
+			    (org-balance-hide-menu)
+			    (set-window-configuration ,orig-window-config)
+			    (org-unhighlight))))
+      (delete-other-windows)
+      (let ((org-buf (current-buffer))
+	    (org-window (selected-window)))
+	(org-highlight (point-at-bol) (point-at-eol))
+	(recenter)
+	(split-window)
+	(switch-to-buffer "*Org-Balance Menu*")
+	(kill-all-local-variables)
+	(let ((inhibit-read-only t))
+	  (erase-buffer))
+	(let ((all (overlay-lists)))
+	  ;; Delete all the overlays.
+	  (mapc 'delete-overlay (car all))
+	  (mapc 'delete-overlay (cdr all)))
+	(widget-insert "Choose an org-balance command:\n\n")
+	(widget-create 'push-button
+		       :notify `(lambda (&rest ignore)
+				  (delete-other-windows)
+				  (switch-to-buffer ,org-buf)
+				  (org-balance-record-time)
+				  (,restore-func))
+		       "Record time")
+	(widget-insert "\n")
+	(widget-create 'push-button
+		       :notify `(lambda (&rest ignore)
+				  (delete-other-windows)
+				  (switch-to-buffer ,org-buf)
+				  (org-balance-record-time)
+				  (,restore-func))
+		       "Record completion")
+
+
+	(widget-insert "\n")
+	(widget-insert "-------------------------\n")
+
+	(widget-create 'push-button
+		       :notify `(lambda (&rest ignore)
+				  (delete-other-windows)
+				  (switch-to-buffer ,org-buf)
+				  (org-tags-view nil val_)
+				  (,restore-func))
+		       "Show agenda time")
+	
+	(widget-create 'push-button
+		       :notify `(lambda (&rest ignore)
+				  (delete-other-windows)
+				  (switch-to-buffer ,org-buf)
+				  (org-balance-show-neglected-time)
+				  (,restore-func))
+		       "Show neglected time")
+	(widget-insert "\nHow long ago?   ")
+	(widget-create 'editable-field :size 5 "-3w")
+	
+	(use-local-map widget-keymap)
+	(widget-setup)
+	(set-buffer-modified-p nil)
+	(local-set-key "q"
+		       `(lambda ()
+			  (interactive)
+			  (,restore-func)
+			  (org-balance-hide-menu)))
+	
+	))))
