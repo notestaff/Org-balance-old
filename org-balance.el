@@ -62,9 +62,10 @@
 (require 'org-agenda)
 (require 'org-compat)
 (require 'org-macs)
+(require 'rxx)
 (eval-when-compile
   (require 'cl)
-  (require 'rxx))
+  )
 
 (defvar org-clock-report-include-clocking-task)
 
@@ -203,19 +204,6 @@ from the `before-change-functions' in the current buffer."
 ;; General-purpose utility routines used in org-balance module
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmacro dbg (&rest exprs)
-  "Print the values of exprs, so you can write e.g. (dbg a b) to print 'a=1 b=2'.
-Returns the value of the last expression."
-  `(let ((expr-vals (list ,@exprs)))
-     (apply 'message
-	    (append (list ,(mapconcat (lambda (expr)
-					(concat (format "%s" expr) "=%s "))
-				      exprs
-				      ""))
-		    expr-vals))
-     (car-safe (with-no-warnings (last expr-vals)))))
-
-(defmacro safe-val (x) `(if (boundp (quote ,x)) ,x 'unbound))
 
 (defun org-balance-groupby (z key-func)
   "Group items in a list by their key, using the specified key extractor.
@@ -311,8 +299,10 @@ Adapted from `org-closed-in-range' from org.el."
     ;; make tree, check each match with the callback
     (message "%s matches here" (org-occur "CLOSED: +\\[\\(.*?\\)\\]" nil callback))) )
 
-(defconst org-balance-inactive-timestamp-regexp (rxx (seq "[" (named-grp time (1+ nonl)) "]" )
-						     (org-float-time (apply 'encode-time (org-parse-time-string time)))))
+(eval-and-compile
+  (defconst org-balance-inactive-timestamp-regexp (rxx (seq "[" (named-grp time (1+ nonl)) "]" )
+						       (org-float-time (apply 'encode-time (org-parse-time-string time))))))
+
 (defconst org-balance-clock-regexp (rxx (seq bol (0+ blank) (eval org-clock-string) (0+ blank)
 					     (org-balance-inactive-timestamp-regexp from) (1+ "-")
 					     (org-balance-inactive-timestamp-regexp to)
@@ -336,11 +326,11 @@ Adapted from `org-closed-in-range' from org.el."
       (save-match-data
 	(goto-char (point-min))
 	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
-	  (setq ts (car clock-interval) te (cdr clock-interval)
-		ts (if tstart (max ts tstart) ts)
-		te (if tend (min te tend) te)
-		dt (- te ts)
-		total-minutes (if (> dt 0) (+ total-minutes (floor (/ dt 60))) total-minutes)))))
+	  (let* ((ts (car clock-interval)) (te (cdr clock-interval))
+		 (ts (if tstart (max ts tstart) ts))
+		 (te (if tend (min te tend) te))
+		 (dt (- te ts)))
+	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
     total-minutes))
 
 (defconst org-balance-closed-regexp (rxx (seq bol (0+ blank) (eval org-closed-string) (1+ blank)
@@ -355,6 +345,7 @@ Originally adapted from `org-closed-in-range'.
 
   ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (optional (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
+  (declare (special org-balance-num-warnings))
   (save-excursion
     (save-match-data
       (goto-char (point-min))
@@ -444,8 +435,7 @@ as you were doing it.
       (insert " => " (format "%2d:%02d" h m)))))
 
 
-(defconst org-balance-goal-todo-keyword "GOAL")
-
+(eval-and-compile (defconst org-balance-goal-todo-keyword "GOAL"))
 
 ;; struct: org-balance-goal-delta - information about how well one goal is being met.
 ;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
@@ -482,7 +472,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			   (save-match-data (org-toggle-tag "goal_error" 'on))
 			   nil))))
 		  (when parsed-goal
-		    (org-toggle-tag "goal_error" 'off)
+		    (save-match-data (org-toggle-tag "goal_error" 'off))
 		    ;;
 		    ;; Compute the actual usage under this subtree, and convert to the same
 		    ;; units as the goal, so we can compare them.
@@ -543,254 +533,6 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
 			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent)))))))))))
     (message "err %d under %d met %d over %d" num-errors num-under num-met num-over)))
-  
-
-(defun org-balance-check-sparsetree ()
-  "Show missed goals as sparsetree"
-  (interactive)
-  (org-balance-remove-overlays)
-  (org-overview)
-  (org-balance-compute-goal-deltas
-   :callback1
-   (lambda ()
-
-     ;(goto-char (1+ cb-goal-point))
-
-     (if cb-error
-	 (org-balance-put-overlay cb-error 'error)
-       ;; so, as the next thing:
-       ;;   - if needed, open up the entry. if still needed,
-       ;;     open up the properties drawer.
-       ;;   - if we do open up the properties drawer, perhaps
-       ;;     show goal results next to corresponding goals?
-       ;;(forward-line)
-       (org-balance-put-overlay
-	(list
-	 (format "%4d%% actual: \"%20s\" %.2f"
-		 (round cb-delta-percent) cb-goal
-		 (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))
-	 "second line"
-	 )
-	)
-     ))
-   :callback2
-   (lambda ()
-     (let ((org-show-hierarchy-above t)
-	   (org-show-following-heading nil)
-	   (org-show-siblings nil))
-       (org-back-to-heading 'invis-ok)
-       (org-show-context 'default)
-       ;(goto-char cb-goal-point)
-       (when nil
-	 (org-balance-put-overlay (format "%4d%% \"%20s\" actual: %.2f"
-					  (round cb-delta-percent)
-					  cb-goal (org-balance-valu-val (org-balance-valu-ratio-num cb-actual)))))
-       
-       ;(forward-line)
-       ;;; ** uncomment
-       ;(org-show-hidden-entry)
-       ;(outline-flag-region (1- (point)) (1+ (point-at-eol)) nil)
-       (save-excursion
-	 (save-match-data
-	   ;(re-search-forward org-drawer-regexp)
-	   ;(goto-char (point-at-bol))
-	   ;(org-flag-drawer nil)))
-       ))))))
-
-(defun org-balance-check2 ()
-  "Check gathering of goal deltas"
-  (interactive)
-  (let* ((goal-deltas-orig (org-balance-compute-goal-deltas2 ))
-	 (goal-deltas (org-balance-groupby goal-deltas-orig 'org-balance-goal-delta-entry-pos)))
-    (org-balance-remove-overlays)
-    (org-overview)
-    (dolist (entry-goal-delta goal-deltas)
-      (goto-char (org-balance-goal-delta-entry-pos (cadr entry-goal-delta)))
-      (org-balance-put-overlay
-       (mapcar
-	(lambda (goal-delta)
-	  (format "%4d%% \"%20s\" actual: %.2f"
-		  (round (org-balance-goal-delta-delta-percent goal-delta))
-		  (org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
-		  (org-balance-valu-val (org-balance-valu-ratio-num (org-balance-goal-delta-actual goal-delta)))))
-	(cdr entry-goal-delta)))
-      (org-show-context 'default))))
-
-
-(defun org-balance-check3 (&optional tstart tend)
-  "Show goal deltas as agenda entries"
-  (interactive)
-  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
-  (unless tend (setq tend (org-float-time (org-current-time))))
-  (let* ((props (list 'face 'default
-		      'done-face 'org-agenda-done
-		      'undone-face 'default
-		      'mouse-face 'highlight
-		      'org-not-done-regexp org-not-done-regexp
-		      'org-todo-regexp org-todo-regexp
-		      'help-echo
-		      (format "mouse-2 or RET jump to org file %s"
-			      (abbreviate-file-name
-			       (or (buffer-file-name (buffer-base-buffer))
-				   (buffer-name (buffer-base-buffer)))))))
-	 )
-    (rxx-flet ((org-make-tags-matcher (match) (cons "org-balance" nil))
-	       (org-prepare-agenda (title) (org-prepare-agenda-orig "org-balance"))
-	       ;; set redo command
-	       (org-scan-tags
-		(&rest args)
-		(mapcar
-		 (lambda (goal-delta)
-		   (goto-char (org-balance-goal-delta-entry-pos goal-delta))
-		   (let ((txt
-			  (org-format-agenda-item
-			   nil
-			   (or
-			    (org-balance-goal-delta-error-msg goal-delta)
-			    (format "%-40s %+4d%% %20s actual: %.2f"
-				    (org-balance-goal-delta-heading goal-delta)
-				    (round (org-balance-goal-delta-delta-percent goal-delta))
-				    (org-balance-goal-text (org-balance-goal-delta-goal goal-delta))
-				    (org-balance-valu-val (org-balance-valu-ratio-num
-							   (org-balance-goal-delta-actual goal-delta)))))
-			   ))
-			 (marker (org-agenda-new-marker)))
-		     (org-add-props txt props 'org-marker marker 'org-hd-marker marker 'org-category (org-get-category)
-				    'priority (org-get-priority
-					       (or
-						(org-balance-goal-priority (org-balance-goal-delta-goal goal-delta))
-						(org-get-heading))) 'type "org-balance"
-						'org-balance-goal-delta goal-delta)))
-		 (org-balance-compute-goal-deltas2 :tstart tstart :tend tend)))
-	       )
-      (let (org-agenda-before-sorting-filter-function
-	    org-agenda-sorting-strategy-selected
-	    (org-agenda-cmp-user-defined
-		(lambda (a b)
-		  (let ((va (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta a)))
-			(vb (org-balance-goal-delta-delta-percent (get-text-property 0 'org-balance-goal-delta b))))
-		    (if (< va vb) -1 +1)
-		    )))
-	    (org-agenda-sorting-strategy `((tags ,@org-balance-agenda-sorting-strategy))))
-	(org-tags-view)))))
-
-(defun org-balance-show-neglected-time (&optional tstart tend)
-  (interactive)
-  (org-balance-reset-overlays)
-  (let (org-balance-result-list)
-    (message "got %d"
-	     (length (delq nil 
-			   (org-balance-compute-goal-deltas
-			    :goal "time" :tstart tstart :tend tend
-			    :callback
-			    (lambda (goal-delta total-here per-day-here per-day-goal-here)
-			       (when 
-				 (org-show-context)
-				 (org-balance-put-overlay (format "goal-delta %s total %s per-day %s per-day-goal %s"
-								  goal-delta total-here per-day-here per-day-goal-here)))
-			       t)
-			    :error-handler
-			    (lambda (err)
-			      (org-show-context)
-			      (org-balance-put-overlay (format "Error: %s" (error-message-string err))))
-			      
-			    ))))))
-
-(defun org-balance-show-neglected-val (&optional tstart tend)
-  (interactive)
-  (org-balance-reset-overlays)
-  (org-balance-compute-goal-deltas :goal "done" :tstart tstart :tend tend
-				   :callback
-				   (lambda (goal-delta total-here per-day-here per-day-goal-here)
-				     (when (< goal-delta 0)
-				       (org-show-context)
-				       (org-balance-put-overlay (format "goal-delta %s total %s per-day %s per-day-goal %s" goal-delta total-here per-day-here per-day-goal-here))))))
-
-
-(defun org-balance-show-non-neglected-val (&optional tstart tend)
-  (interactive)
-  (org-balance-reset-overlays)
-  (org-balance-compute-goal-deltas :goal "done" :tstart tstart :tend tend
-				   :callback
-				   (lambda (goal-delta total-here per-day-here per-day-goal-here)
-				     (when (>= goal-delta 0)
-				       (org-show-context)
-				       (org-balance-put-overlay
-					(format "goal-delta %s total %s per-day %s per-day-goal %s" goal-delta total-here per-day-here per-day-goal-here))))))
-
-
-
-(defun org-balance-show-non-neglected-time (&optional tstart tend)
-  (interactive)
-  (org-balance-check-goals :goal "time" :tstart tstart :tend tend
-			   :neglect-tolerance 30 :show-if-too-much-p t :show-if-just-right t))
-
-(defun org-balance-show-clocked-time (&optional tstart tend)
-  "Show entries that have at least some clocked time in the given interval"
-  (interactive)
-
-  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Start date: "))))
-  (unless tend (setq tend (org-float-time (org-current-time))))
-  
-  (org-clock-sum tstart tend)
-  (message "finished clock sum")
-
-  (org-overview)
-  (org-balance-remove-overlays)
-  (when org-remove-highlights-with-change
-    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
-		  nil 'local))
-  
-  (org-map-entries
-   (lambda ()
-     (let* ((total-minutes-here (get-text-property (point) :org-clock-minutes)))
-       (when (and total-minutes-here (> total-minutes-here 0))
-	 (org-show-context)
-	 (org-balance-put-overlay (format "tot: %s" (org-minutes-to-hh:mm-string (round total-minutes-here))))
-	 )))))
-
-
-(defun org-balance-show-val (&optional tstart tend)
-  "Show entries that have at least some clocked time in the given interval"
-  (interactive)
-
-  (when (not tstart) (setq tstart (org-float-time (org-read-date nil 'to-time nil "Start date: "))))
-  (when (not tend) (setq tend (org-float-time (org-current-time))))
-  
-  (org-balance-sum-property "val" :val-sum 1 tstart tend)
-  (message "finished clock sum")
-
-  (org-overview)
-  (org-balance-remove-overlays)
-  (when org-remove-highlights-with-change
-    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
-		  nil 'local))
-  
-  (org-map-entries
-   (lambda ()
-     (let* ((total-minutes-here (get-text-property (point) :val-sum)))
-       (when (and total-minutes-here (> total-minutes-here 0))
-	 (org-show-context)
-	 (org-balance-put-overlay (format "tot: %.1f" total-minutes-here))
-	 )))))
-
-
-(defmacro org-balance-replacing-function (fname new-func body)
-  ;; Execute code, temporarily replacing a given function with a new one
-  `(let ((old-func (symbol-function ,fname)))
-     (unwind-protect
-	 (progn
-	   (fset ,fname ,new-func)
-	   ,body)
-       (fset ,fname old-func))))
-
-(defun org-balance-cmp (a b)
-  "Compare agenda entries by the amount of neglect, with the most-neglected at the top."
-  (let ((pa (or (get-text-property 0 :org-balance-delta a) 0))
-	(pb (or (get-text-property 0 :org-balance-delta b) 0)))
-    (cond ((> pa pb) +1)
-	  ((< pa pb) -1)
-	  (t nil))))
 
 (defun org-balance-save-amt-neglected (agenda-line)
   "Given an agenda line, save the 'neglect amount' value of the corresponding org entry
@@ -810,162 +552,14 @@ to the agenda line.
 	    (put-text-property 0 1 :org-balance-delta org-balance-delta-val agenda-line)
 	    (concat agenda-line "::: " (number-to-string org-balance-delta-val))))))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;; Section: User interaction
-;;
-;; Interactive commands callable by the user
-;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defun org-balance-cmp (a b)
+  "Compare agenda entries by the amount of neglect, with the most-neglected at the top."
+  (let ((pa (or (get-text-property 0 :org-balance-delta a) 0))
+	(pb (or (get-text-property 0 :org-balance-delta b) 0)))
+    (cond ((> pa pb) +1)
+	  ((< pa pb) -1)
+	  (t nil))))
 
-(defun org-balance-set-goal ()
-  "Set a goal property on the current entry.
-Offer completion for the goal.  Optionally show help screen with goal examples.
-"
-  (interactive)
-  )
-
-(defun org-balance-check-goals ()
-  "Run a check of compliance with goals."
-  (interactive)
-  )
-
-
-(defun* org-balance-dispatcher-api (&key (action 'tree) tstart tend (goal "time")
-					 (goal-delta-relative-p t) (goal-delta-max .05)
-					 (show-goals-under t) show-goals-over show-goals-within
-					 )
-  "Top-level dispatcher for the org-balance package: all user functions can be invoked by calling this routine with
-appropriate parameters.
-"
-  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
-  (unless tend (setq tend (org-float-time (org-current-time))))
-
-  (cond ((eq action 'tree)
-	 (org-balance-reset-overlays)
-	 (org-balance-compute-goal-deltas
-	  :goal goal :goal-delta-relative-p goal-delta-relative-p :tstart tstart :tend tend
-	  :callback
-	  (lambda (goal-delta total-here per-day-here per-day-goal-here per-day-here-in-their-units
-			      per-day-goal-in-their-units their-units)
-	    (when (or (and show-goals-under (< goal-delta (- goal-delta-max)))
-		      (and show-goals-over (> goal-delta goal-delta-max))
-		      (and show-goals-within (<= (- goal-delta-max) goal-delta goal-delta-max)))
-	      (org-show-context)
-	      (org-balance-put-overlay (format "%s%d%%: %.2f (not %s) %s"
-					       (if (>= goal-delta 0) "+" "")
-					       (round (* goal-delta 100.0)) 
-					       per-day-here-in-their-units per-day-goal-in-their-units
-					       their-units
-					       ))))
-	  :error-handler
-	  (lambda (err)
-	    (org-show-context)
-	    (org-balance-put-overlay (format "Error: %s" (error-message-string err))))	  
-	  ))))
-
-
-(defun orgb-test ()
-  (interactive)
-  (let ((displayed-month 8)
-	(displayed-year 2010))
-    (org-balance-dispatcher-api :show-goals-within nil :show-goals-over nil )
-  ))
-
-
-(require 'widget)
-
-(eval-when-compile
-  (require 'wid-edit)
-  (require 'cl)
-  (require 'cl-19))
-
-(defun org-balance-hide-menu ()
-  "Hides the org-balance menu"
-  (interactive)
-  (org-unhighlight)
-  (when (string= (buffer-name (current-buffer))
-		 "*Org-Balance Menu*")
-    (org-balance-remove-overlays)
-    (kill-buffer (current-buffer))
-    (delete-window)
-    ))
-
-
-
-(defun org-balance-menu ()
-  "Show a menu of org-balance functions"
-  (interactive)
-  (if (not (eq major-mode 'org-mode))
-      (message "This function only works in org-mode buffers")
-    (let* ((orig-window-config (current-window-configuration))
-	   (restore-func `(lambda (&rest ignore)
-			    (org-balance-hide-menu)
-			    (set-window-configuration ,orig-window-config)
-			    (org-unhighlight))))
-      (delete-other-windows)
-      (let ((org-buf (current-buffer))
-	    (org-window (selected-window)))
-	(org-highlight (point-at-bol) (point-at-eol))
-	(recenter)
-	(split-window)
-	(switch-to-buffer "*Org-Balance Menu*")
-	(kill-all-local-variables)
-	(let ((inhibit-read-only t))
-	  (erase-buffer))
-	(let ((all (overlay-lists)))
-	  ;; Delete all the overlays.
-	  (mapcar 'delete-overlay (car all))
-	  (mapcar 'delete-overlay (cdr all)))
-	(widget-insert "Choose an org-balance command:\n\n")
-	(widget-create 'push-button
-		       :notify `(lambda (&rest ignore)
-				  (delete-other-windows)
-				  (switch-to-buffer ,org-buf)
-				  (org-balance-record-time)
-				  (,restore-func))
-		       "Record time")
-	(widget-insert "\n")
-	(widget-create 'push-button
-		       :notify `(lambda (&rest ignore)
-				  (delete-other-windows)
-				  (switch-to-buffer ,org-buf)
-				  (org-balance-record-time)
-				  (,restore-func))
-		       "Record completion")
-
-
-	(widget-insert "\n")
-	(widget-insert "-------------------------\n")
-
-	(widget-create 'push-button
-		       :notify `(lambda (&rest ignore)
-				  (delete-other-windows)
-				  (switch-to-buffer ,org-buf)
-				  (org-tags-view nil val_)
-				  (,restore-func))
-		       "Show agenda time")
-	
-	(widget-create 'push-button
-		       :notify `(lambda (&rest ignore)
-				  (delete-other-windows)
-				  (switch-to-buffer ,org-buf)
-				  (org-balance-show-neglected-time)
-				  (,restore-func))
-		       "Show neglected time")
-	(widget-insert "\nHow long ago?   ")
-	(widget-create 'editable-field :size 5 "-3w")
-	
-	(use-local-map widget-keymap)
-	(widget-setup)
-	(set-buffer-modified-p nil)
-	(local-set-key "q"
-		       `(lambda ()
-			  (interactive)
-			  (,restore-func)
-			  (org-balance-hide-menu)))
-	
-	))))
 
 (defun org-agenda-show-path ()
   "Display the Org-mode file which contains the item at point.
@@ -1006,33 +600,37 @@ When called repeatedly, scroll the window that is displaying the buffer."
 ;; (amount per day).  There is also code to convert from the uniform representation back to the user's original
 ;; unit for display (e.g. from "8.57 minutes per day" to "1 hour a week").
 
-
-(defconst org-balance-units
-  '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
-	     (workweek . 7200)
-	     (month . 43200) (year . 525600) (bluemoon 1e12)))
-    (money . ((dollar . 1) (cent . .01) (k . 1000)))
-    (count . ((item . 1) (time . 1)))))
-
+(eval-and-compile
+  (defconst org-balance-units
+    '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
+	       (workweek . 7200)
+	       (month . 43200) (year . 525600) (bluemoon 1e12)))
+      (money . ((dollar . 1) (cent . .01) (k . 1000)))
+      (count . ((item . 1) (time . 1))))))
+  
 ;; for each unit, add plural form: make "seconds" mean the same thing as "second"
-(defconst org-balance-units
-      (mapcar
-       (lambda (dimension-info)
-	 (cons (car dimension-info)
-	       (reduce 'append
-		       (mapcar
-			(lambda (unit-info)
-			  (list unit-info (cons (intern (concat (symbol-name (car unit-info)) "s")) (cdr unit-info))))
-			(cdr dimension-info)))))
-       org-balance-units))
+(eval-and-compile
+  (defconst org-balance-units
+    (mapcar
+     (lambda (dimension-info)
+       (cons (car dimension-info)
+	     (apply
+	      'append
+	      (mapcar
+	       (lambda (unit-info)
+		 (list unit-info (cons (intern (concat (symbol-name (car unit-info)) "s")) (cdr unit-info))))
+	       (cdr dimension-info)))))
+       org-balance-units)))
 
 ;; var: org-balance-unit2dim-alist - assoc list mapping each unit to its dimension (time, money, count, ...)
-(defconst org-balance-unit2dim-alist
-  (reduce 'append
-	  (mapcar
-	   (lambda (dimension-info)
-	     (mapcar (lambda (unit-info) (cons (car unit-info) (car dimension-info))) (cdr dimension-info)))
-	   org-balance-units)))
+(eval-and-compile
+  (defconst org-balance-unit2dim-alist
+    (apply
+     'append
+     (mapcar
+      (lambda (dimension-info)
+	(mapcar (lambda (unit-info) (cons (car unit-info) (car dimension-info))) (cdr dimension-info)))
+      org-balance-units))))
 
 (put 'org-balance-error 'error-conditions '(error org-balance-errors org-balance-error))
 (put 'org-balance-error 'error-message "org-balance error")
@@ -1056,7 +654,7 @@ If ERROR-MESSAGE is given, and the key is not in the list, throws an error with 
   (org-balance-assoc-val unit org-balance-unit2dim-alist))
 
 ;; var: org-balance-unit2base-alist - assoc list mapping each unit to how many base units are in it
-(defconst org-balance-unit2base-alist (reduce 'append (mapcar 'cdr org-balance-units)))
+(defconst org-balance-unit2base-alist (apply 'append (mapcar 'cdr org-balance-units)))
 
 (defun org-balance-unit2base (unit)
   "Return the number of base units in the given unit.  For each dimension we have a base unit in terms of which all other
@@ -1108,42 +706,45 @@ we convert to the specified multiples of new unit."
 (put 'org-balance-parse-error 'error-conditions '(error org-balance-errors org-balance-parse-error))
 (put 'org-balance-parse-error 'error-message "org-balance: Could not parse")
 
-(defconst org-balance-number-names
-  '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
-    (seven . 7) (eight . 8) (nine . 9)
-    (ten . 10)))
+(eval-and-compile
+  (defconst org-balance-number-names
+    '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
+      (seven . 7) (eight . 8) (nine . 9)
+      (ten . 10))))
 
-(defconst org-balance-number-name-regexp
-  (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
-       (lambda (match) (cdr-safe (assoc-string match org-balance-number-names)))))
+(eval-and-compile
+  (defconst org-balance-number-name-regexp
+    (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
+	 (lambda (match) (cdr-safe (assoc-string match org-balance-number-names))))))
 
-(defconst org-balance-number-regexp
-  (rxx
-   (seq
-     (zero-or-more whitespace)
-     
-     (or
-      ;; either an english number name
-      (org-balance-number-name-regexp named-number)
+(eval-and-compile
+  (defconst org-balance-number-regexp
+    (rxx
+     (seq
+      (zero-or-more whitespace)
       
-      ;; or a floating-point number, possibly in scientific notation
-      (seq
-       (optional (any "+-"))
-       (or (seq (one-or-more (any digit))
-		(optional ".")
-		(optional (one-or-more (any digit))))
-	   (seq "." (one-or-more (any digit))))
-       (optional
-	(seq (any "eE")
-	     (optional (any "+-"))
-	     (one-or-more (any digit))))))
-     
-     (zero-or-more whitespace))
-   (lambda (match)
-     (or named-number
-       (string-to-number match)))
-   "number")
-   "Regular expression for a floating-point number")
+      (or
+       ;; either an english number name
+       (org-balance-number-name-regexp named-number)
+       
+       ;; or a floating-point number, possibly in scientific notation
+       (seq
+	(optional (any "+-"))
+	(or (seq (one-or-more (any digit))
+		 (optional ".")
+		 (optional (one-or-more (any digit))))
+	    (seq "." (one-or-more (any digit))))
+	(optional
+	 (seq (any "eE")
+	      (optional (any "+-"))
+	      (one-or-more (any digit))))))
+      
+      (zero-or-more whitespace))
+     (lambda (match)
+       (or named-number
+	   (string-to-number match)))
+     "number")
+    "Regular expression for a floating-point number"))
 			
 
 (defun org-balance-is-valid-number-p (s)
@@ -1165,33 +766,35 @@ by whitespace, it throws an error rather than silently returning zero.
 
 (defalias 'org-balance-parse-number 'org-balance-string-to-number)
 
-(defconst org-balance-number-range-regexp
-  (rxx
-   (seq
-    (org-balance-number-regexp range-start)
-    (optional "-" (org-balance-number-regexp range-end)))
-   (cons range-start (or range-end range-start))))
+(eval-and-compile
+  (defconst org-balance-number-range-regexp
+    (rxx
+     (seq
+      (org-balance-number-regexp range-start)
+      (optional "-" (org-balance-number-regexp range-end)))
+     (cons range-start (or range-end range-start)))))
 
 (defvar org-balance-parse-valu-hooks nil
   "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
 such as $5 into the canonical form `5 dollars'.  Each hook must take a string as an argument and return either an
 `org-balance-valu' struct if it successfully parsed the string, or nil if it didn't.")
 
-(defconst org-balance-unit-regexp
-  (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist))))))
+(eval-and-compile (defconst org-balance-unit-regexp
+		    (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist)))))))
 
-(defconst
-  org-balance-valu-regexp
-  (rxx
-   ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
-   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
-   ;; But either a number or a unit must be given.
-   (or (seq (optional (org-balance-number-regexp val))
-	    (org-balance-unit-regexp unit))
-       (seq val (optional unit)))
-   (org-balance-make-valu (or val 1) (or unit "item"))
-   "value with unit")
-  "regexp for value with a unit, e.g. '1 day'")
+(eval-and-compile
+  (defconst
+    org-balance-valu-regexp
+    (rxx
+     ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
+     ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+     ;; But either a number or a unit must be given.
+     (or (seq (optional (org-balance-number-regexp val))
+	      (org-balance-unit-regexp unit))
+	 (seq val (optional unit)))
+     (org-balance-make-valu (or val 1) (or unit "item"))
+     "value with unit")
+    "regexp for value with a unit, e.g. '1 day'"))
 
   
 (defun org-balance-parse-valu (valu-str)
@@ -1200,27 +803,29 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
    (rxx-parse org-balance-valu-regexp valu-str)))
 
-(defconst
-  org-balance-valu-range-regexp
-  (rxx
-   ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
-   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
-   ;; But either a number or a unit must be given.
-   (or (seq (optional (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
-	    (org-balance-unit-regexp unit))
-       (seq range (optional (one-or-more whitespace) unit)))
-   (let ((number-range (or range (cons 1 1)))
-	 (unit (or unit "item")))
-     (cons (org-balance-make-valu (car number-range) unit)
-	   (org-balance-make-valu (cdr number-range) unit))))
-   "value range")
+(eval-and-compile
+  (defconst
+    org-balance-valu-range-regexp
+    (rxx
+     ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
+     ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+     ;; But either a number or a unit must be given.
+     (or (seq (optional (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
+	      (org-balance-unit-regexp unit))
+	 (seq range (optional (one-or-more whitespace) unit)))
+     (let ((number-range (or range (cons 1 1)))
+	   (unit (or unit "item")))
+       (cons (org-balance-make-valu (car number-range) unit)
+	     (org-balance-make-valu (cdr number-range) unit))))
+    "value range"))
 
 (defun org-balance-parse-valu-range (valu-str)
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
   (rxx-parse org-balance-valu-range-regexp valu-str))
 
-(defconst org-balance-ratio-words (list "per" "every" "each" "/" "a" "in a"))
-(defconst org-balance-ratio-words-regexp (rxx (eval-regexp (regexp-opt org-balance-ratio-words 'words))))
+(eval-and-compile
+  (defconst org-balance-ratio-words (list "per" "every" "each" "/" "a" "in a"))
+  (defconst org-balance-ratio-words-regexp (rxx (eval-regexp (regexp-opt org-balance-ratio-words 'words)))))
 
 ;; Struct: org-balance-valu-ratio - a ratio of two valu's.
 (defstruct org-balance-valu-ratio num denom
@@ -1265,59 +870,60 @@ changing only the numerator."
     result
   ))
 
-(defconst org-balance-polarity-regexp
-  (rxx
-   (seq (zero-or-more whitespace)
-	(or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
-	    (named-grp atleast (eval-regexp (regexp-opt (list "at least")))))
-	(zero-or-more whitespace))
+(eval-and-compile
+  (defconst org-balance-polarity-regexp
+    (rxx
+     (seq (zero-or-more whitespace)
+	  (or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
+	      (named-grp atleast (eval-regexp (regexp-opt (list "at least")))))
+	  (zero-or-more whitespace))
      (if atmost 'atmost 'atleast)
-   "polarity"))
-
-(defconst org-balance-goal-regexp
-  (rxx
-   (seq
-    (0+ blank)
-    (optional
-     (seq (named-grp priority (regexp "\\[#[A-Z0-9]\\]")) (0+ blank)))
-    (optional (org-balance-polarity-regexp polarity))
-    (org-balance-valu-range-regexp numerator)
-    (1+ blank) (org-balance-ratio-words-regexp ratio-word) (1+ blank)
-    (org-balance-valu-regexp denominator)
-    (optional
-     ;; specify margin
+     "polarity"))
+  
+  (defconst org-balance-goal-regexp
+    (rxx
      (seq
-      (1+ blank) "+-" (0+ blank)
-      (or
-       (seq (org-balance-number-regexp margin) (0+ blank) "%")
-       (org-balance-valu-regexp margin))))
-    (0+ blank)
-    )
-   
-   (lambda (goal-str)
-     (make-org-balance-goal 
-      :numer-min (car numerator)
-      :numer-max (cdr numerator)
-      :denom denominator
-      :polarity polarity
-      :margin margin
-      :priority priority
-      :text goal-str
-      :ratio-word ratio-word)))
-  "value ratio goal")
+      (0+ blank)
+      (optional
+       (seq (named-grp priority (regexp "\\[#[A-Z0-9]\\]")) (0+ blank)))
+      (optional (org-balance-polarity-regexp polarity))
+      (org-balance-valu-range-regexp numerator)
+      (1+ blank) (org-balance-ratio-words-regexp ratio-word) (1+ blank)
+      (org-balance-valu-regexp denominator)
+      (optional
+       ;; specify margin
+       (seq
+	(1+ blank) "+-" (0+ blank)
+	(or
+	 (seq (org-balance-number-regexp margin) (0+ blank) "%")
+	 (org-balance-valu-regexp margin))))
+      (0+ blank)
+      )
+     
+     (lambda (goal-str)
+       (make-org-balance-goal 
+	:numer-min (car numerator)
+	:numer-max (cdr numerator)
+	:denom denominator
+	:polarity polarity
+	:margin margin
+	:priority priority
+	:text goal-str
+	:ratio-word ratio-word)))
+    "value ratio goal")
 
-(defconst org-balance-goal-link-regexp
-  (rxx (seq (org-balance-number-regexp factor)
-	    (1+ blank)
-	    "of"
-	    (1+ blank)
-	    (eval-regexp org-any-link-re))
-       factor))
+  (defconst org-balance-goal-link-regexp
+    (rxx (seq (org-balance-number-regexp factor)
+	      (1+ blank)
+	      "of"
+	      (1+ blank)
+	      (eval-regexp org-any-link-re))
+	 factor))
 
-(defconst org-balance-goal-or-link-regexp
-  (rxx (or (org-balance-goal-regexp goal)
-	   (org-balance-goal-link-regexp link))
-       (or goal link)))
+  (defconst org-balance-goal-or-link-regexp
+    (rxx (or (org-balance-goal-regexp goal)
+	     (org-balance-goal-link-regexp link))
+	 (or goal link))))
 
 (defun org-balance-parse-goal-or-link-at-point ()
   "Parse goal or link at point"
@@ -1336,15 +942,13 @@ changing only the numerator."
   ;;    - factor out the follow-a-link code, so that we can use it 
   (save-match-data
     (let ((result (rxx-parse-fwd org-balance-goal-or-link-regexp (point-at-eol) 'partial-match-ok)))
-      (dbg result)
       (if (org-balance-goal-p result) result
 	(save-excursion
 	  (save-window-excursion
 	    (org-open-at-point 'in-emacs)
 	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	      (error "No goal found at link taget"))
-	    (org-balance-scale-goal result (org-balance-parse-goal-or-link-at-point)))
-  )))))
+	    (org-balance-scale-goal result (org-balance-parse-goal-or-link-at-point))))))))
 
 (provide 'org-balance)
 
