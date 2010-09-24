@@ -60,17 +60,29 @@
   (require 'rx))
 
 (defmacro rxx-flet (bindings &rest body)
-  "Temporarily replace functions, making previous definitions available."
+  "Temporarily replace functions, making previous definitions available.  Also, lets you use a function symbol
+for the replacement function definition."
   (declare (indent 1))
   `(let 
-       ,(mapcar (lambda (binding) (list (intern (concat (symbol-name (first binding)) "-orig"))
-					(list 'when (list 'fboundp (list 'quote (first binding)))
-					      (list 'symbol-function (list 'quote (first binding)))))) bindings)
-     (flet ,(append bindings (mapcar
-			      (lambda (binding)
-				(let ((orig-fn (intern (concat (symbol-name (first binding)) "-orig"))))
-				  (list orig-fn '(&rest args) `(apply (symbol-value (quote ,orig-fn)) args))))
-			      bindings))
+       ,(mapcar (lambda (binding)
+		  (let ((orig-func-symbol (intern (concat (symbol-name (first binding)) "-orig"))))
+		    (list orig-func-symbol
+			  `(if (boundp (quote ,orig-func-symbol)) ,orig-func-symbol
+			     (when (fboundp (quote ,(first binding)))
+			       (symbol-function (quote ,(first binding)))))))) bindings)
+     (flet ,(append
+	     (mapcar
+	      (lambda (binding)
+		(let ((orig-fn (intern (concat (symbol-name (first binding)) "-orig"))))
+		  (list orig-fn '(&rest args) `(apply (symbol-value (quote ,orig-fn)) args))))
+	      bindings)
+	     (mapcar
+	      (lambda (binding)
+		(if (and (= (length binding) 2)
+			 (symbolp (second binding)))
+		    (list (first binding) '(&rest args) `(apply (quote ,(second binding)) args))
+		  binding))
+	      bindings))
        ,@body)))
 
 ;; struct: rxx-info - information about a regexp or one named group within it.  when the former, it is attached to a regexp
@@ -390,6 +402,18 @@ with this number.")
     s))
 
 
+(defun rxx-form (form &optional rx-parent)
+  (if (not (boundp 'rxx-env))
+      (funcall rx-form-orig form rx-parent)
+    (cond ((and (consp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
+	   (rxx-process-named-grp (list 'named-grp (second form) (first form))))
+	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
+	   (rxx-process-named-grp (list 'named-grp form)))
+	  ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
+	   ;; what if recurs is used? need to regenerate from form
+	   (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))) 'no-group) '*))
+	  (t (funcall rx-form-orig form rx-parent)))))
+
 (defun rxx-to-string (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions, taken together, allow specifying simple grammars
@@ -398,50 +422,37 @@ in a modular fashion using regular expressions.
 For detailed description, see `rxx'.
 "
   (declare (special rxx-first-grp-num))
-  (let ((rx-form-orig (if (boundp 'rx-form-orig) rx-form-orig (symbol-function 'rx-form))))
-    (flet ((rx-form
-	    (form &optional rx-parent)
-  (if (not (boundp 'rxx-env))
-      (funcall rx-form-orig form rx-parent)
-    (cond ((and (consp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
-	   (rxx-process-named-grp (list 'named-grp (second form) (first form))))
-	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
-	   (rxx-process-named-grp (list 'named-grp form)))
-	  ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
-		 ;; what if recurs is used? need to regenerate from form
-		 (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))) 'no-group) '*))
-	  (t (funcall rx-form-orig form rx-parent))))))
-		    
-  (rxx-remove-unneeded-shy-grps
-   (let* ((rxx-env (rxx-new-env))
-	  (rxx-next-grp-num rxx-first-grp-num)
-	  ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
-	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
-				     (eval-regexp . (rxx-process-eval-regexp 1 1))
-				     (shy-grp . seq)
-				     (recurse . (rxx-process-recurse 1 nil))
-				     (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
-				     (named-group . named-grp) (shy-group . shy-grp)
-				     (named-backref . (rxx-process-named-backref 1 1)))
-				   rx-constituents))
-	  
-	  ;; also allow named-group or ngrp or other names
-	  ;; var: regexp - the string regexp for the form.
-	  (regexp
-	   ;; whenever the rx-to-string call below encounters a (named-grp ) construct
-	   ;; in the form, it calls back to rxx-process-named-grp, which will
-	   ;; add a mapping from the group's name to rxx-grp structure
-	   ;; to rxx-name2grp.
-	   (rx-to-string form 'no-group))
-	  (rxx-info (make-rxx-info
-		     :form form :parser (or parser
-					    
-					    'identity)
-		     :env rxx-env :descr descr :regexp regexp
-		     )))
-     (put-rxx-info regexp rxx-info)
-     (rxx-replace-posix regexp))))))
-  
+  (rxx-flet ((rx-form rxx-form))
+    (rxx-remove-unneeded-shy-grps
+     (let* ((rxx-env (rxx-new-env))
+	    (rxx-next-grp-num rxx-first-grp-num)
+	    ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
+	    (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
+				       (eval-regexp . (rxx-process-eval-regexp 1 1))
+				       (shy-grp . seq)
+				       (recurse . (rxx-process-recurse 1 nil))
+				       (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
+				       (named-group . named-grp) (shy-group . shy-grp)
+				       (named-backref . (rxx-process-named-backref 1 1)))
+				     rx-constituents))
+	    
+	    ;; also allow named-group or ngrp or other names
+	    ;; var: regexp - the string regexp for the form.
+	    (regexp
+	     ;; whenever the rx-to-string call below encounters a (named-grp ) construct
+	     ;; in the form, it calls back to rxx-process-named-grp, which will
+	     ;; add a mapping from the group's name to rxx-grp structure
+	     ;; to rxx-name2grp.
+	     (rx-to-string form 'no-group))
+	    (rxx-info (make-rxx-info
+		       :form form :parser (or parser
+					      
+					      'identity)
+		       :env rxx-env :descr descr :regexp regexp
+		       )))
+       (put-rxx-info regexp rxx-info)
+       (rxx-replace-posix regexp)))))
+
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
 
 (defun rxx-process-named-grp-recurs (form)
