@@ -398,6 +398,20 @@ in a modular fashion using regular expressions.
 For detailed description, see `rxx'.
 "
   (declare (special rxx-first-grp-num))
+  (let ((rx-form-orig (if (boundp 'rx-form-orig) rx-form-orig (symbol-function 'rx-form))))
+    (flet ((rx-form
+	    (form &optional rx-parent)
+  (if (not (boundp 'rxx-env))
+      (funcall rx-form-orig form rx-parent)
+    (cond ((and (consp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
+	   (rxx-process-named-grp (list 'named-grp (second form) (first form))))
+	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
+	   (rxx-process-named-grp (list 'named-grp form)))
+	  ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
+		 ;; what if recurs is used? need to regenerate from form
+		 (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))) 'no-group) '*))
+	  (t (funcall rx-form-orig form rx-parent))))))
+		    
   (rxx-remove-unneeded-shy-grps
    (let* ((rxx-env (rxx-new-env))
 	  (rxx-next-grp-num rxx-first-grp-num)
@@ -426,7 +440,7 @@ For detailed description, see `rxx'.
 		     :env rxx-env :descr descr :regexp regexp
 		     )))
      (put-rxx-info regexp rxx-info)
-     (rxx-replace-posix regexp))))
+     (rxx-replace-posix regexp))))))
   
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
 
@@ -579,19 +593,6 @@ the parsed result in case of match, or nil in case of mismatch."
 						     ,aregexp))))
     (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)
   ))
-
-(defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
-  (if (not (boundp 'rxx-env))
-      ad-do-it
-    (cond ((and (consp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
-	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form)))))
-	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
-	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
-	  ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
-	   (setq ad-return-value
-		 ;; what if recurs is used? need to regenerate from form
-		 (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))) 'no-group) '*)))
-	  (t ad-do-it))))
 
 (defadvice rx-kleene (around rxx-kleene first (form) ;activate compile
 			     )
