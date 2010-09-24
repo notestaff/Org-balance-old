@@ -1517,3 +1517,5 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 (setq org-agenda-custom-commands (org-balance-make-agenda-custom-commands))
 	
+(rxx-parse org-balance-clock-regexp "			 CLOCK: [2010-09-21 Tue 11:38]--[2010-09-22 Wed 00:13] => 12:35")
+
