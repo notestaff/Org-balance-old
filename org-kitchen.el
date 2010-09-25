@@ -1978,3 +1978,13 @@ appropriate parameters.
      nil
      '(("\\<\\(?1:defrxx\\(?:const\\)?\\)\\>\\(?:[[:blank:]]+\\<\\(?2:[^[:blank:]]+\\)\\>\\)"
 	(1  font-lock-keyword-face) (2  font-lock-variable-face))))))
+
+(rxx-parse org-balance-link-regexp "[[http://mit.edu][thislink]]")
+
+(defun try () (interactive)
+  (rxx-do-search-fwd org-balance-link-regexp link
+			 (message "found link at %s isint %s" link (integerp link))))
+
+(let ((s "********* [#A] GOAL clockedtime: at least 2 hours per day"))
+  (string-match org-balance-goal-prefix-regexp s)
+  (match-string 0 s))
