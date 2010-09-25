@@ -1,12 +1,13 @@
 
 
 (eval-when-compile (require 'cl))
- (require 'rxx)
+(require 'rxx)
 
-(eval-when-compile (defconst number-regexp (rxx (one-or-more digit) string-to-number)))
+;(eval-when-compile (defconst number-regexp (rxx (one-or-more digit) string-to-number)))
+(defrxx number-regexp (one-or-more digit) string-to-number "a number")
 
-(eval-when-compile (defconst fraction-regexp (rxx (seq (number-regexp numerator) "/" (number-regexp denominator))
-						 (cons numerator denominator))))
+(defrxx fraction-regexp (seq (number-regexp numerator) "/" (number-regexp denominator))
+  (cons numerator denominator))
 
 ;; (assert
 ;;  ;; issue: when compiling, the previous defs are not available.
@@ -21,14 +22,12 @@
 ;; 				    (list rmin rmax))))
 ;; 	    (rxx-parse range-regexp "[(1/2)]--[(3/4)]"))) '((1 . 2) (3 . 4))))
 
-(eval-when-compile
-  (defconst rxx-number-names
-    '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
-      (seven . 7) (eight . 8) (nine . 9)
-      (ten . 10)))
+(defrxxconst rxx-number-names
+  '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
+    (seven . 7) (eight . 8) (nine . 9)
+    (ten . 10)))
 
-  (defconst rxx-number-regexp
-    (rxx
+(defrxx rxx-number-regexp
      (seq
       (zero-or-more whitespace)
       
@@ -53,48 +52,45 @@
        (if number-name (cdr (assoc-string number-name rxx-number-names))
 	 (string-to-number match)))
      "number")
-    "Regular expression for a floating-point number")
   
-  (defconst rxx-number-range-regexp
-    (rxx
-     (seq
-      (rxx-number-regexp range-start)
-      (optional "-" (rxx-number-regexp range-end)))
-     (cons range-start (or range-end range-start))))
+(defrxx rxx-number-range-regexp
+  (seq
+   (rxx-number-regexp range-start)
+   (optional "-" (rxx-number-regexp range-end)))
+  (cons range-start (or range-end range-start)))
 
-  (defconst rxx-units
-    '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
-	       (workweek . 7200)
-	       (month . 43200) (year . 525600) (bluemoon 1e12)))
-      (money . ((dollar . 1) (cent . .01) (k . 1000)))
-      (count . ((item . 1) (time . 1)))))
+(defrxxconst rxx-units
+  '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
+	     (workweek . 7200)
+	     (month . 43200) (year . 525600) (bluemoon 1e12)))
+    (money . ((dollar . 1) (cent . .01) (k . 1000)))
+    (count . ((item . 1) (time . 1)))))
 
-  ;; for each unit, add plural form: make "seconds" mean the same thing as "second"
-  (defconst rxx-units
-    (mapcar
-     (lambda (dimension-info)
-       (cons (car dimension-info)
-	     (apply 'append
-		    (mapcar
-		     (lambda (unit-info)
-		       (list unit-info (cons (intern (concat (symbol-name (car unit-info)) "s")) (cdr unit-info))))
-		     (cdr dimension-info)))))
-     rxx-units))
+;; for each unit, add plural form: make "seconds" mean the same thing as "second"
+(defrxxconst rxx-units
+  (mapcar
+   (lambda (dimension-info)
+     (cons (car dimension-info)
+	   (apply 'append
+		  (mapcar
+		   (lambda (unit-info)
+		     (list unit-info (cons (intern (concat (symbol-name (car unit-info)) "s")) (cdr unit-info))))
+		   (cdr dimension-info)))))
+   rxx-units))
 
 ;; var: rxx-unit2dim-alist - assoc list mapping each unit to its dimension (time, money, count, ...)
-  (defconst rxx-unit2dim-alist
-    (apply 'append
-	   (mapcar
-	    (lambda (dimension-info)
-	      (mapcar (lambda (unit-info) (cons (car unit-info) (car dimension-info))) (cdr dimension-info)))
-	    rxx-units)))
+(defrxxconst rxx-unit2dim-alist
+  (apply 'append
+	 (mapcar
+	  (lambda (dimension-info)
+	    (mapcar (lambda (unit-info) (cons (car unit-info) (car dimension-info))) (cdr dimension-info)))
+	  rxx-units)))
   
-  (defconst rxx-unit-regexp
-    (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car rxx-unit2dim-alist))))))
-  
-  (defconst
-    rxx-valu-regexp
-    (rxx
+(defrxx rxx-unit-regexp
+  (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car rxx-unit2dim-alist)))))
+
+(defrxx
+  rxx-valu-regexp
      ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
      ;; or an optional number (assumed to be 1 if not given) followed by a unit.
      ;; But either a number or a unit must be given.
@@ -103,14 +99,11 @@
 	 (seq val (optional unit)))
      (cons (or val 1) (or unit "item"))
      "value with unit")
-    "regexp for value with a unit, e.g. '1 day'"))
 
 (assert (equal (rxx-parse rxx-valu-regexp "1 day") '(1 . "day")))
 
-(eval-when-compile
-  (defconst
+(defrxx
     rxx-valu-range-regexp
-    (rxx
      ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
      ;; or an optional number (assumed to be 1 if not given) followed by a unit.
      ;; But either a number or a unit must be given.
@@ -121,49 +114,47 @@
      (let ((number-range (or range (cons 1 1)))
 	   (unit (or unit "item")))
        (cons (cons (car number-range) unit)
-	     (cons (cdr number-range) unit))))
+	     (cons (cdr number-range) unit)))
     "value range")
   
-  (defconst rxx-ratio-words (list "per" "every" "each" "/" "a" "in a"))
+(defrxxconst rxx-ratio-words (list "per" "every" "each" "/" "a" "in a"))
   
-  (defconst rxx-polarity-regexp
-    (rxx
-     (seq (zero-or-more whitespace)
-	  (seq
-	   (or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
-	       (named-grp atleast (eval-regexp (regexp-opt (list "at least"))))))
-	  (zero-or-more whitespace))
-     (if atmost 'atmost 'atleast)
-     "polarity"))
-  
-  (defconst rxx-valu-ratio-goal-regexp
-    (rxx
-     (seq
-      (optional (named-grp polarity rxx-polarity-regexp))
-      (named-grp num rxx-valu-range-regexp)
-      (one-or-more whitespace) (eval-regexp (regexp-opt rxx-ratio-words)) (one-or-more whitespace)
-      (named-grp denom rxx-valu-regexp)
-      (optional
-       ;; specify margin
+(defrxx rxx-polarity-regexp
+  (seq (zero-or-more whitespace)
        (seq
-	(one-or-more whitespace)
-	"+-"
-	(zero-or-more whitespace)
-	(seq
-	 (or
-	  (seq (named-grp margin-percent rxx-number-regexp)
-	       (zero-or-more whitespace)
-	       "%")
-	  (named-grp margin-val rxx-valu-regexp))))))
-     (lambda (goal-str)
-       (list
-	:num-min (car num)
-	:num-max (cdr num)
-	:denom denom
-	:polarity polarity
-	:margin (or margin-percent margin-val)
-	:text goal-str)))
-    "value ratio goal"))
+	(or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
+	    (named-grp atleast (eval-regexp (regexp-opt (list "at least"))))))
+       (zero-or-more whitespace))
+  (if atmost 'atmost 'atleast)
+  "polarity")
+  
+(defrxx rxx-valu-ratio-goal-regexp
+  (seq
+   (optional (named-grp polarity rxx-polarity-regexp))
+   (named-grp num rxx-valu-range-regexp)
+   (one-or-more whitespace) (eval-regexp (regexp-opt rxx-ratio-words)) (one-or-more whitespace)
+   (named-grp denom rxx-valu-regexp)
+   (optional
+    ;; specify margin
+    (seq
+     (one-or-more whitespace)
+     "+-"
+     (zero-or-more whitespace)
+     (seq
+      (or
+       (seq (named-grp margin-percent rxx-number-regexp)
+	    (zero-or-more whitespace)
+	    "%")
+       (named-grp margin-val rxx-valu-regexp))))))
+  (lambda (goal-str)
+    (list
+     :num-min (car num)
+     :num-max (cdr num)
+     :denom denom
+     :polarity polarity
+     :margin (or margin-percent margin-val)
+     :text goal-str))
+  "value ratio goal")
   
 (assert (equal (rxx-parse rxx-valu-ratio-goal-regexp "at least once a day +- 5%")
 	       '(:num-min (1 . "item") :num-max (1 . "item") :denom (1 . "day") :polarity atleast :margin 5 :text "at least once a day +- 5%")))
@@ -172,9 +163,9 @@
 
 
 (assert (equal (rxx-parse (rxx (seq (or (named-grp num (one-or-more digit)) (seq "hithere" (named-grp num)))  (named-backref num)) (string-to-number num)) "hithere1212") 12))
-;;;borrowed from orgmode
-(eval-when-compile (defconst rxx-clock-string "CLOCK:"))
 
+;;;borrowed from orgmode
+(defrxxconst rxx-clock-string "CLOCK:")
 
 (defun rxx-parse-time-string (s &optional nodefault)
   "Parse the standard Org-mode time string.
@@ -200,26 +191,24 @@ TIME defaults to the current time."
       (time-to-seconds (or time (current-time)))
     (float-time time)))
 
-(eval-when-compile
-  (defconst rxx-clock-regexp
-    (rxx (or (seq (named-grp left-bracket "<") (named-grp time (1+ (not (any ">")))) ">")
-	     (seq (named-grp left-bracket "[")
-		  (named-grp time (1+ (not (any ">"))) "]")))
-	 (rxx-float-time (apply 'encode-time (rxx-parse-time-string time))))))
+(defrxx rxx-clock-regexp
+  (or (seq (named-grp left-bracket "<") (named-grp time (1+ (not (any ">")))) ">")
+      (seq (named-grp left-bracket "[")
+	   (named-grp time (1+ (not (any ">"))) "]")))
+  (rxx-float-time (apply 'encode-time (rxx-parse-time-string time))))
 
 (assert (equal (rxx-parse rxx-clock-regexp "<2010-09-01 Wed 15:49>") 1283370540.0))
 
 
-(defconst rxx-clock-range-regexp
-  (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp)) (cons from to)))
+(defrxx rxx-clock-range-regexp
+  (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp)) (cons from to))
 
 (assert (equal (rxx-parse rxx-clock-range-regexp "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '(1283254980.0 . 1283276580.0)))
 (assert (equal (rxx-parse rxx-clock-range-regexp "CLOCK:[2010-08-31 Tue 07:43]--<2010-08-31 Tue 13:43>") '(1283254980.0 . 1283276580.0)))
 
-
-(defconst rxx-clock-range-regexp2
-  (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp))
-       (cons (rxx-match-val '(from time .. .. to time)) to)))
+(defrxx rxx-clock-range-regexp2
+  (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp))
+  (cons (rxx-match-val '(from time .. .. to time)) to))
 
 (assert (equal (rxx-parse rxx-clock-range-regexp2 "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '("2010-08-31 Tue 13:43" . 1283276580.0)))
 
