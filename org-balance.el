@@ -334,7 +334,7 @@ Adapted from `org-closed-in-range' from org.el."
 				       (org-balance-inactive-timestamp-regexp time))
   time)
 
-(defun org-balance-sum-org-property (prop tstart tend)
+(defun org-balance-sum-org-property (prop tstart tend unit)
   "Fast summing of property.  Returns the sum of the property under the current restriction.
 
 Originally adapted from `org-closed-in-range'.
@@ -346,7 +346,7 @@ Originally adapted from `org-closed-in-range'.
   (save-excursion
     (save-match-data
       (goto-char (point-min))
-      (let (prop-sum
+      (let ((prop-sum (org-balance-make-valu 0 unit))
 	    (prop-default (concat "default_" prop)))
 	(rxx-do-search-fwd org-balance-closed-regexp closed-time
 	  (when (and (<= tstart closed-time) (<= closed-time tend))
@@ -368,17 +368,17 @@ Originally adapted from `org-closed-in-range'.
 			 (incf org-balance-num-warnings)
 			 nil))))
 		  (when prop-valu-here
-		    (setq prop-sum (if (not prop-sum) prop-valu-here (org-balance-add-valu prop-sum prop-valu-here)))))))))
+		    (setq prop-sum (org-balance-add-valu prop-sum prop-valu-here))))))))
 	prop-sum))))
 
-(defun org-balance-sum-property (prop tstart tend)
+(defun org-balance-sum-property (prop tstart tend unit)
   "Sum a property in the specified period, within the current file restriction."
   (message "at %s summing %s" (point) prop)
   (cond ((string= prop "clockedtime")
 	 (org-balance-make-valu (org-balance-clock-sum tstart tend) 'minutes))
 	((string= prop "actualtime")
 	 (org-balance-make-valu (- tend tstart) 'seconds))
-	(t (org-balance-sum-org-property prop tstart tend))))
+	(t (org-balance-sum-org-property prop tstart tend unit))))
 
 (defun org-balance-record-time (&optional hours ago)
   "Record the given amount of time as time spent under the current org entry.
@@ -441,17 +441,42 @@ as you were doing it.
 (defstruct org-balance-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
 
 (defrxx org-balance-prop-name-regexp (1+ alnum))
-(defrxx org-balance-link-regexp (eval-regexp (rxx-make-shy org-any-link-re)))
+(defrxx org-balance-link-regexp (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
+(defstruct org-balance-prop prop link)
 (defrxx org-balance-prop-regexp (seq (org-balance-prop-name-regexp prop)
 				     (opt (1+ blank) "at" (1+ blank) (org-balance-link-regexp link)))
-  (cons prop link))
+  (make-org-balance-prop :prop prop :link link))
+
+(defstruct org-balance-prop-ratio num denom)
 (defrxx org-balance-prop-ratio-regexp
   (seq (org-balance-prop-regexp num) (optional (0+ blank) "/" (0+ blank) (org-balance-prop-regexp denom)))
-  (cons num (or denom (cons "clockedtime" nil))))
+  (make-org-balance-prop-ratio :num num :denom (or denom (make-org-balance-prop :prop "actualtime"))))
 
 (defrxx org-balance-goal-prefix-regexp
-  (seq bol (1+ "*") (1+ blank) (optional "[#" upper "]" (1+ blank)) (eval org-balance-goal-todo-keyword) (1+ blank)
-       (named-group goal-name (1+ alnum)) (0+ blank) ":" (0+ blank)) goal-name)
+  (seq bol (1+ "*") (1+ blank) (eval org-balance-goal-todo-keyword) (1+ blank) (optional "[#" upper "]" (1+ blank))
+       (org-balance-prop-ratio-regexp prop-ratio) (0+ blank) ":" (0+ blank)) prop-ratio)
+
+(defun org-balance-compute-actual-prop (prop tstart tend unit)
+  (message "computing prop %s at %s" prop (point))
+  (save-excursion
+    (save-window-excursion
+      (save-match-data
+	(when (org-balance-prop-link prop)
+	  (let ((org-link-search-must-match-exact-headline t))
+	    (org-open-at-point 'in-emacs)))
+	(org-balance-sum-property (org-balance-prop-prop prop) tstart tend unit)))))
+
+(defun org-balance-compute-actual-prop-ratio (prop-ratio tstart tend parsed-goal)
+  (message "computing prop-ratio %s at %s for goal %s" prop-ratio (point) parsed-goal)
+  (org-balance-convert-valu-ratio
+   (make-org-balance-valu-ratio
+    :num (org-balance-compute-actual-prop (org-balance-prop-ratio-num prop-ratio) tstart tend
+					  (org-balance-valu-unit (org-balance-goal-numer-min parsed-goal)))
+    :denom (org-balance-compute-actual-prop (org-balance-prop-ratio-denom prop-ratio) tstart tend
+					    (org-balance-valu-unit (org-balance-goal-denom parsed-goal))))
+   (make-org-balance-valu-ratio
+    :num (org-balance-goal-numer-min parsed-goal)
+    :denom (org-balance-goal-denom parsed-goal))))
 
 (defun* org-balance-compute-goal-deltas2 (&key goals tstart tend)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
@@ -468,7 +493,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 	(save-match-data
 	  (let ((org-balance-num-warnings 0) goal-deltas)
 	    ;; FIXME if goals specified, make regexp for them
-	      (rxx-do-search-fwd org-balance-goal-prefix-regexp goal-name-here
+	      (rxx-do-search-fwd org-balance-goal-prefix-regexp prop-ratio
 		(let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
 		       (parsed-goal
 			(condition-case err
@@ -499,62 +524,47 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      (outline-up-heading 1 'invisible-ok))
 			    (org-narrow-to-subtree)
 			    (goto-char (point-min))
-			    (let* ((sum-here
-				    (org-balance-sum-property goal-name-here tstart tend)))
-			      (message "sum-here is %s" sum-here)
-			      (unless sum-here
-				(setq sum-here (org-balance-make-valu
-						0
-						(org-balance-valu-unit (org-balance-goal-numer-min parsed-goal)))))
-			      (let ((actual
-				     (org-balance-convert-valu-ratio
-				      (make-org-balance-valu-ratio
-				       :num
-				       sum-here
-				       :denom days-in-interval)
-				      (make-org-balance-valu-ratio
-				       :num (org-balance-goal-numer-min parsed-goal)
-				       :denom (org-balance-goal-denom parsed-goal)))))
-				
-				(let* ( (polarity (or (org-balance-goal-polarity parsed-goal)
-						      (cdr (assoc-string goal-name-here org-balance-default-polarity))))
-					(margin (or (org-balance-goal-margin parsed-goal)
-						    org-balance-default-margin-percent))
-					(goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
-					(goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
-					(range-min (- goal-min
-						      (if (numberp margin)
-							  (* (/ (float margin) 100.0) goal-min)
-							(org-balance-valu-val margin))))
-					
-					(range-max (+ goal-max
-						      (if (numberp margin)
-							  (* (/ (float margin) 100.0) goal-max)
-							(org-balance-valu-val margin))))
-					
-					(actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual))))
-				  
-				  (setq delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
-							((< range-max actual-num)
-							 (if (eq polarity 'atleast)
-							     (- actual-num goal-max)
-							   (- goal-max actual-num)))
-							((< actual-num range-min)
-							 (if (eq polarity 'atmost)
-							     (- goal-min actual-num)
-							   (- actual-num goal-min))))
-					delta-percent
-					(* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min)))))))))
-			(cond ((< delta-val 0) (incf num-under))
-			      ((> delta-val 0) (incf num-over))
-			      ((= delta-val 0) (incf num-met)))
-			(org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
-			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))
-			;; FIXME: include in goal_updated the period for which it was updated.
-			(org-entry-put (point) "goal_updated" (format-time-string
-							       (org-time-stamp-format 'long 'inactive)
-							       (current-time))))))))))))
-    (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
+			    (let* ((actual (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))
+				   (dummy (message "actual is %s" actual))
+				   (polarity (or (org-balance-goal-polarity parsed-goal)
+						(cdr (assoc-string (org-balance-prop-prop (org-balance-prop-ratio-num  prop-ratio)) org-balance-default-polarity))))
+				   (margin (or (org-balance-goal-margin parsed-goal)
+					       org-balance-default-margin-percent))
+				   (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
+				   (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
+				   (range-min (- goal-min
+						 (if (numberp margin)
+						     (* (/ (float margin) 100.0) goal-min)
+						   (org-balance-valu-val margin))))
+				   
+				   (range-max (+ goal-max
+						 (if (numberp margin)
+						     (* (/ (float margin) 100.0) goal-max)
+						   (org-balance-valu-val margin))))
+				   
+				   (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual))))
+			      
+			      (setq delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+						    ((< range-max actual-num)
+						     (if (eq polarity 'atleast)
+							 (- actual-num goal-max)
+						       (- goal-max actual-num)))
+						    ((< actual-num range-min)
+						     (if (eq polarity 'atmost)
+							 (- goal-min actual-num)
+						       (- actual-num goal-min))))
+				    delta-percent
+				    (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min))))))))
+		      (cond ((< delta-val 0) (incf num-under))
+			    ((> delta-val 0) (incf num-over))
+			    ((= delta-val 0) (incf num-met)))
+		      (org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
+		      (org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))
+		      ;; FIXME: include in goal_updated the period for which it was updated.
+		      (org-entry-put (point) "goal_updated" (format-time-string
+							     (org-time-stamp-format 'long 'inactive)
+							     (current-time)))))))))))
+	  (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
 (defun org-balance-do () (interactive) (org-balance-compute-goal-deltas2))
 
@@ -952,6 +962,12 @@ changing only the numerator."
 	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	      (error "No goal found at link taget"))
 	    (org-balance-scale-goal result (org-balance-parse-goal-or-link-at-point))))))))
+
+
+(defun org-balance-remove-props ()
+  (interactive)
+  (dolist (prop '("goal_delta_val" "goal_delta_percent" "goal_updated"))
+    (org-delete-property-globally prop)))
 
 (provide 'org-balance)
 
