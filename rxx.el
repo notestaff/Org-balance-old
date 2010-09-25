@@ -481,6 +481,7 @@ For detailed description, see `rxx'.
 	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				     (eval-regexp . (rxx-process-eval-regexp 1 1))
 				     (shy-grp . seq)
+				     (sep-by . (rxx-process-sep-by 1 nil))
 				     (recurse . (rxx-process-recurse 1 nil))
 				     (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
 				     (named-group . named-grp) (shy-group . shy-grp)
@@ -503,6 +504,24 @@ For detailed description, see `rxx'.
 		     )))
      (put-rxx-info regexp rxx-info)
      (rxx-replace-posix regexp))))
+
+(defun rxx-process-sep-by (form)
+  "Process the sep-by form"
+  (let ((separator (second form)))
+    (rx-form
+     (apply 'append
+	    (list
+	     (list 'seq (third form))
+
+	     ;; FIXME: if the first few are optional then need to put blanks inside each optional.
+	     ;; and _not_ have a blank in front of the first non-optional arg.
+
+	     ;; so, need to split the list into optional and non-optional and treat them differently.
+	     (apply 'append (mapcar
+			     (lambda (x)
+			       (if (and (consp x) (memq (first x) '(opt optional zero-or-one)))
+				   (rxx-dbg (list (append (list (first x) separator) (cdr x))))
+				 (list separator x))) (cdddr form))))))))
 
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
 
