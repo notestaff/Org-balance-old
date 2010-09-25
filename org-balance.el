@@ -451,7 +451,7 @@ as you were doing it.
 					 (cons prop link)))
   (defconst org-balance-prop-ratio-regexp
     (rxx (seq (org-balance-prop-regexp num) (optional (0+ blank) "/" (0+ blank) (org-balance-prop-regexp denom)))
-	 (list num (or (rxx-dbg denom) (list "clockedtime" nil))))))
+	 (cons num (or denom (cons "clockedtime" nil))))))
 
 (defconst org-balance-goal-prefix-regexp
   (rxx (seq bol (1+ "*") (1+ blank) (optional "[#" upper "]" (1+ blank)) (eval org-balance-goal-todo-keyword) (1+ blank)
@@ -548,6 +548,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      ((= delta-val 0) (incf num-met)))
 			(org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
 			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))
+			;; FIXME: include in goal_updated the period for which it was updated.
 			(org-entry-put (point) "goal_updated" (format-time-string
 							       (org-time-stamp-format 'long 'inactive)
 							       (current-time))))))))))))
@@ -621,16 +622,15 @@ When called repeatedly, scroll the window that is displaying the buffer."
 ;; (amount per day).  There is also code to convert from the uniform representation back to the user's original
 ;; unit for display (e.g. from "8.57 minutes per day" to "1 hour a week").
 
-(eval-when-compile
+(eval-and-compile
   (defconst org-balance-units
     '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
 	       (workweek . 7200)
 	       (month . 43200) (year . 525600) (bluemoon 1e12)))
       (money . ((dollar . 1) (cent . .01) (k . 1000)))
-      (count . ((item . 1) (time . 1))))))
+      (count . ((item . 1) (time . 1)))))
   
 ;; for each unit, add plural form: make "seconds" mean the same thing as "second"
-(eval-when-compile
   (defconst org-balance-units
     (mapcar
      (lambda (dimension-info)
@@ -641,10 +641,9 @@ When called repeatedly, scroll the window that is displaying the buffer."
 	       (lambda (unit-info)
 		 (list unit-info (cons (intern (concat (symbol-name (car unit-info)) "s")) (cdr unit-info))))
 	       (cdr dimension-info)))))
-       org-balance-units)))
+       org-balance-units))
 
 ;; var: org-balance-unit2dim-alist - assoc list mapping each unit to its dimension (time, money, count, ...)
-(eval-when-compile
   (defconst org-balance-unit2dim-alist
     (apply
      'append
