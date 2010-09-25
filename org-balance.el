@@ -63,9 +63,7 @@
 (require 'org-compat)
 (require 'org-macs)
 (require 'rxx)
-(eval-when-compile
-  (require 'cl)
-  )
+(eval-when-compile (require 'cl))
 
 (defvar org-clock-report-include-clocking-task)
 
@@ -299,15 +297,14 @@ Adapted from `org-closed-in-range' from org.el."
     ;; make tree, check each match with the callback
     (message "%s matches here" (org-occur "CLOSED: +\\[\\(.*?\\)\\]" nil callback))) )
 
-(eval-when-compile
-  (defconst org-balance-inactive-timestamp-regexp (rxx (seq "[" (named-grp time (1+ nonl)) "]" )
-						       (org-float-time (apply 'encode-time (org-parse-time-string time))))))
+(defrxx org-balance-inactive-timestamp-regexp (seq "[" (named-grp time (1+ nonl)) "]" )
+  (org-float-time (apply 'encode-time (org-parse-time-string time))))
 
-(defconst org-balance-clock-regexp (rxx (seq bol (0+ blank) (eval org-clock-string) (0+ blank)
-					     (org-balance-inactive-timestamp-regexp from) (1+ "-")
-					     (org-balance-inactive-timestamp-regexp to)
-					     " => " (1+ nonl))
-					(cons from to)))
+(defrxx org-balance-clock-regexp (seq bol (0+ blank) (eval org-clock-string) (0+ blank)
+				      (org-balance-inactive-timestamp-regexp from) (1+ "-")
+				      (org-balance-inactive-timestamp-regexp to)
+				      " => " (1+ nonl))
+  (cons from to))
 
 (defun org-balance-clock-sum (tstart tend)
   "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
@@ -333,9 +330,9 @@ Adapted from `org-closed-in-range' from org.el."
 	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
     total-minutes))
 
-(defconst org-balance-closed-regexp (rxx (seq bol (0+ blank) (eval org-closed-string) (1+ blank)
-					      (org-balance-inactive-timestamp-regexp time))
-					 time))
+(defrxx org-balance-closed-regexp (seq bol (0+ blank) (eval org-closed-string) (1+ blank)
+				       (org-balance-inactive-timestamp-regexp time))
+  time)
 
 (defun org-balance-sum-org-property (prop tstart tend)
   "Fast summing of property.  Returns the sum of the property under the current restriction.
@@ -436,26 +433,25 @@ as you were doing it.
       (insert " => " (format "%2d:%02d" h m)))))
 
 
-(eval-when-compile (defconst org-balance-goal-todo-keyword "GOAL"))
+(defrxxconst org-balance-goal-todo-keyword "GOAL")
 
 ;; struct: org-balance-goal-delta - information about how well one goal is being met.
 ;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
 ;;      presents it in a list.
 (defstruct org-balance-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
 
-(eval-when-compile
-  (defconst org-balance-prop-name-regexp (rxx (1+ alnum)))
-  (defconst org-balance-link-regexp (rxx (eval-regexp (rxx-make-shy org-any-link-re))))
-  (defconst org-balance-prop-regexp (rxx (seq (org-balance-prop-name-regexp prop)
-					      (opt (1+ blank) "at" (1+ blank) (org-balance-link-regexp link)))
-					 (cons prop link)))
-  (defconst org-balance-prop-ratio-regexp
-    (rxx (seq (org-balance-prop-regexp num) (optional (0+ blank) "/" (0+ blank) (org-balance-prop-regexp denom)))
-	 (cons num (or denom (cons "clockedtime" nil))))))
+(defrxx org-balance-prop-name-regexp (1+ alnum))
+(defrxx org-balance-link-regexp (eval-regexp (rxx-make-shy org-any-link-re)))
+(defrxx org-balance-prop-regexp (seq (org-balance-prop-name-regexp prop)
+				     (opt (1+ blank) "at" (1+ blank) (org-balance-link-regexp link)))
+  (cons prop link))
+(defrxx org-balance-prop-ratio-regexp
+  (seq (org-balance-prop-regexp num) (optional (0+ blank) "/" (0+ blank) (org-balance-prop-regexp denom)))
+  (cons num (or denom (cons "clockedtime" nil))))
 
-(defconst org-balance-goal-prefix-regexp
-  (rxx (seq bol (1+ "*") (1+ blank) (optional "[#" upper "]" (1+ blank)) (eval org-balance-goal-todo-keyword) (1+ blank)
-	    (named-group goal-name (1+ alnum)) (0+ blank) ":" (0+ blank)) goal-name))
+(defrxx org-balance-goal-prefix-regexp
+  (seq bol (1+ "*") (1+ blank) (optional "[#" upper "]" (1+ blank)) (eval org-balance-goal-todo-keyword) (1+ blank)
+       (named-group goal-name (1+ alnum)) (0+ blank) ":" (0+ blank)) goal-name)
 
 (defun* org-balance-compute-goal-deltas2 (&key goals tstart tend)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
@@ -480,7 +476,13 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			  (error
 			   (incf num-errors)
 			   (message "Error parsing %s" goal-def-here)
-			   (save-match-data (org-toggle-tag "goal_error" 'on))
+			   (save-match-data
+			     (org-toggle-tag "goal_error" 'on)
+			     (org-entry-delete nil "goal_delta_val")
+			     (org-entry-delete nil "goal_delta_percent")
+			     (org-entry-put (point) "goal_updated" (format-time-string
+								    (org-time-stamp-format 'long 'inactive)
+								    (current-time))))
 			   nil))))
 		  (when parsed-goal
 		    (save-match-data (org-toggle-tag "goal_error" 'off))
@@ -552,7 +554,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(org-entry-put (point) "goal_updated" (format-time-string
 							       (org-time-stamp-format 'long 'inactive)
 							       (current-time))))))))))))
-    (message "err %d under %d met %d over %d" num-errors num-under num-met num-over)))
+    (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
 (defun org-balance-do () (interactive) (org-balance-compute-goal-deltas2))
 
@@ -622,35 +624,34 @@ When called repeatedly, scroll the window that is displaying the buffer."
 ;; (amount per day).  There is also code to convert from the uniform representation back to the user's original
 ;; unit for display (e.g. from "8.57 minutes per day" to "1 hour a week").
 
-(eval-and-compile
-  (defconst org-balance-units
-    '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
-	       (workweek . 7200)
-	       (month . 43200) (year . 525600) (bluemoon 1e12)))
-      (money . ((dollar . 1) (cent . .01) (k . 1000)))
-      (count . ((item . 1) (time . 1)))))
-  
+(defrxxconst org-balance-units
+  '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
+	     (workweek . 7200)
+	     (month . 43200) (year . 525600) (bluemoon 1e12)))
+    (money . ((dollar . 1) (cent . .01) (k . 1000)))
+    (count . ((item . 1) (time . 1)))))
+
 ;; for each unit, add plural form: make "seconds" mean the same thing as "second"
-  (defconst org-balance-units
-    (mapcar
-     (lambda (dimension-info)
-       (cons (car dimension-info)
-	     (apply
-	      'append
-	      (mapcar
-	       (lambda (unit-info)
-		 (list unit-info (cons (intern (concat (symbol-name (car unit-info)) "s")) (cdr unit-info))))
-	       (cdr dimension-info)))))
-       org-balance-units))
+(defrxxconst org-balance-units
+  (mapcar
+   (lambda (dimension-info)
+     (cons (car dimension-info)
+	   (apply
+	    'append
+	    (mapcar
+	     (lambda (unit-info)
+	       (list unit-info (cons (intern (concat (symbol-name (car unit-info)) "s")) (cdr unit-info))))
+	     (cdr dimension-info)))))
+   org-balance-units))
 
 ;; var: org-balance-unit2dim-alist - assoc list mapping each unit to its dimension (time, money, count, ...)
-  (defconst org-balance-unit2dim-alist
-    (apply
-     'append
-     (mapcar
-      (lambda (dimension-info)
-	(mapcar (lambda (unit-info) (cons (car unit-info) (car dimension-info))) (cdr dimension-info)))
-      org-balance-units))))
+(defrxxconst org-balance-unit2dim-alist
+  (apply
+   'append
+   (mapcar
+    (lambda (dimension-info)
+      (mapcar (lambda (unit-info) (cons (car unit-info) (car dimension-info))) (cdr dimension-info)))
+    org-balance-units)))
 
 (put 'org-balance-error 'error-conditions '(error org-balance-errors org-balance-error))
 (put 'org-balance-error 'error-message "org-balance error")
@@ -726,23 +727,21 @@ we convert to the specified multiples of new unit."
 (put 'org-balance-parse-error 'error-conditions '(error org-balance-errors org-balance-parse-error))
 (put 'org-balance-parse-error 'error-message "org-balance: Could not parse")
 
-(eval-when-compile
-  (defconst org-balance-number-names
-    '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
-      (seven . 7) (eight . 8) (nine . 9)
-      (ten . 10)))
+(defrxxconst org-balance-number-names
+  '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
+    (seven . 7) (eight . 8) (nine . 9)
+    (ten . 10)))
 
-  (defconst org-balance-number-name-regexp
-    (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
-	 (lambda (match) (cdr-safe (assoc-string match org-balance-number-names)))))
+(defrxx org-balance-number-name-regexp
+  (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
+  (lambda (match) (cdr-safe (assoc-string match org-balance-number-names))))
 
-  (defconst org-balance-number-regexp
-    (rxx
-     (seq
-      (zero-or-more whitespace)
-      
-      (or
-       ;; either an english number name
+(defrxx org-balance-number-regexp
+  (seq
+   (zero-or-more whitespace)
+   
+   (or
+    ;; either an english number name
        (org-balance-number-name-regexp named-number)
        
        ;; or a floating-point number, possibly in scientific notation
@@ -756,13 +755,12 @@ we convert to the specified multiples of new unit."
 	 (seq (any "eE")
 	      (optional (any "+-"))
 	      (one-or-more (any digit))))))
-      
-      (zero-or-more whitespace))
-     (lambda (match)
-       (or named-number
-	   (string-to-number match)))
-     "number")
-    "Regular expression for a floating-point number"))
+   
+   (zero-or-more whitespace))
+  (lambda (match)
+    (or named-number
+	(string-to-number match)))
+  "number")
 
 (defun org-balance-is-valid-number-p (s)
   "Test if s is a number or a string representing a valid number (ignoring leading or trailing whitespace).
@@ -783,34 +781,30 @@ by whitespace, it throws an error rather than silently returning zero.
 
 (defalias 'org-balance-parse-number 'org-balance-string-to-number)
 
-(eval-when-compile
-  (defconst org-balance-number-range-regexp
-    (rxx
-     (seq
-      (org-balance-number-regexp range-start)
-      (optional "-" (org-balance-number-regexp range-end)))
-     (cons range-start (or range-end range-start))))
+(defrxx org-balance-number-range-regexp
+  (seq
+   (org-balance-number-regexp range-start)
+   (optional "-" (org-balance-number-regexp range-end)))
+  (cons range-start (or range-end range-start)))
 
-  (defvar org-balance-parse-valu-hooks nil
-    "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
+(defvar org-balance-parse-valu-hooks nil
+  "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
 such as $5 into the canonical form `5 dollars'.  Each hook must take a string as an argument and return either an
 `org-balance-valu' struct if it successfully parsed the string, or nil if it didn't.")
 
-  (defconst org-balance-unit-regexp
-		    (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist))))))
+(defrxx org-balance-unit-regexp
+  (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist)))))
 
-  (defconst
+(defrxx
     org-balance-valu-regexp
-    (rxx
-     ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
-     ;; or an optional number (assumed to be 1 if not given) followed by a unit.
-     ;; But either a number or a unit must be given.
-     (or (seq (optional (org-balance-number-regexp val))
-	      (org-balance-unit-regexp unit))
-	 (seq val (optional unit)))
+    ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
+    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+    ;; But either a number or a unit must be given.
+    (or (seq (optional (org-balance-number-regexp val))
+	     (org-balance-unit-regexp unit))
+	(seq val (optional unit)))
      (org-balance-make-valu (or val 1) (or unit "item"))
      "value with unit")
-    "regexp for value with a unit, e.g. '1 day'"))
   
 (defun org-balance-parse-valu (valu-str)
   "Given a string representing a value with units, parse it into an org-balance-valu structure."
@@ -818,29 +812,26 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
    (rxx-parse org-balance-valu-regexp valu-str)))
 
-(eval-when-compile
-  (defconst
-    org-balance-valu-range-regexp
-    (rxx
-     ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
-     ;; or an optional number (assumed to be 1 if not given) followed by a unit.
-     ;; But either a number or a unit must be given.
-     (or (seq (optional (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
-	      (org-balance-unit-regexp unit))
-	 (seq range (optional (one-or-more whitespace) unit)))
-     (let ((number-range (or range (cons 1 1)))
-	   (unit (or unit "item")))
-       (cons (org-balance-make-valu (car number-range) unit)
-	     (org-balance-make-valu (cdr number-range) unit))))
-    "value range"))
+(defrxx
+  org-balance-valu-range-regexp
+  ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
+  ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+  ;; But either a number or a unit must be given.
+  (or (seq (optional (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
+	   (org-balance-unit-regexp unit))
+      (seq range (optional (one-or-more whitespace) unit)))
+  (let ((number-range (or range (cons 1 1)))
+	(unit (or unit "item")))
+    (cons (org-balance-make-valu (car number-range) unit)
+	  (org-balance-make-valu (cdr number-range) unit)))
+  "value range")
 
 (defun org-balance-parse-valu-range (valu-str)
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
   (rxx-parse org-balance-valu-range-regexp valu-str))
 
-(eval-when-compile
-  (defconst org-balance-ratio-words (list "per" "every" "each" "/" "a" "in a"))
-  (defconst org-balance-ratio-words-regexp (rxx (eval-regexp (regexp-opt org-balance-ratio-words 'words)))))
+(defrxxconst org-balance-ratio-words (list "per" "every" "each" "/" "a" "in a"))
+(defrxxconst org-balance-ratio-words-regexp (rxx (eval-regexp (regexp-opt org-balance-ratio-words 'words))))
 
 ;; Struct: org-balance-valu-ratio - a ratio of two valu's.
 (defstruct org-balance-valu-ratio num denom
@@ -885,60 +876,56 @@ changing only the numerator."
     result
   ))
 
-(eval-when-compile
-  (defconst org-balance-polarity-regexp
-    (rxx
-     (seq (zero-or-more whitespace)
-	  (or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
-	      (named-grp atleast (eval-regexp (regexp-opt (list "at least")))))
-	  (zero-or-more whitespace))
-     (if atmost 'atmost 'atleast)
-     "polarity"))
+(defrxx org-balance-polarity-regexp
+  (seq (zero-or-more whitespace)
+       (or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
+	   (named-grp atleast (eval-regexp (regexp-opt (list "at least")))))
+       (zero-or-more whitespace))
+  (if atmost 'atmost 'atleast)
+  "polarity")
   
-  (defconst org-balance-goal-regexp
-    (rxx
-     (seq
-      (0+ blank)
-      (optional
-       (seq (named-grp priority (regexp "\\[#[A-Z0-9]\\]")) (0+ blank)))
-      (optional (org-balance-polarity-regexp polarity))
-      (org-balance-valu-range-regexp numerator)
-      (1+ blank) (org-balance-ratio-words-regexp ratio-word) (1+ blank)
-      (org-balance-valu-regexp denominator)
-      (optional
-       ;; specify margin
-       (seq
-	(1+ blank) "+-" (0+ blank)
-	(or
-	 (seq (org-balance-number-regexp margin) (0+ blank) "%")
-	 (org-balance-valu-regexp margin))))
-      (0+ blank)
-      )
-     
-     (lambda (goal-str)
-       (make-org-balance-goal 
-	:numer-min (car numerator)
-	:numer-max (cdr numerator)
-	:denom denominator
-	:polarity polarity
-	:margin margin
-	:priority priority
-	:text goal-str
-	:ratio-word ratio-word)))
-    "value ratio goal")
+(defrxx org-balance-goal-regexp
+  (seq
+   (0+ blank)
+   (optional
+    (seq (named-grp priority (regexp "\\[#[A-Z0-9]\\]")) (0+ blank)))
+   (optional (org-balance-polarity-regexp polarity))
+   (org-balance-valu-range-regexp numerator)
+   (1+ blank) (org-balance-ratio-words-regexp ratio-word) (1+ blank)
+   (org-balance-valu-regexp denominator)
+   (optional
+    ;; specify margin
+    (seq
+     (1+ blank) "+-" (0+ blank)
+     (or
+      (seq (org-balance-number-regexp margin) (0+ blank) "%")
+      (org-balance-valu-regexp margin))))
+   (0+ blank))
+  
+  (lambda (goal-str)
+    (make-org-balance-goal 
+     :numer-min (car numerator)
+     :numer-max (cdr numerator)
+     :denom denominator
+     :polarity polarity
+     :margin margin
+     :priority priority
+     :text goal-str
+     :ratio-word ratio-word))
+  "value ratio goal")
 
-  (defconst org-balance-goal-link-regexp
-    (rxx (seq (org-balance-number-regexp factor)
-	      (1+ blank)
-	      "of"
-	      (1+ blank)
-	      org-balance-link-regexp)
-	 factor))
+(defrxx org-balance-goal-link-regexp
+  (seq (org-balance-number-regexp factor)
+       (1+ blank)
+       "of"
+       (1+ blank)
+       org-balance-link-regexp)
+  factor)
 
-  (defconst org-balance-goal-or-link-regexp
-    (rxx (or (org-balance-goal-regexp goal)
-	     (org-balance-goal-link-regexp link))
-	 (or goal link))))
+(defrxx org-balance-goal-or-link-regexp
+  (or (org-balance-goal-regexp goal)
+      (org-balance-goal-link-regexp link))
+  (or goal link))
 
 (defun org-balance-parse-goal-or-link-at-point ()
   "Parse goal or link at point"
