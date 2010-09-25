@@ -299,7 +299,7 @@ Adapted from `org-closed-in-range' from org.el."
     ;; make tree, check each match with the callback
     (message "%s matches here" (org-occur "CLOSED: +\\[\\(.*?\\)\\]" nil callback))) )
 
-(eval-and-compile
+(eval-when-compile
   (defconst org-balance-inactive-timestamp-regexp (rxx (seq "[" (named-grp time (1+ nonl)) "]" )
 						       (org-float-time (apply 'encode-time (org-parse-time-string time))))))
 
@@ -376,6 +376,7 @@ Originally adapted from `org-closed-in-range'.
 
 (defun org-balance-sum-property (prop tstart tend)
   "Sum a property in the specified period, within the current file restriction."
+  (message "at %s summing %s" (point) prop)
   (cond ((string= prop "clockedtime")
 	 (org-balance-make-valu (org-balance-clock-sum tstart tend) 'minutes))
 	((string= prop "actualtime")
@@ -435,16 +436,26 @@ as you were doing it.
       (insert " => " (format "%2d:%02d" h m)))))
 
 
-(eval-and-compile (defconst org-balance-goal-todo-keyword "GOAL"))
+(eval-when-compile (defconst org-balance-goal-todo-keyword "GOAL"))
 
 ;; struct: org-balance-goal-delta - information about how well one goal is being met.
 ;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
 ;;      presents it in a list.
 (defstruct org-balance-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
 
+(eval-when-compile
+  (defconst org-balance-prop-name-regexp (rxx (1+ alnum)))
+  (defconst org-balance-link-regexp (rxx (eval-regexp (rxx-make-shy org-any-link-re))))
+  (defconst org-balance-prop-regexp (rxx (seq (org-balance-prop-name-regexp prop)
+					      (opt (1+ blank) "at" (1+ blank) (org-balance-link-regexp link)))
+					 (cons prop link)))
+  (defconst org-balance-prop-ratio-regexp
+    (rxx (seq (org-balance-prop-regexp num) (optional (0+ blank) "/" (0+ blank) (org-balance-prop-regexp denom)))
+	 (list num (or (rxx-dbg denom) (list "clockedtime" nil))))))
+
 (defconst org-balance-goal-prefix-regexp
   (rxx (seq bol (1+ "*") (1+ blank) (optional "[#" upper "]" (1+ blank)) (eval org-balance-goal-todo-keyword) (1+ blank)
-	    (named-group goal-name (1+ alnum)) (1+ blank)) goal-name))
+	    (named-group goal-name (1+ alnum)) (0+ blank) ":" (0+ blank)) goal-name))
 
 (defun* org-balance-compute-goal-deltas2 (&key goals tstart tend)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
@@ -488,6 +499,11 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			    (goto-char (point-min))
 			    (let* ((sum-here
 				    (org-balance-sum-property goal-name-here tstart tend)))
+			      (message "sum-here is %s" sum-here)
+			      (unless sum-here
+				(setq sum-here (org-balance-make-valu
+						0
+						(org-balance-valu-unit (org-balance-goal-numer-min parsed-goal)))))
 			      (let ((actual
 				     (org-balance-convert-valu-ratio
 				      (make-org-balance-valu-ratio
@@ -531,8 +547,13 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      ((> delta-val 0) (incf num-over))
 			      ((= delta-val 0) (incf num-met)))
 			(org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
-			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent)))))))))))
+			(org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))
+			(org-entry-put (point) "goal_updated" (format-time-string
+							       (org-time-stamp-format 'long 'inactive)
+							       (current-time))))))))))))
     (message "err %d under %d met %d over %d" num-errors num-under num-met num-over)))
+
+(defun org-balance-do () (interactive) (org-balance-compute-goal-deltas2))
 
 (defun org-balance-save-amt-neglected (agenda-line)
   "Given an agenda line, save the 'neglect amount' value of the corresponding org entry
@@ -600,7 +621,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
 ;; (amount per day).  There is also code to convert from the uniform representation back to the user's original
 ;; unit for display (e.g. from "8.57 minutes per day" to "1 hour a week").
 
-(eval-and-compile
+(eval-when-compile
   (defconst org-balance-units
     '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
 	       (workweek . 7200)
@@ -609,7 +630,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
       (count . ((item . 1) (time . 1))))))
   
 ;; for each unit, add plural form: make "seconds" mean the same thing as "second"
-(eval-and-compile
+(eval-when-compile
   (defconst org-balance-units
     (mapcar
      (lambda (dimension-info)
@@ -623,7 +644,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
        org-balance-units)))
 
 ;; var: org-balance-unit2dim-alist - assoc list mapping each unit to its dimension (time, money, count, ...)
-(eval-and-compile
+(eval-when-compile
   (defconst org-balance-unit2dim-alist
     (apply
      'append
@@ -706,18 +727,16 @@ we convert to the specified multiples of new unit."
 (put 'org-balance-parse-error 'error-conditions '(error org-balance-errors org-balance-parse-error))
 (put 'org-balance-parse-error 'error-message "org-balance: Could not parse")
 
-(eval-and-compile
+(eval-when-compile
   (defconst org-balance-number-names
     '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
       (seven . 7) (eight . 8) (nine . 9)
-      (ten . 10))))
+      (ten . 10)))
 
-(eval-and-compile
   (defconst org-balance-number-name-regexp
     (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
-	 (lambda (match) (cdr-safe (assoc-string match org-balance-number-names))))))
+	 (lambda (match) (cdr-safe (assoc-string match org-balance-number-names)))))
 
-(eval-and-compile
   (defconst org-balance-number-regexp
     (rxx
      (seq
@@ -745,7 +764,6 @@ we convert to the specified multiples of new unit."
 	   (string-to-number match)))
      "number")
     "Regular expression for a floating-point number"))
-			
 
 (defun org-balance-is-valid-number-p (s)
   "Test if s is a number or a string representing a valid number (ignoring leading or trailing whitespace).
@@ -766,23 +784,22 @@ by whitespace, it throws an error rather than silently returning zero.
 
 (defalias 'org-balance-parse-number 'org-balance-string-to-number)
 
-(eval-and-compile
+(eval-when-compile
   (defconst org-balance-number-range-regexp
     (rxx
      (seq
       (org-balance-number-regexp range-start)
       (optional "-" (org-balance-number-regexp range-end)))
-     (cons range-start (or range-end range-start)))))
+     (cons range-start (or range-end range-start))))
 
-(defvar org-balance-parse-valu-hooks nil
-  "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
+  (defvar org-balance-parse-valu-hooks nil
+    "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
 such as $5 into the canonical form `5 dollars'.  Each hook must take a string as an argument and return either an
 `org-balance-valu' struct if it successfully parsed the string, or nil if it didn't.")
 
-(eval-and-compile (defconst org-balance-unit-regexp
-		    (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist)))))))
+  (defconst org-balance-unit-regexp
+		    (rxx (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist))))))
 
-(eval-and-compile
   (defconst
     org-balance-valu-regexp
     (rxx
@@ -795,7 +812,6 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
      (org-balance-make-valu (or val 1) (or unit "item"))
      "value with unit")
     "regexp for value with a unit, e.g. '1 day'"))
-
   
 (defun org-balance-parse-valu (valu-str)
   "Given a string representing a value with units, parse it into an org-balance-valu structure."
@@ -803,7 +819,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
    (rxx-parse org-balance-valu-regexp valu-str)))
 
-(eval-and-compile
+(eval-when-compile
   (defconst
     org-balance-valu-range-regexp
     (rxx
@@ -823,7 +839,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
   (rxx-parse org-balance-valu-range-regexp valu-str))
 
-(eval-and-compile
+(eval-when-compile
   (defconst org-balance-ratio-words (list "per" "every" "each" "/" "a" "in a"))
   (defconst org-balance-ratio-words-regexp (rxx (eval-regexp (regexp-opt org-balance-ratio-words 'words)))))
 
@@ -870,7 +886,7 @@ changing only the numerator."
     result
   ))
 
-(eval-and-compile
+(eval-when-compile
   (defconst org-balance-polarity-regexp
     (rxx
      (seq (zero-or-more whitespace)
@@ -917,7 +933,7 @@ changing only the numerator."
 	      (1+ blank)
 	      "of"
 	      (1+ blank)
-	      (eval-regexp org-any-link-re))
+	      org-balance-link-regexp)
 	 factor))
 
   (defconst org-balance-goal-or-link-regexp
@@ -945,7 +961,8 @@ changing only the numerator."
       (if (org-balance-goal-p result) result
 	(save-excursion
 	  (save-window-excursion
-	    (org-open-at-point 'in-emacs)
+	    (let ((org-link-search-must-match-exact-headline t))
+	      (org-open-at-point 'in-emacs))
 	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	      (error "No goal found at link taget"))
 	    (org-balance-scale-goal result (org-balance-parse-goal-or-link-at-point))))))))
