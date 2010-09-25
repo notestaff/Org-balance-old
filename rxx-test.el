@@ -3,16 +3,16 @@
 (eval-when-compile (require 'cl))
  (require 'rxx)
 
-(eval-and-compile (defconst number-regexp (rxx (one-or-more digit) string-to-number)))
+(eval-when-compile (defconst number-regexp (rxx (one-or-more digit) string-to-number)))
 
-(eval-and-compile (defconst fraction-regexp (rxx (seq (number-regexp numerator) "/" (number-regexp denominator))
+(eval-when-compile (defconst fraction-regexp (rxx (seq (number-regexp numerator) "/" (number-regexp denominator))
 						 (cons numerator denominator))))
 
 ;; (assert
 ;;  ;; issue: when compiling, the previous defs are not available.
 ;;  ;; so, need to make a macro that translates the whole thing into something
 ;;  ;; that at runtime does the right thing.
-;;  (equal (eval-and-compile
+;;  (equal (eval-when-compile
 ;; 	  (let* ((number-regexp (rxx (one-or-more digit) string-to-number))
 ;; 		 (fraction-regexp (rxx (seq (number-regexp numerator) "/" (number-regexp denominator))
 ;; 				       (cons numerator denominator)))
@@ -21,7 +21,7 @@
 ;; 				    (list rmin rmax))))
 ;; 	    (rxx-parse range-regexp "[(1/2)]--[(3/4)]"))) '((1 . 2) (3 . 4))))
 
-(eval-and-compile
+(eval-when-compile
   (defconst rxx-number-names
     '((once . 1) (twice . 2) (thrice . 3) (one . 1) (two . 2) (three . 3) (four . 4) (five . 5) (six . 6)
       (seven . 7) (eight . 8) (nine . 9)
@@ -107,7 +107,7 @@
 
 (assert (equal (rxx-parse rxx-valu-regexp "1 day") '(1 . "day")))
 
-(eval-and-compile
+(eval-when-compile
   (defconst
     rxx-valu-range-regexp
     (rxx
@@ -173,7 +173,7 @@
 
 (assert (equal (rxx-parse (rxx (seq (or (named-grp num (one-or-more digit)) (seq "hithere" (named-grp num)))  (named-backref num)) (string-to-number num)) "hithere1212") 12))
 ;;;borrowed from orgmode
-(eval-and-compile (defconst rxx-clock-string "CLOCK:"))
+(eval-when-compile (defconst rxx-clock-string "CLOCK:"))
 
 
 (defun rxx-parse-time-string (s &optional nodefault)
@@ -200,7 +200,7 @@ TIME defaults to the current time."
       (time-to-seconds (or time (current-time)))
     (float-time time)))
 
-(eval-and-compile
+(eval-when-compile
   (defconst rxx-clock-regexp
     (rxx (or (seq (named-grp left-bracket "<") (named-grp time (1+ (not (any ">")))) ">")
 	     (seq (named-grp left-bracket "[")
@@ -243,17 +243,17 @@ TIME defaults to the current time."
 				    (named-backref (para cifry))) (rxx-match-val '(para cifry))) "1b1") "1"))
 
 (assert (equal
-	 (eval-and-compile (let* ((re2 (rxx (seq "zz" (named-grp hru (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)))) hru)))
+	 (eval-when-compile (let* ((re2 (rxx (seq "zz" (named-grp hru (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)))) hru)))
 	   (rxx-parse re2 "zz1 2 3 "))) '("1 " "2 " "3 ")))
 
-;; (assert (equal (eval-and-compile (let* ((rexp (rxx (or (seq "(" (named-grp-recurs val rexp) ")")
+;; (assert (equal (eval-when-compile (let* ((rexp (rxx (or (seq "(" (named-grp-recurs val rexp) ")")
 ;; 				     (rxx-number-regexp val)) val))
 ;; 		      (rxx-recurs-depth 2)
 ;; 		      (rexp2 (rxx-to-string (rxx-info-form (get-rxx-info rexp)) '(cons val nil))))
 ;; 		 (rxx-parse rexp2 "(1)"))) '(1)))
 
 
-;; (eval-and-compile (let* ((op-regexp (rxx (or "+" "-" "*" "/") intern))
+;; (eval-when-compile (let* ((op-regexp (rxx (or "+" "-" "*" "/") intern))
 ;;        (rexp (rxx (or (seq "(" (named-grp-recurs val rexp) ")")
 ;; 		      (rxx-number-regexp valn)
 ;; 		      (seq (named-grp-recurs left rexp) (optional (op-regexp op)  (named-grp-recurs right rexp)))) (or val valn (funcall op left right)))
@@ -268,7 +268,7 @@ TIME defaults to the current time."
 ;	 (rxx-parse rexp "1+2")
 ;	 (let ((rxx-recurs-depth 2))
 ;	   (rxx-parse (rxx (eval-regexp rexp) theval) "1+2")))
-;; (eval-and-compile (let* ((number-regexp (rxx (one-or-more digit) string-to-number))
+;; (eval-when-compile (let* ((number-regexp (rxx (one-or-more digit) string-to-number))
 ;;        (fraction-regexp (rxx (seq (named-grp numerator number-regexp) "/" (named-grp denominator number-regexp))
 ;; 			     (cons numerator denominator)))
 ;;        (paren-regexp (rxx (seq "(" (named-grp val fraction-regexp) ")") val))
@@ -281,7 +281,7 @@ TIME defaults to the current time."
 ;; 		      (expr (rxx exp)))
 ;; 		 (rxx-parse expr "+++1")) "+++1"))
 
-;; (assert (equal (eval-and-compile (let* ((num (rxx (1+ digit) string-to-number))
+;; (assert (equal (eval-when-compile (let* ((num (rxx (1+ digit) string-to-number))
 ;; 		      (exp (rxx (or (named-grp sub (recurse (seq "(" (exp a) (named-grp op (or "+" "-" "*" "/")) (exp b) ")"))) (num d)) (if (boundp 'a) (list a b d) (list d))))
 ;; 		      (rxx-recurs-depth 2)
 ;; 		      (expr (rxx exp (lambda (full) (list full sub d  (rxx-match-val '(sub op))))))
@@ -289,7 +289,7 @@ TIME defaults to the current time."
 ;; 		 (rxx-parse expr s 'part-ok))) '("(30+(42*57))" "(30+(42*57))" nil "+")))
 
 
-;; (assert (equal (eval-and-compile (let* ((num (rxx (1+ digit) string-to-number))
+;; (assert (equal (eval-when-compile (let* ((num (rxx (1+ digit) string-to-number))
 ;; 		      (exp (rxx (or (named-grp sub (recurse (seq "(" (exp a) (named-grp op (or "+" "-" "*" "/")) (exp b) ")"))) (num d)) (if (boundp 'a) (list a b d) (list d))))
 ;; 		      (rxx-recurs-depth 3)
 ;; 		      (expr (rxx exp (lambda (full) (list full sub d  (rxx-match-val '(sub op))))))
