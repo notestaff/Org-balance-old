@@ -1968,4 +1968,5 @@ appropriate parameters.
 (message "VVVVVVV%sVVVVVVVVV" (rxx-env-lookup 'num (rxx-info-env (get-rxx-info org-balance-prop-ratio-regexp))))
 
 (string-match org-any-link-re "[[#privet]]")
-(rxx-parse org-balance-prop-ratio-regexp "done at [[#here]]")
+(car (rxx-parse org-balance-prop-ratio-regexp "done at [[#here]] / spend at [[#there][see]]"))
+(equal (cons "hi" nil) (list "hi"))
