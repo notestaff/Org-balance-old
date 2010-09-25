@@ -732,9 +732,12 @@ the parsed result in case of match, or nil in case of mismatch."
 
 (defun rxx-add-font-lock-keywords ()
   (when (featurep 'font-lock)
+    (put 'defrxxconst 'doc-string-elt 3)
+    (put 'defrxx 'doc-string-elt 4)
     (font-lock-add-keywords
      nil
-     '(("\\<defrxx\\(?:const\\)?\\>" . font-lock-keyword-face)))))
+     '(("\\<\\(defrxx\\(?:const\\)?\\)[[:space:]]+\\([^[:space:]]+\\)" .
+	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
   
 (add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)
 
