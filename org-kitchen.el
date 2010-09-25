@@ -1970,3 +1970,11 @@ appropriate parameters.
 (string-match org-any-link-re "[[#privet]]")
 (car (rxx-parse org-balance-prop-ratio-regexp "done at [[#here]] / spend at [[#there][see]]"))
 (equal (cons "hi" nil) (list "hi"))
+(defun rxx-add-font-lock-keywords ()
+  (when (featurep 'font-lock)
+    (put 'defrxxconst 'doc-string-elt 3)
+    (put 'defrxx 'doc-string-elt 4)
+    (font-lock-add-keywords
+     nil
+     '(("\\<\\(?1:defrxx\\(?:const\\)?\\)\\>\\(?:[[:blank:]]+\\<\\(?2:[^[:blank:]]+\\)\\>\\)"
+	(1  font-lock-keyword-face) (2  font-lock-variable-face))))))
