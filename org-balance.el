@@ -457,7 +457,6 @@ as you were doing it.
        (org-balance-prop-ratio-regexp prop-ratio) (0+ blank) ":" (0+ blank)) prop-ratio)
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
-  (message "computing prop %s at %s" prop (point))
   (save-excursion
     (save-window-excursion
       (save-match-data
@@ -467,7 +466,6 @@ as you were doing it.
 	(org-balance-sum-property (org-balance-prop-prop prop) tstart tend unit)))))
 
 (defun org-balance-compute-actual-prop-ratio (prop-ratio tstart tend parsed-goal)
-  (message "computing prop-ratio %s at %s for goal %s" prop-ratio (point) parsed-goal)
   (org-balance-convert-valu-ratio
    (make-org-balance-valu-ratio
     :num (org-balance-compute-actual-prop (org-balance-prop-ratio-num prop-ratio) tstart tend
@@ -525,7 +523,6 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			    (org-narrow-to-subtree)
 			    (goto-char (point-min))
 			    (let* ((actual (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))
-				   (dummy (message "actual is %s" actual))
 				   (polarity (or (org-balance-goal-polarity parsed-goal)
 						(cdr (assoc-string (org-balance-prop-prop (org-balance-prop-ratio-num  prop-ratio)) org-balance-default-polarity))))
 				   (margin (or (org-balance-goal-margin parsed-goal)
