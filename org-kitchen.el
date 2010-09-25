@@ -1964,3 +1964,8 @@ appropriate parameters.
 			  (org-balance-hide-menu)))
 	
 	))))
+
+(message "VVVVVVV%sVVVVVVVVV" (rxx-env-lookup 'num (rxx-info-env (get-rxx-info org-balance-prop-ratio-regexp))))
+
+(string-match org-any-link-re "[[#privet]]")
+(rxx-parse org-balance-prop-ratio-regexp "done at [[#here]]")
