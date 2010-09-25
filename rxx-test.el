@@ -89,16 +89,16 @@
 (defrxx rxx-unit-regexp
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car rxx-unit2dim-alist)))))
 
-(defrxx
-  rxx-valu-regexp
-     ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
-     ;; or an optional number (assumed to be 1 if not given) followed by a unit.
-     ;; But either a number or a unit must be given.
-     (or (seq (optional (rxx-number-regexp val))
-	      (rxx-unit-regexp unit))
-	 (seq val (optional unit)))
-     (cons (or val 1) (or unit "item"))
-     "value with unit")
+
+(defrxx rxx-valu-regexp
+  ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
+  ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+  ;; But either a number or a unit must be given.
+  (or (seq (optional (rxx-number-regexp val))
+	   (rxx-unit-regexp unit))
+      (seq val (optional unit)))
+  (cons (or val 1) (or unit "item"))
+  "value with unit")
 
 (assert (equal (rxx-parse rxx-valu-regexp "1 day") '(1 . "day")))
 
