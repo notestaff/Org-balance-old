@@ -725,11 +725,11 @@ the parsed result in case of match, or nil in case of mismatch."
   re)
 
 (defmacro defrxx (var regexp &optional parser descr)
-  `(eval-when-compile
+  `(eval-and-compile
      (defconst ,var (rxx ,regexp ,parser ,descr) ,descr)))
 
 (defmacro defrxxconst (symbol initvalue &optional docstring)
-  `(eval-when-compile
+  `(eval-and-compile
      (defconst ,symbol ,initvalue ,docstring)))
 
 (provide 'rxx)
