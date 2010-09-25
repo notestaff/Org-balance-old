@@ -56,9 +56,7 @@
 ;; user-callable functions: rxx-named-grp-num, rxx, rxx-match-val, rxx-match-string, rxx-parse
 
 (require 'rx)
-(eval-when-compile
-  (require 'cl)
-)
+(eval-when-compile (require 'cl))
 
 (defmacro rxx-flet (bindings &rest body)
   "Temporarily replace functions, making previous definitions available.  Also, lets you use a function symbol
@@ -731,6 +729,18 @@ the parsed result in case of match, or nil in case of mismatch."
 (defmacro defrxxconst (symbol initvalue &optional docstring)
   `(eval-and-compile
      (defconst ,symbol ,initvalue ,docstring)))
+
+(defun rxx-add-font-lock-keywords ()
+  (when (featurep 'font-lock)
+    (font-lock-add-keywords
+     nil
+     '(("\\<defrxx\\(?:const\\)?\\>" . font-lock-keyword-face)))))
+  
+(add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)
+
+(defun rxx-unload-function ()
+  "Remove any hooks pointing to rxx functions"
+  (remove-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords))
 
 (provide 'rxx)
 
