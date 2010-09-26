@@ -389,7 +389,7 @@ as you were doing it.
 				       (org-balance-inactive-timestamp-regexp time))
   time)
 
-(defun org-balance-sum-org-property (prop tstart tend unit)
+(defun org-balance-sum-org-property (prop tstart tend unit prop-default-val)
   "Fast summing of property.  Returns the sum of the property under the current restriction.
 
 Originally adapted from `org-closed-in-range'.
@@ -398,6 +398,7 @@ Originally adapted from `org-closed-in-range'.
   ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (optional (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (declare (special org-balance-num-warnings))
+  (rxx-dbg "why" prop unit prop-default-val)
   (save-excursion
     (save-match-data
       (goto-char (point-min))
@@ -412,6 +413,7 @@ Originally adapted from `org-closed-in-range'.
 		    ((prop-here
 		      (or (org-entry-get nil prop)
 			  (org-entry-get nil prop-default 'inherit)
+			  prop-default-val
 			  "1"))
 		     (prop-valu-here
 		      (condition-case err
@@ -426,16 +428,20 @@ Originally adapted from `org-closed-in-range'.
 		    (setq prop-sum (org-balance-add-valu prop-sum prop-valu-here))))))))
 	prop-sum))))
 
-(defun org-balance-sum-property (prop tstart tend unit)
+(defun org-balance-sum-property (prop tstart tend unit prop-default-val)
   "Sum a property in the specified period, within the current file restriction."
-  (message "at %s summing %s" (point) prop)
-  (cond ((string= prop "clockedtime")
-	 (org-balance-make-valu (org-balance-clock-sum tstart tend) 'minutes))
-	((string= prop "actualtime")
-	 (org-balance-make-valu (- tend tstart) 'seconds))
-	(t (org-balance-sum-org-property prop tstart tend unit))))
+  (rxx-dbg "summing" (buffer-file-name (current-buffer)) (point) prop prop-default-val)
+  (let ((result 
+	 (cond ((string= prop "clockedtime")
+		(org-balance-make-valu (org-balance-clock-sum tstart tend) 'minutes))
+	       ((string= prop "actualtime")
+		(org-balance-make-valu (- tend tstart) 'seconds))
+	       (t (org-balance-sum-org-property prop tstart tend unit prop-default-val)))))
+    (rxx-dbg prop unit (buffer-file-name (current-buffer)) (point) result)))
 
 (defrxx org-balance-archive-regexp (seq bol (1+ blank) ":ARCHIVE:" (1+ blank) (named-grp loc (1+ nonl))) loc)
+
+(defstruct org-balance-loc file heading)
 
 (defun org-balance-find-all-archive-targets ()
   "Find all the places where an entry from the current subtree could have been archived"
@@ -448,16 +454,52 @@ Originally adapted from `org-closed-in-range'.
 	  (rxx-do-search-fwd org-balance-archive-regexp loc
 	    (message "found loc %s at %s" loc (point))
 	    (add-to-list 'archive-locs loc))
-	  (mapcar (lambda (loc) (cons (org-extract-archive-file loc)
-				      (org-extract-archive-heading loc)))
+	  (mapcar (lambda (loc) (make-org-balance-loc :file (org-extract-archive-file loc)
+						      :heading (org-extract-archive-heading loc)))
 		  archive-locs))))))
 
 (defun org-balance-sum-property-with-archives (prop tstart tend unit)
   "Sum a property in the specified period.  Include any entries that may have been archived from the current subtree."
-  
-  )
 
+  ;; special-case for actualtime: do not go to archives.
 
+  ;; if num and denom are for same subtree, go over the archives only once.
+  ;; (and determine which closed items intersect this).
+
+  (let ((prop-sum (org-balance-sum-property prop tstart tend unit nil))
+	(prop-default-val (org-entry-get nil (concat "default_" prop) 'inherit)))
+    (rxx-dbg (point) (buffer-file-name (current-buffer)) prop unit prop-sum prop-default-val)
+    (when (not (string= prop "actualtime"))
+      (let ((olpath-regexp (concat "^[ \t]+:ARCHIVE_OLPATH: " (mapconcat 'identity (org-get-outline-path) "/"))))
+	(dolist (loc (org-balance-find-all-archive-targets))
+	  (save-excursion
+	    (save-window-excursion
+	      (save-restriction
+		(save-match-data
+		  (when (org-balance-loc-file loc)
+		    (find-file (org-balance-loc-file loc)))
+		  (widen)
+		  (when (org-balance-loc-heading loc)
+		    (save-match-data
+		      (when (re-search-forward
+			     (concat "^" (regexp-quote (org-balance-loc-heading loc))
+				     (org-re "[ \t]*\\(:[[:alnum:]_@#%:]+:\\)?[ \t]*\\($\\|\r\\)"))
+			     nil t)
+			(progn
+			  (goto-char (match-beginning 0))
+			  (org-narrow-to-subtree)))))
+		  
+		  (goto-char (if org-archive-reversed-order (point-min) (point-max)))
+		  (while (funcall (if org-archive-reversed-order 're-search-forward 're-search-backward)
+				  olpath-regexp (not 'bounded) 'no-error)
+		    (save-excursion
+		      (save-restriction
+			(save-match-data
+			  (org-back-to-heading 'invisible-ok)
+			  (setq prop-sum
+				(org-balance-add-valu prop-sum (org-balance-sum-property prop tstart tend unit
+											 prop-default-val))))))))))))))
+    prop-sum))
 
 (defrxxconst org-balance-goal-todo-keyword "GOAL")
 
@@ -489,7 +531,7 @@ Originally adapted from `org-closed-in-range'.
 	(when (org-balance-prop-link prop)
 	  (let ((org-link-search-must-match-exact-headline t))
 	    (org-open-at-point 'in-emacs)))
-	(org-balance-sum-property (org-balance-prop-prop prop) tstart tend unit)))))
+	(org-balance-sum-property-with-archives (org-balance-prop-prop prop) tstart tend unit)))))
 
 (defun org-balance-compute-actual-prop-ratio (prop-ratio tstart tend parsed-goal)
   (org-balance-convert-valu-ratio
@@ -548,7 +590,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
       (goto-char (point-min))
       (save-restriction
 	(save-match-data
-	    ;; FIXME if goals specified, make regexp for them
+	    ;; FIXOPT if goals specified, make regexp for them
 	  (rxx-do-search-fwd org-balance-goal-prefix-regexp prop-ratio
 	    (let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
 		   (parsed-goal
@@ -597,7 +639,9 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 							   (current-time)))))))))))
 	(message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
-(defun org-balance-do () (interactive) (org-balance-compute-goal-deltas2))
+(defun org-balance-do () (interactive)
+  (message "--------------------------------")
+  (org-balance-compute-goal-deltas2))
 
 (defun org-balance-save-amt-neglected (agenda-line)
   "Given an agenda line, save the 'neglect amount' value of the corresponding org entry
@@ -882,6 +926,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 (defun org-balance-convert-valu-ratio (old-valu-ratio new-valu-ratio)
   "Convert a valu ratio to new units, e.g. minutes per day to hours per week.  We keep the denominator of the new ratio,
 changing only the numerator."
+  (rxx-dbg old-valu-ratio new-valu-ratio)
   (let ((new-num (org-balance-valu-ratio-num new-valu-ratio))
 	(new-denom (org-balance-valu-ratio-denom new-valu-ratio)))
     (make-org-balance-valu-ratio
