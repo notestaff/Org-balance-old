@@ -502,6 +502,39 @@ Originally adapted from `org-closed-in-range'.
     :num (org-balance-goal-numer-min parsed-goal)
     :denom (org-balance-goal-denom parsed-goal))))
 
+(defun org-balance-compute-delta (parsed-goal prop-ratio actual)
+  (let* ((polarity (or (org-balance-goal-polarity parsed-goal)
+		       (cdr (assoc-string (org-balance-prop-prop
+					   (org-balance-prop-ratio-num  prop-ratio))
+					  org-balance-default-polarity))))
+	 (margin (or (org-balance-goal-margin parsed-goal)
+		     org-balance-default-margin-percent))
+	 (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
+	 (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
+	 (range-min (- goal-min
+		       (if (numberp margin)
+			   (* (/ (float margin) 100.0) goal-min)
+			 (org-balance-valu-val margin))))
+	 
+	 (range-max (+ goal-max
+		       (if (numberp margin)
+			   (* (/ (float margin) 100.0) goal-max)
+			 (org-balance-valu-val margin))))
+	 
+	 (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
+	 (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+			  ((< range-max actual-num)
+			   (if (eq polarity 'atleast)
+			       (- actual-num goal-max)
+			     (- goal-max actual-num)))
+			  ((< actual-num range-min)
+			   (if (eq polarity 'atmost)
+			       (- goal-min actual-num)
+			     (- actual-num goal-min)))))
+	 (delta-percent
+	  (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min)))))
+    (cons delta-val delta-percent)))
+
 (defun* org-balance-compute-goal-deltas2 (&key goals tstart tend)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
 resource GOAL toward that goal in the period between TSTART and TEND.  Call the callback with the value.
@@ -515,82 +548,54 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
       (goto-char (point-min))
       (save-restriction
 	(save-match-data
-	  (let ((org-balance-num-warnings 0) goal-deltas)
 	    ;; FIXME if goals specified, make regexp for them
-	      (rxx-do-search-fwd org-balance-goal-prefix-regexp prop-ratio
-		(let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
-		       (parsed-goal
-			(condition-case err
-			    (org-balance-parse-goal-or-link-at-point)
-			  (error
-			   (incf num-errors)
-			   (message "Error parsing %s" goal-def-here)
-			   (save-match-data
-			     (org-toggle-tag "goal_error" 'on)
-			     (org-entry-delete nil "goal_delta_val")
-			     (org-entry-delete nil "goal_delta_percent")
-			     (org-entry-put (point) "goal_updated" (format-time-string
-								    (org-time-stamp-format 'long 'inactive)
-								    (current-time))))
-			   nil))))
-		  (when parsed-goal
-		    (save-match-data (org-toggle-tag "goal_error" 'off))
-		    ;;
-		    ;; Compute the actual usage under this subtree, and convert to the same
-		    ;; units as the goal, so we can compare them.
-		    ;;
-		    (let (delta-val delta-percent)
-		      (save-match-data
-			(save-excursion
-			  (save-restriction
-			    (outline-up-heading 1 'invisible-ok)
-			    (when (string= (upcase (org-get-heading)) "GOALS")
-			      (outline-up-heading 1 'invisible-ok))
-			    (org-narrow-to-subtree)
-			    (goto-char (point-min))
-			    (let*
-				((actual (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))
-				 (polarity (or (org-balance-goal-polarity parsed-goal)
-					       (cdr (assoc-string (org-balance-prop-prop
-								   (org-balance-prop-ratio-num  prop-ratio))
-								  org-balance-default-polarity))))
-				 (margin (or (org-balance-goal-margin parsed-goal)
-					     org-balance-default-margin-percent))
-				 (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
-				 (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
-				 (range-min (- goal-min
-					       (if (numberp margin)
-						   (* (/ (float margin) 100.0) goal-min)
-						 (org-balance-valu-val margin))))
-				 
-				 (range-max (+ goal-max
-					       (if (numberp margin)
-						   (* (/ (float margin) 100.0) goal-max)
-						 (org-balance-valu-val margin))))
-				 
-				 (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual))))
-			      
-			      (setq delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
-						    ((< range-max actual-num)
-						     (if (eq polarity 'atleast)
-							 (- actual-num goal-max)
-						       (- goal-max actual-num)))
-						    ((< actual-num range-min)
-						     (if (eq polarity 'atmost)
-							 (- goal-min actual-num)
-						       (- actual-num goal-min))))
-				    delta-percent
-				    (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min))))))))
-		      (cond ((< delta-val 0) (incf num-under))
-			    ((> delta-val 0) (incf num-over))
-			    ((= delta-val 0) (incf num-met)))
-		      (org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
-		      (org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))
-		      ;; FIXME: include in goal_updated the period for which it was updated.
-		      (org-entry-put (point) "goal_updated" (format-time-string
-							     (org-time-stamp-format 'long 'inactive)
-							     (current-time)))))))))))
-	  (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
+	  (rxx-do-search-fwd org-balance-goal-prefix-regexp prop-ratio
+	    (let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
+		   (parsed-goal
+		    (condition-case err
+			(org-balance-parse-goal-or-link-at-point)
+		      (error
+		       (incf num-errors)
+		       (message "Error parsing %s" goal-def-here)
+		       (save-match-data
+			 (org-toggle-tag "goal_error" 'on)
+			 (org-entry-delete nil "goal_delta_val")
+			 (org-entry-delete nil "goal_delta_percent")
+			 (org-entry-put (point) "goal_updated" (format-time-string
+								(org-time-stamp-format 'long 'inactive)
+								(current-time))))
+		       nil))))
+	      (when parsed-goal
+		(save-match-data (org-toggle-tag "goal_error" 'off))
+		;;
+		;; Compute the actual usage under this subtree, and convert to the same
+		;; units as the goal, so we can compare them.
+		;;
+		(let (delta-val-and-percent)
+		  (save-match-data
+		    (save-excursion
+		      (save-restriction
+			(outline-up-heading 1 'invisible-ok)
+			(when (string= (upcase (org-get-heading)) "GOALS")
+			  (outline-up-heading 1 'invisible-ok))
+			(org-narrow-to-subtree)
+			(goto-char (point-min))
+			(setq delta-val-and-percent
+			      (org-balance-compute-delta
+			       parsed-goal prop-ratio
+			       (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))))))
+		  (let ((delta-val (car delta-val-and-percent))
+			(delta-percent (cdr delta-val-and-percent)))
+		    (cond ((< delta-val 0) (incf num-under))
+			  ((> delta-val 0) (incf num-over))
+			  ((= delta-val 0) (incf num-met)))
+		    (org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
+		    (org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))
+		    ;; FIXME: include in goal_updated the period for which it was updated.
+		    (org-entry-put (point) "goal_updated" (format-time-string
+							   (org-time-stamp-format 'long 'inactive)
+							   (current-time)))))))))))
+	(message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
 (defun org-balance-do () (interactive) (org-balance-compute-goal-deltas2))
 
