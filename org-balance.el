@@ -297,6 +297,61 @@ Adapted from `org-closed-in-range' from org.el."
     ;; make tree, check each match with the callback
     (message "%s matches here" (org-occur "CLOSED: +\\[\\(.*?\\)\\]" nil callback))) )
 
+
+(defun org-balance-record-time (&optional hours ago)
+  "Record the given amount of time as time spent under the current org entry.
+Useful when you did some task but weren't near a computer to start/stop the org timer
+as you were doing it.
+"
+  (interactive)
+  ;
+  ; allow various specifications of time: :15 for 15 mins, 15m or any other (number, unit) thing.
+  ; also compound specs such as 1 hour 15 mins (so, basically, ((value unit)+) as long as units
+  ; are compatible and keep decreasing.
+  ;
+  ; also, have additional ways to enter some specific units -- e.g. $1 for money units,
+  ; :15 for 15 mins, 01:15, etc.  1h30m, 1.5hrs, etc.
+  ;
+  (unless hours (setq hours (float (string-to-number (read-string "How many hours? ")))))
+  (unless ago (setq ago (float (string-to-number (read-string "Finished how long ago (in hours)? " nil nil 0)))))
+
+  (message "hours is %s ago is %s" hours ago)
+
+  (let (target-pos (msg-extra ""))
+      ;; Clock in at which position?
+    (setq target-pos
+	  (if (and (eobp) (not (org-on-heading-p)))
+	      (point-at-bol 0)
+	    (point)))
+
+    (org-clock-find-position nil)
+
+    (insert-before-markers "\n")
+    (backward-char 1)
+    (org-indent-line-function)
+    (when (and (save-excursion
+		 (end-of-line 0)
+		 (org-in-item-p)))
+      (beginning-of-line 1)
+      (org-indent-line-to (- (org-get-indentation) 2)))
+    (insert org-clock-string " ")
+
+    (let* ((end-time (- (org-float-time) (* ago 60.0 60.0)))
+	   (start-time (- end-time (* hours 60.0 60.0)))
+	   (s (- end-time start-time))
+	   (h (floor (/ s 3600.0)))
+	   (s (- s (* 3600.0 h)))
+	   (m (floor (/ s 60.0)))
+	   (s (- s (* 60.0 s))))
+      (org-insert-time-stamp (seconds-to-time start-time)
+			     'with-hm 'inactive)
+      (insert "--")
+      (org-insert-time-stamp (seconds-to-time end-time)
+			     'with-hm 'inactive)
+      (insert " => " (format "%2d:%02d" h m)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defrxx org-balance-inactive-timestamp-regexp (seq "[" (named-grp time (1+ nonl)) "]" )
   (org-float-time (apply 'encode-time (org-parse-time-string time))))
 
@@ -380,57 +435,28 @@ Originally adapted from `org-closed-in-range'.
 	 (org-balance-make-valu (- tend tstart) 'seconds))
 	(t (org-balance-sum-org-property prop tstart tend unit))))
 
-(defun org-balance-record-time (&optional hours ago)
-  "Record the given amount of time as time spent under the current org entry.
-Useful when you did some task but weren't near a computer to start/stop the org timer
-as you were doing it.
-"
-  (interactive)
-  ;
-  ; allow various specifications of time: :15 for 15 mins, 15m or any other (number, unit) thing.
-  ; also compound specs such as 1 hour 15 mins (so, basically, ((value unit)+) as long as units
-  ; are compatible and keep decreasing.
-  ;
-  ; also, have additional ways to enter some specific units -- e.g. $1 for money units,
-  ; :15 for 15 mins, 01:15, etc.  1h30m, 1.5hrs, etc.
-  ;
-  (unless hours (setq hours (float (string-to-number (read-string "How many hours? ")))))
-  (unless ago (setq ago (float (string-to-number (read-string "Finished how long ago (in hours)? " nil nil 0)))))
+(defrxx org-balance-archive-regexp (seq bol (1+ blank) ":ARCHIVE:" (1+ blank) (named-grp loc (1+ nonl))) loc)
 
-  (message "hours is %s ago is %s" hours ago)
+(defun org-balance-find-all-archive-targets ()
+  "Find all the places where an entry from the current subtree could have been archived"
 
-  (let (target-pos (msg-extra ""))
-      ;; Clock in at which position?
-    (setq target-pos
-	  (if (and (eobp) (not (org-on-heading-p)))
-	      (point-at-bol 0)
-	    (point)))
+  (save-excursion
+    (save-window-excursion
+      (save-restriction
+	(let ((archive-locs (list (org-get-local-archive-location))))
+	  (org-narrow-to-subtree)
+	  (rxx-do-search-fwd org-balance-archive-regexp loc
+	    (message "found loc %s at %s" loc (point))
+	    (add-to-list 'archive-locs loc))
+	  (mapcar (lambda (loc) (cons (org-extract-archive-file loc)
+				      (org-extract-archive-heading loc)))
+		  archive-locs))))))
 
-    (org-clock-find-position nil)
+(defun org-balance-sum-property-with-archives (prop tstart tend unit)
+  "Sum a property in the specified period.  Include any entries that may have been archived from the current subtree."
+  
+  )
 
-    (insert-before-markers "\n")
-    (backward-char 1)
-    (org-indent-line-function)
-    (when (and (save-excursion
-		 (end-of-line 0)
-		 (org-in-item-p)))
-      (beginning-of-line 1)
-      (org-indent-line-to (- (org-get-indentation) 2)))
-    (insert org-clock-string " ")
-
-    (let* ((end-time (- (org-float-time) (* ago 60.0 60.0)))
-	   (start-time (- end-time (* hours 60.0 60.0)))
-	   (s (- end-time start-time))
-	   (h (floor (/ s 3600.0)))
-	   (s (- s (* 3600.0 h)))
-	   (m (floor (/ s 60.0)))
-	   (s (- s (* 60.0 s))))
-      (org-insert-time-stamp (seconds-to-time start-time)
-			     'with-hm 'inactive)
-      (insert "--")
-      (org-insert-time-stamp (seconds-to-time end-time)
-			     'with-hm 'inactive)
-      (insert " => " (format "%2d:%02d" h m)))))
 
 
 (defrxxconst org-balance-goal-todo-keyword "GOAL")
@@ -522,24 +548,27 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			      (outline-up-heading 1 'invisible-ok))
 			    (org-narrow-to-subtree)
 			    (goto-char (point-min))
-			    (let* ((actual (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))
-				   (polarity (or (org-balance-goal-polarity parsed-goal)
-						(cdr (assoc-string (org-balance-prop-prop (org-balance-prop-ratio-num  prop-ratio)) org-balance-default-polarity))))
-				   (margin (or (org-balance-goal-margin parsed-goal)
-					       org-balance-default-margin-percent))
-				   (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
-				   (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
-				   (range-min (- goal-min
-						 (if (numberp margin)
-						     (* (/ (float margin) 100.0) goal-min)
-						   (org-balance-valu-val margin))))
-				   
-				   (range-max (+ goal-max
-						 (if (numberp margin)
-						     (* (/ (float margin) 100.0) goal-max)
-						   (org-balance-valu-val margin))))
-				   
-				   (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual))))
+			    (let*
+				((actual (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))
+				 (polarity (or (org-balance-goal-polarity parsed-goal)
+					       (cdr (assoc-string (org-balance-prop-prop
+								   (org-balance-prop-ratio-num  prop-ratio))
+								  org-balance-default-polarity))))
+				 (margin (or (org-balance-goal-margin parsed-goal)
+					     org-balance-default-margin-percent))
+				 (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
+				 (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
+				 (range-min (- goal-min
+					       (if (numberp margin)
+						   (* (/ (float margin) 100.0) goal-min)
+						 (org-balance-valu-val margin))))
+				 
+				 (range-max (+ goal-max
+					       (if (numberp margin)
+						   (* (/ (float margin) 100.0) goal-max)
+						 (org-balance-valu-val margin))))
+				 
+				 (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual))))
 			      
 			      (setq delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
 						    ((< range-max actual-num)
