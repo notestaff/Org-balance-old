@@ -633,11 +633,11 @@ the parsed result in case of match, or nil in case of mismatch."
 		 rxx-object)
 	    (rxx-call-parser rxx-info (match-string 0))))))
 
-(defmacro rxx-do-search-fwd (aregexp var forms)
+(defmacro rxx-do-search-fwd (aregexp var &rest forms)
   "Search forward while matches"
   (declare (indent 2))
   `(let (,var) (while (setq ,var (rxx-search-fwd ,aregexp (not 'boundary) 'no-error))
-		 ,forms)))
+		 ,@forms)))
 
 (defun rxx-parse-fwd (aregexp &optional bound partial-match-ok)
   (save-match-data
@@ -705,8 +705,7 @@ the parsed result in case of match, or nil in case of mismatch."
 						  (eq (car-safe (car-safe (cdr-safe (cdr-safe elem)))) 'recurse)))) form)))
   ad-do-it
   (when (boundp 'rxx-env) (not (rx-atomic-p ad-return-value))
-	(setq ad-return-value (rx-group-if ad-return-value '*)))
-  )
+	(setq ad-return-value (rx-group-if ad-return-value '*))))
 
 (defun rxx-remove-unneeded-shy-grps (re)
   "Remove shy groups that do nothing"
@@ -743,6 +742,7 @@ the parsed result in case of match, or nil in case of mismatch."
 
 (defun rxx-unload-function ()
   "Remove any hooks pointing to rxx functions"
+  (ad-disable-regexp "rxx")
   (remove-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords))
 
 (provide 'rxx)
