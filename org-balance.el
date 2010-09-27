@@ -696,6 +696,10 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			(kill-buffer))
 		    (incf num-failed)
 		    (message "Failed test on %s" test-file)
+		    (show-all)
+		    (find-file ref-file)
+		    (show-all)
+		    (find-file test-file)
 		    (ediff-files test-file ref-file))))
 	      (message "%s tests ok, %s tests failed" num-ok num-failed))))))))
 
