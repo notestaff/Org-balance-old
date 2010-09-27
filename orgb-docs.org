@@ -38,9 +38,6 @@ Org-Balance Documentation
   hours per week on project A".  Goals can also be specified in terms of other goals: you could say "out of the time alloted to
   open-source, spend 40% of it on project A".
 
-* Installation
-
-  Download the files =org-balance.el= and =rxx.el=; put them into your =load-path=.   Put =(require 'org-balance)= in your =.emacs=.
   
 * Usage
 
@@ -135,6 +132,9 @@ Org-Balance Documentation
   	 	
 * Installation
 
+  Download the files =org-balance.el= and =rxx.el=; put them into your =load-path=.   Put =(require 'org-balance)= in your
+  =.emacs=.
+  
   Copy org-balance.el and rxx.el to your load-path.  Ideally, also byte-compile them (important for speed -- much of of cl macros).
   Set or customize some vars.
 
@@ -147,11 +147,16 @@ Org-Balance Documentation
   
   
 * Configuring org-balance preferences
-  
-  
 
-  
+*** Possibly relevant org vars
 
-  
-  
-  
+***** org-log-done-with-time
+***** org-log-done
+  	 	
+  	 	
+
+  	 	
+
+  	 	
+  	 	
+  	 	
