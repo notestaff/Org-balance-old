@@ -355,7 +355,7 @@ as you were doing it.
 (defrxx org-balance-inactive-timestamp-regexp (seq "[" (named-grp time (1+ nonl)) "]" )
   (org-float-time (apply 'encode-time (org-parse-time-string time))))
 
-(defrxx org-balance-clock-regexp (seq bol (0+ blank) (eval org-clock-string) (0+ blank)
+(defrxx org-balance-clock-regexp (seq bol blanks? (eval org-clock-string) blanks?
 				      (org-balance-inactive-timestamp-regexp from) (1+ "-")
 				      (org-balance-inactive-timestamp-regexp to)
 				      " => " (1+ nonl))
@@ -385,7 +385,7 @@ as you were doing it.
 	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
     total-minutes))
 
-(defrxx org-balance-closed-regexp (seq bol (0+ blank) (eval org-closed-string) (1+ blank)
+(defrxx org-balance-closed-regexp (seq bol blanks? (eval org-closed-string) blanks
 				       (org-balance-inactive-timestamp-regexp time))
   time)
 
@@ -395,7 +395,7 @@ as you were doing it.
 Originally adapted from `org-closed-in-range'.
 "
 
-  ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (optional (not (any ?*))) (0+ nonl) (eol))
+  ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (declare (special org-balance-num-warnings))
   (rxx-dbg "why" prop unit prop-default-val)
@@ -439,7 +439,7 @@ Originally adapted from `org-closed-in-range'.
 	       (t (org-balance-sum-org-property prop tstart tend unit prop-default-val)))))
     (rxx-dbg prop unit (buffer-file-name (current-buffer)) (point) result)))
 
-(defrxx org-balance-archive-regexp (seq bol (1+ blank) ":ARCHIVE:" (1+ blank) (named-grp loc (1+ nonl))) loc)
+(defrxx org-balance-archive-regexp (seq bol blanks ":ARCHIVE:" blanks (named-grp loc (1+ nonl))) loc)
 
 (defstruct org-balance-loc file heading)
 
@@ -518,17 +518,17 @@ Originally adapted from `org-closed-in-range'.
 (defrxx org-balance-link-regexp (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
 (defstruct org-balance-prop prop link)
 (defrxx org-balance-prop-regexp (seq (org-balance-prop-name-regexp prop)
-				     (opt (1+ blank) "at" (1+ blank) (org-balance-link-regexp link)))
+				     (opt blanks "at" blanks (org-balance-link-regexp link)))
   (make-org-balance-prop :prop prop :link link))
 
 (defstruct org-balance-prop-ratio num denom)
 (defrxx org-balance-prop-ratio-regexp
-  (seq (org-balance-prop-regexp num) (optional (0+ blank) "/" (0+ blank) (org-balance-prop-regexp denom)))
+  (seq (org-balance-prop-regexp num) (opt blanks? "/" blanks? (org-balance-prop-regexp denom)))
   (make-org-balance-prop-ratio :num num :denom (or denom (make-org-balance-prop :prop "actualtime"))))
 
 (defrxx org-balance-goal-prefix-regexp
-  (seq bol (1+ "*") (1+ blank) (eval org-balance-goal-todo-keyword) (1+ blank) (optional "[#" upper "]" (1+ blank))
-       (org-balance-prop-ratio-regexp prop-ratio) (0+ blank) ":" (0+ blank)) prop-ratio)
+  (seq bol (1+ "*") blanks (eval org-balance-goal-todo-keyword) blanks (opt "[#" upper "]" blanks)
+       (org-balance-prop-ratio-regexp prop-ratio) blanks? ":" blanks?) prop-ratio)
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
   (save-excursion
@@ -869,14 +869,14 @@ we convert to the specified multiples of new unit."
        
        ;; or a floating-point number, possibly in scientific notation
        (seq
-	(optional (any "+-"))
+	(opt (any "+-"))
 	(or (seq (one-or-more (any digit))
-		 (optional ".")
-		 (optional (one-or-more (any digit))))
+		 (opt ".")
+		 (opt (one-or-more (any digit))))
 	    (seq "." (one-or-more (any digit))))
-	(optional
+	(opt
 	 (seq (any "eE")
-	      (optional (any "+-"))
+	      (opt (any "+-"))
 	      (one-or-more (any digit))))))
    
    (zero-or-more whitespace))
@@ -907,7 +907,7 @@ by whitespace, it throws an error rather than silently returning zero.
 (defrxx org-balance-number-range-regexp
   (seq
    (org-balance-number-regexp range-start)
-   (optional "-" (org-balance-number-regexp range-end)))
+   (opt "-" (org-balance-number-regexp range-end)))
   (cons range-start (or range-end range-start)))
 
 (defvar org-balance-parse-valu-hooks nil
@@ -923,9 +923,9 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
     ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
     ;; or an optional number (assumed to be 1 if not given) followed by a unit.
     ;; But either a number or a unit must be given.
-    (or (seq (optional (org-balance-number-regexp val))
+    (or (seq (opt (org-balance-number-regexp val))
 	     (org-balance-unit-regexp unit))
-	(seq val (optional unit)))
+	(seq val (opt unit)))
      (org-balance-make-valu (or val 1) (or unit "item"))
      "value with unit")
   
@@ -940,9 +940,9 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
-  (or (seq (optional (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
+  (or (seq (opt (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
 	   (org-balance-unit-regexp unit))
-      (seq range (optional (one-or-more whitespace) unit)))
+      (seq range (opt (one-or-more whitespace) unit)))
   (let ((number-range (or range (cons 1 1)))
 	(unit (or unit "item")))
     (cons (org-balance-make-valu (car number-range) unit)
@@ -1010,21 +1010,21 @@ changing only the numerator."
   
 (defrxx org-balance-goal-regexp
   (seq
-   (0+ blank)
-   (optional
-    (seq (named-grp priority (regexp "\\[#[A-Z0-9]\\]")) (0+ blank)))
-   (optional (org-balance-polarity-regexp polarity))
+   blanks?
+   (opt
+    (seq (named-grp priority (regexp "\\[#[A-Z0-9]\\]")) blanks?))
+   (opt (org-balance-polarity-regexp polarity))
    (org-balance-valu-range-regexp numerator)
-   (1+ blank) (org-balance-ratio-words-regexp ratio-word) (1+ blank)
+   blanks (org-balance-ratio-words-regexp ratio-word) blanks
    (org-balance-valu-regexp denominator)
-   (optional
+   (opt
     ;; specify margin
     (seq
-     (1+ blank) "+-" (0+ blank)
+     blanks "+-" blanks?
      (or
-      (seq (org-balance-number-regexp margin) (0+ blank) "%")
+      (seq (org-balance-number-regexp margin) blanks? "%")
       (org-balance-valu-regexp margin))))
-   (0+ blank))
+   blanks?)
   
   (lambda (goal-str)
     (make-org-balance-goal 
@@ -1040,9 +1040,9 @@ changing only the numerator."
 
 (defrxx org-balance-goal-link-regexp
   (seq (org-balance-number-regexp factor)
-       (1+ blank)
+       blanks
        "of"
-       (1+ blank)
+       blanks
        org-balance-link-regexp)
   factor)
 
