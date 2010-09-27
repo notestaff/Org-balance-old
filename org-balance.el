@@ -350,6 +350,19 @@ as you were doing it.
 			     'with-hm 'inactive)
       (insert " => " (format "%2d:%02d" h m)))))
 
+(defconst org-balance-seconds-per-minute 60)
+(defconst org-balance-minutes-per-hour 60)
+
+(defun org-balance-record-done (&optional hours-ago)
+  (interactive)
+  (save-excursion
+    (org-back-to-heading 'invis-ok)
+    (unless hours-ago (setq hours-ago (float (string-to-number (read-string "Finished how long ago (in hours)? " nil nil 0)))))
+    (let* ((seconds-ago (* hours-ago org-balance-minutes-per-hour org-balance-seconds-per-minute))
+	   (done-time (time-subtract (org-current-time) (seconds-to-time seconds-ago))))
+      (flet ((org-current-time () done-time))
+	(org-todo 'done)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defrxx org-balance-inactive-timestamp-regexp (seq "[" (named-grp time (1+ nonl)) "]" )
@@ -589,7 +602,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 "
   (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
   (unless tend (setq tend (org-float-time (org-current-time))))
-  (rxx-dbg tstart tend)
+  (rxx-dbg tstart tend (current-time))
 
   (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0)
 	(days-in-interval (org-balance-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
@@ -652,8 +665,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 
 (defconst org-balance-regtest-dir "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/regtests/")
 (defconst org-balance-regtest-defs
-  '(("mythings.org" 1283015820.0 1285607849.393998 (19616 55415 443943))))
-
+  '(("mythings.org" 1283015820.0 1285607849.393998 (19616 55415 443943))
+    ("rt1.org" 1284760020.0 1285624025.292002 (19617 4313 292003))))
 
 (defun org-balance-regtests ()
   (interactive)
