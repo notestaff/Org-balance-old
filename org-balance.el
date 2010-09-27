@@ -443,6 +443,11 @@ Originally adapted from `org-closed-in-range'.
 
 (defstruct org-balance-loc file heading)
 
+(defun org-balance-not-blank (s)
+  "Return nil if s is nil or a blank string, else return s"
+  (when (and s (save-match-data (string-match (rx (not blank)) s)))
+    s))
+
 (defun org-balance-find-all-archive-targets ()
   "Find all the places where an entry from the current subtree could have been archived"
 
@@ -454,8 +459,8 @@ Originally adapted from `org-closed-in-range'.
 	  (rxx-do-search-fwd org-balance-archive-regexp loc
 	    (message "found loc %s at %s" loc (point))
 	    (add-to-list 'archive-locs loc))
-	  (mapcar (lambda (loc) (make-org-balance-loc :file (org-extract-archive-file loc)
-						      :heading (org-extract-archive-heading loc)))
+	  (mapcar (lambda (loc) (make-org-balance-loc :file (org-balance-not-blank (org-extract-archive-file loc))
+						      :heading (org-balance-not-blank (org-extract-archive-heading loc))))
 		  archive-locs))))))
 
 (defun org-balance-sum-property-with-archives (prop tstart tend unit)
@@ -487,6 +492,7 @@ Originally adapted from `org-closed-in-range'.
 			     nil t)
 			(progn
 			  (goto-char (match-beginning 0))
+			  (rxx-dbg "we are at" (buffer-name (current-buffer)) (point))
 			  (org-narrow-to-subtree)))))
 		  
 		  (goto-char (if org-archive-reversed-order (point-min) (point-max)))
@@ -583,6 +589,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 "
   (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
   (unless tend (setq tend (org-float-time (org-current-time))))
+  (rxx-dbg tstart tend)
 
   (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0)
 	(days-in-interval (org-balance-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
@@ -605,7 +612,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			 (org-entry-delete nil "goal_delta_percent")
 			 (org-entry-put (point) "goal_updated" (format-time-string
 								(org-time-stamp-format 'long 'inactive)
-								(current-time))))
+								(if (boundp 'goal-update-time) goal-update-time (current-time)))))
 		       nil))))
 	      (when parsed-goal
 		(save-match-data (org-toggle-tag "goal_error" 'off))
@@ -631,17 +638,48 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		    (cond ((< delta-val 0) (incf num-under))
 			  ((> delta-val 0) (incf num-over))
 			  ((= delta-val 0) (incf num-met)))
-		    (org-entry-put (point) "goal_delta_val" (format "%s" delta-val))
-		    (org-entry-put (point) "goal_delta_percent" (format "%s" delta-percent))
+		    (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
+		    (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
 		    ;; FIXME: include in goal_updated the period for which it was updated.
 		    (org-entry-put (point) "goal_updated" (format-time-string
 							   (org-time-stamp-format 'long 'inactive)
-							   (current-time)))))))))))
+							   (if (boundp 'goal-update-time) goal-update-time (current-time))))))))))))
 	(message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
 (defun org-balance-do () (interactive)
   (message "--------------------------------")
   (org-balance-compute-goal-deltas2))
+
+(defconst org-balance-regtest-dir "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/regtests/")
+(defconst org-balance-regtest-defs
+  '(("mythings.org" 1283015820.0 1285607849.393998 (19616 55415 443943))))
+
+
+(defun org-balance-regtests ()
+  (interactive)
+  (save-excursion
+    (save-window-excursion
+      (save-restriction
+	(save-match-data
+	  (let ((num-ok 0) (num-failed 0))
+	    (dolist (regtest org-balance-regtest-defs)
+	      (let* ((test-file (concat org-balance-regtest-dir (first regtest)))
+		     (ref-file (concat (file-name-sans-extension test-file) "_ref.org")))
+		(find-file test-file)
+		(widen)
+		(goto-char (point-min))
+		(org-balance-remove-props)
+		(let ((goal-update-time (fourth regtest)))
+		  (org-balance-compute-goal-deltas2 :tstart (second regtest) :tend (third regtest)))
+		(save-buffer)
+		(if (zerop (call-process "diff" (not 'infile) (not 'destination) (not 'display)
+					 "-b" test-file ref-file))
+		    (progn
+		      (incf num-ok)
+		      (kill-buffer))
+		  (incf num-failed)
+		  (ediff-files test-file ref-file))))
+	    (message "%s tests ok, %s tests failed" num-ok num-failed)))))))
 
 (defun org-balance-save-amt-neglected (agenda-line)
   "Given an agenda line, save the 'neglect amount' value of the corresponding org entry
