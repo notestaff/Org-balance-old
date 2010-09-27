@@ -623,9 +623,10 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			 (org-toggle-tag "goal_error" 'on)
 			 (org-entry-delete nil "goal_delta_val")
 			 (org-entry-delete nil "goal_delta_percent")
-			 (org-entry-put (point) "goal_updated" (format-time-string
-								(org-time-stamp-format 'long 'inactive)
-								(if (boundp 'goal-update-time) goal-update-time (current-time)))))
+			 (org-entry-put (point) "goal_updated"
+					(format-time-string
+					 (org-time-stamp-format 'long 'inactive)
+					 (if (boundp 'goal-update-time) goal-update-time (current-time)))))
 		       nil))))
 	      (when parsed-goal
 		(save-match-data (org-toggle-tag "goal_error" 'off))
@@ -654,9 +655,10 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		    (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
 		    (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
 		    ;; FIXME: include in goal_updated the period for which it was updated.
-		    (org-entry-put (point) "goal_updated" (format-time-string
-							   (org-time-stamp-format 'long 'inactive)
-							   (if (boundp 'goal-update-time) goal-update-time (current-time))))))))))))
+		    (org-entry-put (point) "goal_updated"
+				   (format-time-string
+				    (org-time-stamp-format 'long 'inactive)
+				    (if (boundp 'goal-update-time) goal-update-time (current-time))))))))))))
 	(message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
 (defun org-balance-do () (interactive)
@@ -1102,8 +1104,12 @@ changing only the numerator."
 
 (defun org-balance-remove-props ()
   (interactive)
-  (dolist (prop '("goal_delta_val" "goal_delta_percent" "goal_updated"))
-    (org-delete-property-globally prop)))
+  (save-excursion
+    (save-restriction
+      (widen)
+      (dolist (prop '("goal_delta_val" "goal_delta_percent" "goal_updated"))
+	(org-delete-property-globally prop))
+      (org-map-entries '(org-toggle-tag "goal_error" 'off) "+goal_error/!GOAL" 'file))))
 
 (provide 'org-balance)
 
