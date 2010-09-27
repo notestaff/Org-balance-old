@@ -20,8 +20,8 @@
 
 ******* GOAL done: 3 per day
 		  :PROPERTIES:
-		  :goal_delta_val: -2.90
-		  :goal_delta_percent: -96.7
+		  :goal_delta_val: -2.70
+		  :goal_delta_percent: -90.0
 		  :goal_updated: [2010-09-27 Mon 17:47]
 		  :END:
 
@@ -31,6 +31,13 @@
 				 CLOSED: [2010-09-27 Mon 12:35]
 		  	 	
 
+********* project B
+
+*********** DONE write more code
+				 CLOSED: [2010-09-27 Mon 10:41]
+*********** DONE write some code
+				 CLOSED: [2010-09-27 Mon 13:41]
+			  	 
 ***** open-source projects
 
 *** learn
