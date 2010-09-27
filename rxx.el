@@ -479,6 +479,8 @@ For detailed description, see `rxx'.
 	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				     (eval-regexp . (rxx-process-eval-regexp 1 1))
 				     (shy-grp . seq)
+				     (blanks . "[[:blank:]]+")
+				     (blanks? . "[[:blank:]]*")
 				     (sep-by . (rxx-process-sep-by 1 nil))
 				     (recurse . (rxx-process-recurse 1 nil))
 				     (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
