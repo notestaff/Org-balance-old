@@ -1,0 +1,72 @@
+
+
+* things
+  :PROPERTIES:
+  :default_spend: 0 dollars
+  :END:
+  
+*** work
+	 
+***** goals
+******* GOAL clockedtime: 5 hours per day
+		  CLOCK: [2010-09-27 Mon 02:35]--[2010-09-27 Mon 05:35] =>  3:00
+		  :PROPERTIES:
+		  :goal_delta_val: -4.70
+		  :goal_delta_percent: -94.0
+		  :goal_updated: [2010-09-27 Mon 17:47]
+		  :END:
+		  
+***** current work
+
+******* GOAL done: 3 per day
+		  :PROPERTIES:
+		  :goal_delta_val: -2.90
+		  :goal_delta_percent: -96.7
+		  :goal_updated: [2010-09-27 Mon 17:47]
+		  :END:
+
+********* project A
+
+*********** DONE write regtest suite
+				 CLOSED: [2010-09-27 Mon 12:35]
+		  	 	
+
+***** open-source projects
+
+*** learn
+	 
+*** hobbies
+***** guitar
+
+***** photography
+	 	
+*** health
+***** run
+
+*** budget
+
+***** income
+
+******* salary
+		  
+******* consulting
+
+******* selling on ebay
+
+******* interest
+
+
+********* CDs
+
+********* stocks
+
+***** spending
+
+******* food
+
+******* entertainment
+		  
+		  
+*** Local archive
+
+	 
