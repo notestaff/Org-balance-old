@@ -62,11 +62,13 @@
 (require 'org-agenda)
 (require 'org-compat)
 (require 'org-macs)
+(require 'org-archive)
 (require 'rxx)
 (eval-when-compile (require 'cl))
 
-(defvar org-clock-report-include-clocking-task)
+(rxx-set-prefix org-balance)
 
+(defvar org-clock-report-include-clocking-task)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Section: org-balance customizations
@@ -365,13 +367,13 @@ as you were doing it.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defrxx org-balance-inactive-timestamp-regexp (seq "[" (named-grp time (1+ nonl)) "]" )
+(defrxx inactive-timestamp (seq "[" (named-grp time (1+ nonl)) "]" )
   (org-float-time (apply 'encode-time (org-parse-time-string time))))
 
-(defrxx org-balance-clock-regexp (seq bol blanks? (eval org-clock-string) blanks?
-				      (org-balance-inactive-timestamp-regexp from) (1+ "-")
-				      (org-balance-inactive-timestamp-regexp to)
-				      " => " (1+ nonl))
+(defrxx clock (seq bol blanks? (eval org-clock-string) blanks?
+		   (inactive-timestamp from) (1+ "-")
+		   (inactive-timestamp to)
+		   " => " (1+ nonl))
   (cons from to))
 
 (defun org-balance-clock-sum (tstart tend)
@@ -398,7 +400,7 @@ as you were doing it.
 	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
     total-minutes))
 
-(defrxx org-balance-closed-regexp (sep-by blanks bol (eval org-closed-string) (org-balance-inactive-timestamp-regexp time))
+(defrxx closed (sep-by blanks bol (eval org-closed-string) (inactive-timestamp time))
   time)
 
 (defun org-balance-sum-org-property (prop tstart tend unit prop-default-val)
@@ -451,7 +453,7 @@ Originally adapted from `org-closed-in-range'.
 	       (t (org-balance-sum-org-property prop tstart tend unit prop-default-val)))))
     (rxx-dbg prop unit (buffer-file-name (current-buffer)) (point) result)))
 
-(defrxx org-balance-archive-regexp (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl))) loc)
+(defrxx archive (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl))) loc)
 
 (defstruct org-balance-loc file heading)
 
@@ -474,6 +476,8 @@ Originally adapted from `org-closed-in-range'.
 	  (mapcar (lambda (loc) (make-org-balance-loc :file (org-balance-not-blank (org-extract-archive-file loc))
 						      :heading (org-balance-not-blank (org-extract-archive-heading loc))))
 		  archive-locs))))))
+
+(defvar org-archive-reversed-order)
 
 (defun org-balance-sum-property-with-archives (prop tstart tend unit)
   "Sum a property in the specified period.  Include any entries that may have been archived from the current subtree."
@@ -526,23 +530,23 @@ Originally adapted from `org-closed-in-range'.
 ;;      presents it in a list.
 (defstruct org-balance-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
 
-(defrxx org-balance-prop-name-regexp (1+ alnum))
-(defrxx org-balance-link-regexp (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
+(defrxx prop-name (1+ alnum))
+(defrxx link (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
 (defstruct org-balance-prop prop link)
-(defrxx org-balance-prop-regexp (seq (org-balance-prop-name-regexp prop)
-				     (opt blanks "at" blanks (org-balance-link-regexp link)))
+(defrxx prop (seq (prop-name prop)
+		  (opt blanks "at" blanks (link link)))
   (make-org-balance-prop :prop prop :link link))
 
 (defstruct org-balance-prop-ratio num denom)
-(defrxx org-balance-prop-ratio-regexp
-  (seq (org-balance-prop-regexp num) (opt blanks? "/" blanks? (org-balance-prop-regexp denom)))
+(defrxx prop-ratio
+  (seq (prop num) (opt blanks? "/" blanks? (prop denom)))
   (make-org-balance-prop-ratio :num num :denom (or denom (make-org-balance-prop :prop "actualtime"))))
 
-(defrxx org-balance-priority-regexp (seq "[#" (any upper digit) "]"))
+(defrxx priority (seq "[#" (any upper digit) "]"))
 
-(defrxx org-balance-goal-prefix-regexp
-  (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) (opt org-balance-priority-regexp)
-		   (org-balance-prop-ratio-regexp prop-ratio))
+(defrxx goal-prefix
+  (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) (opt priority)
+		   (prop-ratio prop-ratio))
        blanks? ":" blanks?) prop-ratio)
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
@@ -881,11 +885,11 @@ we convert to the specified multiples of new unit."
     (seven . 7) (eight . 8) (nine . 9)
     (ten . 10)))
 
-(defrxx org-balance-number-name-regexp
+(defrxx number-name
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
   (lambda (match) (cdr-safe (assoc-string match org-balance-number-names))))
 
-(defrxx org-balance-number-regexp
+(defrxx number
   (seq
    (zero-or-more whitespace)
    
@@ -930,8 +934,8 @@ by whitespace, it throws an error rather than silently returning zero.
 
 (defalias 'org-balance-parse-number 'org-balance-string-to-number)
 
-(defrxx org-balance-number-range-regexp
-  (seq (org-balance-number-regexp range-start) (opt "-" (org-balance-number-regexp range-end)))
+(defrxx number-range
+  (seq (number range-start) (opt "-" (number range-end)))
   (cons range-start (or range-end range-start)))
 
 (defvar org-balance-parse-valu-hooks nil
@@ -939,14 +943,14 @@ by whitespace, it throws an error rather than silently returning zero.
 such as $5 into the canonical form `5 dollars'.  Each hook must take a string as an argument and return either an
 `org-balance-valu' struct if it successfully parsed the string, or nil if it didn't.")
 
-(defrxx org-balance-unit-regexp
+(defrxx unit
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist)))))
 
-(defrxx org-balance-valu-regexp
+(defrxx valu
   ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
-  (or (seq (opt (org-balance-number-regexp val)) (org-balance-unit-regexp unit))
+  (or (seq (opt (number val)) (unit unit))
       (seq val (opt unit)))
   (org-balance-make-valu (or val 1) (or unit "item"))
   "value with unit")
@@ -957,12 +961,12 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
    (rxx-parse org-balance-valu-regexp valu-str)))
 
-(defrxx org-balance-valu-range-regexp
+(defrxx valu-range
   ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
-  (or (seq (opt (seq (org-balance-number-range-regexp range) (one-or-more whitespace)))
-	   (org-balance-unit-regexp unit))
+  (or (seq (opt (seq (number-range range) (one-or-more whitespace)))
+	   (unit unit))
       (seq range (opt (one-or-more whitespace) unit)))
   (let ((number-range (or range (cons 1 1)))
 	(unit (or unit "item")))
@@ -1020,26 +1024,26 @@ changing only the numerator."
     result
   ))
 
-(defrxx org-balance-polarity-regexp
+(defrxx polarity
   (or (named-grp atmost (eval-regexp (regexp-opt (list "at most") 'words)))
       (named-grp atleast (eval-regexp (regexp-opt (list "at least") 'words))))
   (if atmost 'atmost 'atleast)
   "polarity")
 
-(defrxx org-balance-margin-regexp
+(defrxx margin
   (seq "+-" blanks?
        (or
-	(seq (org-balance-number-regexp margin) blanks? "%")
-	(org-balance-valu-regexp margin))) margin)
+	(seq (number margin) blanks? "%")
+	(valu margin))) margin)
 
 (defrxx org-balance-goal-regexp
   (sep-by
    blanks
-   (opt (org-balance-polarity-regexp polarity))
-   (org-balance-valu-range-regexp numerator)
-   (org-balance-ratio-words-regexp ratio-word)
-   (org-balance-valu-regexp denominator)
-   (opt (org-balance-margin-regexp margin)))
+   (opt (polarity polarity))
+   (valu-range numerator)
+   (ratio-words ratio-word)
+   (valu denominator)
+   (opt (margin margin)))
   
   (lambda (goal-str)
     (make-org-balance-goal 
@@ -1052,18 +1056,13 @@ changing only the numerator."
      :ratio-word ratio-word))
   "value ratio goal")
 
-(defrxx org-balance-goal-link-regexp
-  (sep-by
-   blanks
-   (org-balance-number-regexp factor)
-   "of"
-   (opt "actual")
-   org-balance-link-regexp)
+
+(defrxx goal-link (sep-by blanks (number factor) "of" (opt "actual") link)
   factor)
 
 (defrxx org-balance-goal-or-link-regexp
-  (or (org-balance-goal-regexp goal)
-      (org-balance-goal-link-regexp link))
+  (or (goal goal)
+      (goal-link link))
   (or goal link))
 
 (defun org-balance-parse-goal-or-link-at-point ()
@@ -1092,7 +1091,6 @@ changing only the numerator."
 	      (error "No goal found at link taget"))
 	    (org-balance-scale-goal result (org-balance-parse-goal-or-link-at-point))))))))
 
-
 (defun org-balance-remove-props ()
   (interactive)
   (save-excursion
@@ -1101,6 +1099,8 @@ changing only the numerator."
       (dolist (prop '("goal_delta_val" "goal_delta_percent" "goal_updated"))
 	(org-delete-property-globally prop))
       (org-map-entries '(org-toggle-tag "goal_error" 'off) "+goal_error/!GOAL" 'file))))
+
+(rxx-set-prefix nil)
 
 (provide 'org-balance)
 

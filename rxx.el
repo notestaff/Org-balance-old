@@ -128,7 +128,7 @@ bound to the same name in an environment, this returns a list."
   (when (symbolp grp-name) (setq grp-name (list grp-name)))
   (if (eq (first grp-name) '..)
       (rxx-env-lookup (cdr grp-name) (rxx-parent-env rxx-env))
-    (let ((grp-infos (cdr-safe (assq (first grp-name) rxx-env))))
+    (let ((grp-infos (cdr-safe (assq (first grp-name) (cdr rxx-env)))))
       (apply 'append
 	     (mapcar
 	      (lambda (grp-info)
@@ -147,7 +147,17 @@ environment RXX-ENV.  If already bound, add to the binding."
 		     (first new-entry)))))
     (setcdr entry (cons rxx-info (cdr entry)))
     rxx-env))
-    
+
+(defmacro do-rxx-env (grp-name rxx-infos rxx-env &rest forms)
+  "Execute forms for each (grp-name, rxx-info) binding in this env"
+  (declare (indent 3))
+  (let ((cur-var (make-symbol "cur")))
+    `(let ((,cur-var (cdr ,rxx-env)))
+       (while ,cur-var
+	 (let ((,grp-name (car ,cur-var))
+	       (,rxx-infos (cdr ,cur-var)))
+	   ,@forms)
+	 (setq ,cur-var (cdr ,cur-var))))))
 
 (defun rxx-named-grp-num (grp-name &optional aregexp)
   "Look up the explicitly numbered group number assigned to the given named group, for passing as the SUBEXP argument
@@ -349,7 +359,6 @@ a `let' form, except that the list of symbols can be computed at run-time."
 		   (funcall parser match-str)
 		 (eval parser))))
 	  parser-result)))))
-      
 
 (defun rxx-match-aux (code)
   "Common code of `rxx-match-val', `rxx-match-string', `rxx-match-beginning' and `rxx-match-end'.  Looks up the rxx-info
@@ -450,19 +459,24 @@ Returns the value of the last expression."
 
 (defmacro rxx-safe-val (x) `(if (boundp (quote ,x)) ,x 'unbound))
 
+(defun rxx-symbol (symbol)
+  (if (and (boundp 'rxx-prefix) rxx-prefix (not (save-match-data (string-match "-regexp$" (symbol-name symbol)))))
+      (intern (concat rxx-prefix "-" (symbol-name symbol) "-regexp"))
+    symbol))
 
 (defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
+  (declare (special rxx-env))
   (if (not (boundp 'rxx-env))
       ad-do-it
-    (cond ((and (consp form) (symbolp (first form)) (boundp (first form)) (get-rxx-info (symbol-value (first form))))
-	      (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (first form)))))
-	    ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
-	        (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
-	      ((and (symbolp form) (boundp form) (get-rxx-info (symbol-value form)))
-	          (setq ad-return-value
-			 ;; what if recurs is used? need to regenerate from form
-			 (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value form))) 'no-group) '*)))
-	        (t ad-do-it))))
+    (cond ((and (consp form) (symbolp (first form)) (boundp (rxx-symbol (first form))) (get-rxx-info (symbol-value (rxx-symbol (first form)))))
+	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (rxx-symbol (first form))))))
+	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
+	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
+	  ((and (symbolp form) (boundp (rxx-symbol form)) (get-rxx-info (symbol-value (rxx-symbol form))))
+	   (setq ad-return-value
+		 ;; FIXME: what if recurs is used? need to regenerate from form
+		 (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value (rxx-symbol form)))) 'no-group) '*)))
+	  (t ad-do-it))))
 
 (defun rxx-to-string (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
@@ -683,13 +697,13 @@ the parsed result in case of match, or nil in case of mismatch."
     (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)
   ))
 
-(defadvice rx-kleene (around rxx-kleene first (form) ;activate compile
-			     )
+(defadvice rx-kleene (around rxx-kleene first (form) ) ;activate compile
   (if (not (boundp 'rxx-env))
       ad-do-it
-    (let* ((parent-rxx-env rxx-env)
+    (let* ((grp-num (incf rxx-next-grp-num))
+	   (parent-rxx-env rxx-env)
 	   (rxx-env (new-rxx-env parent-rxx-env)))
-      (progn ad-do-it)
+      ad-do-it
       ;; now for each name in rxx-env,
       ;; put a name into parent-rxx-env with a parser that would:
       ;;   - for zero-or-one, just leave it.
@@ -702,7 +716,10 @@ the parsed result in case of match, or nil in case of mismatch."
       ;;
       ;; notes:
       ;;   - what exactly happens if zero repetitions matched?
-      )))
+      (setq ad-return-value  (format "\\(?%d:%s\\)" grp-num ad-do-it))
+
+      (do-rxx-env (grp-name rxx-infos rxx-env)
+	  ))))
 
 (defadvice rx-or (around rxx-or first (form) activate compile)
   (unless (or (not (boundp 'rxx-env))
@@ -729,12 +746,16 @@ the parsed result in case of match, or nil in case of mismatch."
     (setq re (substring re 4 -2)))
   re)
 
+(defmacro rxx-set-prefix (prefix)
+  `(defrxxconst rxx-prefix (when (quote ,prefix) (symbol-name (quote ,prefix)))))
+
 (defmacro defrxxconst (symbol initvalue &optional docstring)
   `(eval-and-compile
+     (rxx-dbg (quote ,symbol) (and (boundp 'rxx-prefix) rxx-prefix))
      (defconst ,symbol ,initvalue ,docstring)))
 
 (defmacro defrxx (var regexp &optional parser descr)
-  `(defrxxconst ,var (rxx ,regexp ,parser ,descr) ,descr))
+  `(defrxxconst ,(rxx-symbol var) (rxx ,regexp ,parser ,descr) ,descr))
 
 (defmacro defrxxrecurse (depth var regexp &optional parser descr)
   `(defrxxconst ,var ,(let ((rxx-recurs-depth depth))
