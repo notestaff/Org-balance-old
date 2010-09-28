@@ -1030,7 +1030,13 @@ changing only the numerator."
       (named-grp atleast (eval-regexp (regexp-opt (list "at least") 'words))))
   (if atmost 'atmost 'atleast)
   "polarity")
-  
+
+(defrxx org-balance-margin-regexp
+  (seq "+-" blanks?
+       (or
+	(seq (org-balance-number-regexp margin) blanks? "%")
+	(org-balance-valu-regexp margin))) margin)
+
 (defrxx org-balance-goal-regexp
   (sep-by
    blanks
@@ -1038,12 +1044,7 @@ changing only the numerator."
    (org-balance-valu-range-regexp numerator)
    (org-balance-ratio-words-regexp ratio-word)
    (org-balance-valu-regexp denominator)
-   (opt
-    ;; specify margin
-    "+-" blanks?
-    (or
-     (seq (org-balance-number-regexp margin) blanks? "%")
-     (org-balance-valu-regexp margin))))
+   (opt (org-balance-margin-regexp margin)))
   
   (lambda (goal-str)
     (make-org-balance-goal 
