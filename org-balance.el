@@ -667,70 +667,6 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   (message "--------------------------------")
   (org-balance-compute-goal-deltas2))
 
-(defconst org-balance-regtest-dir "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/regtests/")
-(defconst org-balance-regtest-defs
-  '(("mythings.org" 1283015820.0 1285607849.393998 (19616 55415 443943))
-    ("rt1.org" 1284760020.0 1285624025.292002 (19617 4313 292003))))
-
-(defconst org-balance-parse-test-defs
-  '((inactive-timestamp "[2010-09-28 Tue 16:11]" 1285704660.0)
-    (clock "		 CLOCK: [2010-09-07 Tue 21:07]--[2010-09-08 Wed 00:07] =>  3:00" (1283908020.0 . 1283918820.0))
-    (closed "			 	CLOSED: [2009-08-27 Thu 11:58]" 1251388680.0)
-    (archive "	 :ARCHIVE:  %s_archive::work archive" "%s_archive::work archive")
-    (number "three" 3)
-    (number "3." 3)
-    (number "3.3737" 3.3737)
-    (number ".012340" 0.01234)
-    (number "1e-5" 1e-5)
-    (number "1.35e5" 1.35e5)))
-
-(defun org-balance-test-parsing ()
-  (interactive)
-  (let ((num-ok 0))
-    (dolist (parse-test org-balance-parse-test-defs)
-      (assert (equal (rxx-parse
-		      (symbol-value
-		       (intern (concat "org-balance-" (symbol-name (first parse-test)) "-regexp")))
-		      (second parse-test))
-		     (third parse-test)))
-      (incf num-ok))
-    (message "%d parsing tests ok" num-ok)))
-
-(defun org-balance-regtests ()
-  (interactive)
-  (org-balance-test-parsing)
-  (save-excursion
-    (save-window-excursion
-      (save-restriction
-	(save-match-data
-	  (let ((num-ok 0) (num-failed 0))
-	    (dolist (regtest org-balance-regtest-defs)
-	      (let* ((test-file (concat org-balance-regtest-dir (first regtest)))
-		     (ref-file (concat (file-name-sans-extension test-file) "_ref.org")))
-		(if (not (and (file-readable-p test-file) (file-readable-p ref-file)))
-		    (progn
-		      (incf num-failed)
-		      (message "Could not read test file %s or reference file %s" test-file ref-file))
-		  (find-file test-file)
-		  (widen)
-		  (goto-char (point-min))
-		  (org-balance-remove-props)
-		  (let ((goal-update-time (fourth regtest)))
-		    (org-balance-compute-goal-deltas2 :tstart (second regtest) :tend (third regtest)))
-		  (save-buffer)
-		  (if (zerop (call-process "diff" (not 'infile) (not 'destination) (not 'display)
-					   "-b" test-file ref-file))
-		      (progn
-			(incf num-ok)
-			(kill-buffer))
-		    (incf num-failed)
-		    (message "Failed test on %s" test-file)
-		    (show-all)
-		    (find-file ref-file)
-		    (show-all)
-		    (find-file test-file)
-		    (ediff-files test-file ref-file))))
-	      (message "%s tests ok, %s tests failed" num-ok num-failed))))))))
 
 (defun org-balance-save-amt-neglected (agenda-line)
   "Given an agenda line, save the 'neglect amount' value of the corresponding org entry
@@ -1046,7 +982,7 @@ changing only the numerator."
 	(seq (number margin) blanks? "%")
 	(valu margin))) margin)
 
-(defrxx org-balance-goal-regexp
+(defrxx goal
   (sep-by
    blanks
    (opt polarity)
@@ -1108,6 +1044,82 @@ changing only the numerator."
       (dolist (prop '("goal_delta_val" "goal_delta_percent" "goal_updated"))
 	(org-delete-property-globally prop))
       (org-map-entries '(org-toggle-tag "goal_error" 'off) "+goal_error/!GOAL" 'file))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defconst org-balance-regtest-dir "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/regtests/")
+(defconst org-balance-regtest-defs
+  '(("mythings.org" 1283015820.0 1285607849.393998 (19616 55415 443943))
+    ("rt1.org" 1284760020.0 1285624025.292002 (19617 4313 292003))))
+
+(defconst org-balance-parse-test-defs
+  '((inactive-timestamp "[2010-09-28 Tue 16:11]" 1285704660.0)
+    (clock "		 CLOCK: [2010-09-07 Tue 21:07]--[2010-09-08 Wed 00:07] =>  3:00" (1283908020.0 . 1283918820.0))
+    (closed "			 	CLOSED: [2009-08-27 Thu 11:58]" 1251388680.0)
+    (archive "	 :ARCHIVE:  %s_archive::work archive" "%s_archive::work archive")
+    (number "three" 3)
+    (number "3." 3)
+    (number "3.3737" 3.3737)
+    (number ".012340" 0.01234)
+    (number "1e-5" 1e-5)
+    (number "1.35e5" 1.35e5)
+    (goal "once a month" [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 month] nil nil "a" "once a month"])
+    (goal "at least 2-3 times a week" [cl-struct-org-balance-goal [cl-struct-org-balance-valu 2 times] [cl-struct-org-balance-valu 3 times] [cl-struct-org-balance-valu 1 week] atleast nil "a" "at least 2-3 times a week"])
+    (goal "at most 1200 dollars per year +- 100 dollars" [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1200 dollars] [cl-struct-org-balance-valu 1200 dollars]
+										     [cl-struct-org-balance-valu 1 year] atmost [cl-struct-org-balance-valu 100 dollars] "per" "at most 1200 dollars per year +- 100 dollars"])))
+
+
+(defun org-balance-test-parsing ()
+  (interactive)
+  (let ((num-ok 0))
+    (dolist (parse-test org-balance-parse-test-defs)
+      (assert (equal (rxx-parse
+		      (symbol-value
+		       (intern (concat "org-balance-" (symbol-name (first parse-test)) "-regexp")))
+		      (second parse-test))
+		     (third parse-test)))
+      (incf num-ok))
+    (message "%d parsing tests ok" num-ok)))
+
+(defun org-balance-regtests ()
+  (interactive)
+  (org-balance-test-parsing)
+  (save-excursion
+    (save-window-excursion
+      (save-restriction
+	(save-match-data
+	  (let ((num-ok 0) (num-failed 0))
+	    (dolist (regtest org-balance-regtest-defs)
+	      (let* ((test-file (concat org-balance-regtest-dir (first regtest)))
+		     (ref-file (concat (file-name-sans-extension test-file) "_ref.org")))
+		(if (not (and (file-readable-p test-file) (file-readable-p ref-file)))
+		    (progn
+		      (incf num-failed)
+		      (message "Could not read test file %s or reference file %s" test-file ref-file))
+		  (find-file test-file)
+		  (widen)
+		  (goto-char (point-min))
+		  (org-balance-remove-props)
+		  (let ((goal-update-time (fourth regtest)))
+		    (org-balance-compute-goal-deltas2 :tstart (second regtest) :tend (third regtest)))
+		  (save-buffer)
+		  (if (zerop (call-process "diff" (not 'infile) (not 'destination) (not 'display)
+					   "-b" test-file ref-file))
+		      (progn
+			(incf num-ok)
+			(kill-buffer))
+		    (incf num-failed)
+		    (message "Failed test on %s" test-file)
+		    (show-all)
+		    (find-file ref-file)
+		    (show-all)
+		    (find-file test-file)
+		    (ediff-files test-file ref-file))))
+	      (message "%s tests ok, %s tests failed" num-ok num-failed))))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 (rxx-set-prefix nil)
 
