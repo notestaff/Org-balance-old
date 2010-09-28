@@ -942,24 +942,22 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 (defrxx org-balance-unit-regexp
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist)))))
 
-(defrxx
-    org-balance-valu-regexp
-    ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
-    ;; or an optional number (assumed to be 1 if not given) followed by a unit.
-    ;; But either a number or a unit must be given.
-    (or (seq (opt (org-balance-number-regexp val)) (org-balance-unit-regexp unit))
-	(seq val (opt unit)))
-    (org-balance-make-valu (or val 1) (or unit "item"))
-    "value with unit")
-  
+(defrxx org-balance-valu-regexp
+  ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
+  ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+  ;; But either a number or a unit must be given.
+  (or (seq (opt (org-balance-number-regexp val)) (org-balance-unit-regexp unit))
+      (seq val (opt unit)))
+  (org-balance-make-valu (or val 1) (or unit "item"))
+  "value with unit")
+
 (defun org-balance-parse-valu (valu-str)
   "Given a string representing a value with units, parse it into an org-balance-valu structure."
   (or
    (run-hook-with-args-until-success 'org-balance-parse-valu-hooks valu-str)
    (rxx-parse org-balance-valu-regexp valu-str)))
 
-(defrxx
-  org-balance-valu-range-regexp
+(defrxx org-balance-valu-range-regexp
   ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
