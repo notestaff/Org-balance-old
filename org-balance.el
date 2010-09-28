@@ -684,9 +684,6 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
     (number "1e-5" 1e-5)
     (number "1.35e5" 1.35e5)))
 
-(rxx-parse  (string-to-number "1.0e-5")
-
-
 (defun org-balance-test-parsing ()
   (interactive)
   (let ((num-ok 0))
