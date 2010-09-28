@@ -594,6 +594,7 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 
   (rxx-to-string form parser descr))
 
+
 (defmacro rxxlet* (bindings &rest forms)
   (list 'let* (mapcar (lambda (binding) (list (first binding)
 					      (list 'rxx (second binding) (third binding) (symbol-name (first binding)))))
@@ -728,13 +729,16 @@ the parsed result in case of match, or nil in case of mismatch."
     (setq re (substring re 4 -2)))
   re)
 
-(defmacro defrxx (var regexp &optional parser descr)
-  `(eval-and-compile
-     (defconst ,var (rxx ,regexp ,parser ,descr) ,descr)))
-
 (defmacro defrxxconst (symbol initvalue &optional docstring)
   `(eval-and-compile
      (defconst ,symbol ,initvalue ,docstring)))
+
+(defmacro defrxx (var regexp &optional parser descr)
+  `(defrxxconst ,var (rxx ,regexp ,parser ,descr) ,descr))
+
+(defmacro defrxxrecurse (depth var regexp &optional parser descr)
+  `(defrxxconst ,var ,(let ((rxx-recurs-depth depth))
+			(rxx-to-string regexp parser descr)) ,descr))
 
 (defun rxx-add-font-lock-keywords ()
   (when (featurep 'font-lock)
@@ -742,7 +746,9 @@ the parsed result in case of match, or nil in case of mismatch."
     (put 'defrxx 'doc-string-elt 4)
     (font-lock-add-keywords
      nil
-     '(("\\<\\(defrxx\\(?:const\\)?\\)[[:space:]]+\\([^[:space:]]+\\)" .
+     '(("\\<\\(defrxx\\(?:\\(?:const\\)\\)?\\)[[:space:]]+\\([^[:space:]]+\\)" .
+	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
+       ("\\<\\(defrxxrecurse\\)[[:space:]]+\\(?:[[:digit:]]+\\)[[:space:]]+\\([^[:space:]]+\\)" .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
   
 (add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)

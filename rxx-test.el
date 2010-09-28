@@ -297,5 +297,16 @@ TIME defaults to the current time."
 (assert (equal (rxx-flet ((rxx-ppp rxx-qqq))
 		 (rxx-ppp 33)) 1089))
 
+(defrxx rxx-num-regexp (1+ digit) string-to-number)
+(defrxx rxx-op-regexp (or "+" "-" "*" "/") intern)
+(defrxx rxx-expr (or
+		  (seq "(" (rxx-op-regexp op) blanks (recurse (rxx-expr left)) blanks (recurse (rxx-expr right)) ")")
+		  (seq "(" (recurse (rxx-expr in-paren)) ")")
+		  (rxx-num-regexp plain-num)) (or (and op (funcall op left right)) in-paren plain-num))
+
+
+(defrxxrecurse 3 rxx-expr3 (rxx-expr e) e)
+
+(assert (equal (rxx-parse rxx-expr3 "(+ 1 (* 2 3))") 7))
 
 (message "All rxx tests seem to have passed")
