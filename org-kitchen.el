@@ -1988,3 +1988,4 @@ appropriate parameters.
 (let ((s "********* [#A] GOAL clockedtime: at least 2 hours per day"))
   (string-match org-balance-goal-prefix-regexp s)
   (match-string 0 s))
+
