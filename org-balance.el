@@ -931,9 +931,7 @@ by whitespace, it throws an error rather than silently returning zero.
 (defalias 'org-balance-parse-number 'org-balance-string-to-number)
 
 (defrxx org-balance-number-range-regexp
-  (seq
-   (org-balance-number-regexp range-start)
-   (opt "-" (org-balance-number-regexp range-end)))
+  (seq (org-balance-number-regexp range-start) (opt "-" (org-balance-number-regexp range-end)))
   (cons range-start (or range-end range-start)))
 
 (defvar org-balance-parse-valu-hooks nil
@@ -949,11 +947,10 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
     ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
     ;; or an optional number (assumed to be 1 if not given) followed by a unit.
     ;; But either a number or a unit must be given.
-    (or (seq (opt (org-balance-number-regexp val))
-	     (org-balance-unit-regexp unit))
+    (or (seq (opt (org-balance-number-regexp val)) (org-balance-unit-regexp unit))
 	(seq val (opt unit)))
-     (org-balance-make-valu (or val 1) (or unit "item"))
-     "value with unit")
+    (org-balance-make-valu (or val 1) (or unit "item"))
+    "value with unit")
   
 (defun org-balance-parse-valu (valu-str)
   "Given a string representing a value with units, parse it into an org-balance-valu structure."
