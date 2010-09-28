@@ -672,8 +672,36 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
   '(("mythings.org" 1283015820.0 1285607849.393998 (19616 55415 443943))
     ("rt1.org" 1284760020.0 1285624025.292002 (19617 4313 292003))))
 
+(defconst org-balance-parse-test-defs
+  '((inactive-timestamp "[2010-09-28 Tue 16:11]" 1285704660.0)
+    (clock "		 CLOCK: [2010-09-07 Tue 21:07]--[2010-09-08 Wed 00:07] =>  3:00" (1283908020.0 . 1283918820.0))
+    (closed "			 	CLOSED: [2009-08-27 Thu 11:58]" 1251388680.0)
+    (archive "	 :ARCHIVE:  %s_archive::work archive" "%s_archive::work archive")
+    (number "three" 3)
+    (number "3." 3)
+    (number "3.3737" 3.3737)
+    (number ".012340" 0.01234)
+    (number "1e-5" 1e-5)
+    (number "1.35e5" 1.35e5)))
+
+(rxx-parse  (string-to-number "1.0e-5")
+
+
+(defun org-balance-test-parsing ()
+  (interactive)
+  (let ((num-ok 0))
+    (dolist (parse-test org-balance-parse-test-defs)
+      (assert (equal (rxx-parse
+		      (symbol-value
+		       (intern (concat "org-balance-" (symbol-name (first parse-test)) "-regexp")))
+		      (second parse-test))
+		     (third parse-test)))
+      (incf num-ok))
+    (message "%d parsing tests ok" num-ok)))
+
 (defun org-balance-regtests ()
   (interactive)
+  (org-balance-test-parsing)
   (save-excursion
     (save-window-excursion
       (save-restriction
