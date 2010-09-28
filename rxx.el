@@ -744,11 +744,12 @@ the parsed result in case of match, or nil in case of mismatch."
   (when (featurep 'font-lock)
     (put 'defrxxconst 'doc-string-elt 3)
     (put 'defrxx 'doc-string-elt 4)
+    (put 'defrxxrecurse 'doc-string-elt 5)
     (font-lock-add-keywords
      nil
-     '(("\\<\\(defrxx\\(?:\\(?:const\\)\\)?\\)[[:space:]]+\\([^[:space:]]+\\)" .
+     `((,(rxx (seq bow (group (or "defrxx" "defrxxconst")) blanks (group (1+ (not space))))) .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
-       ("\\<\\(defrxxrecurse\\)[[:space:]]+\\(?:[[:digit:]]+\\)[[:space:]]+\\([^[:space:]]+\\)" .
+       (,(rxx (seq bow (group "defrxxrecurse") blanks (1+ digit) blanks (group (1+ (not space))))) .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
   
 (add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)
