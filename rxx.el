@@ -506,22 +506,27 @@ For detailed description, see `rxx'.
      (rxx-replace-posix regexp))))
 
 (defun rxx-process-sep-by (form)
-  "Process the sep-by form"
-  (let ((separator (second form)))
+  "Process the sep-by form, which looks like (sep-by separator ....)"
+  (let ((separator (second form))
+	(seq-elems (cddr form)))
     (rx-form
-     (apply 'append
-	    (list
-	     (list 'seq (third form))
-
-	     ;; FIXME: if the first few are optional then need to put blanks inside each optional.
-	     ;; and _not_ have a blank in front of the first non-optional arg.
-
-	     ;; so, need to split the list into optional and non-optional and treat them differently.
-	     (apply 'append (mapcar
-			     (lambda (x)
-			       (if (and (consp x) (memq (first x) '(opt optional zero-or-one)))
-				   (rxx-dbg (list (append (list (first x) separator) (cdr x))))
-				 (list separator x))) (cdddr form))))))))
+     (let ((form-with-separators '(seq)) seen-non-optional)
+       (dolist (seq-elem seq-elems form-with-separators)
+	 (let ((is-optional (and (consp seq-elem) (memq (first seq-elem) '(opt optional zero-or-one)))))
+	   (rxx-dbg "starting " seq-elem form-with-separators is-optional seen-non-optional)
+	   (setq form-with-separators
+		 (append form-with-separators
+			 (if is-optional
+			     (list
+			      (if (not seen-non-optional)
+				  (append seq-elem (when (> (length form) 3) (list separator)))
+				(progn
+				  (rxx-dbg seq-elem (first seq-elem) (list (first seq-elem)) (cdr seq-elem))
+				  (append (list (first seq-elem) separator) (cdr seq-elem)))))
+			   (if (not seen-non-optional) (list seq-elem)
+			     (list separator seq-elem)))))
+	   (unless is-optional (setq seen-non-optional t))
+	   (rxx-dbg seq-elem is-optional form-with-separators)))))))
 
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
 
