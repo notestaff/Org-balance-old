@@ -734,7 +734,7 @@ the parsed result in case of match, or nil in case of mismatch."
 
 (defun rxx-remove-unneeded-shy-grps (re)
   "Remove shy groups that do nothing"
-  (while (and nil (>= (length re) 10) (string= (substring re 0 8) "\\(?:\\(?:")
+  (while (and t (>= (length re) 10) (string= (substring re 0 8) "\\(?:\\(?:")
 	      (string= (substring re -4) "\\)\\)"))
     (setq re (substring re 4 -2)))
   re)
