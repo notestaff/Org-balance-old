@@ -392,7 +392,7 @@ as you were doing it.
     (save-excursion
       (save-match-data
 	(goto-char (point-min))
-	(rxx-do-search-fwd clock clock-interval
+	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
 	  (let* ((ts (car clock-interval)) (te (cdr clock-interval))
 		 (ts (if tstart (max ts tstart) ts))
 		 (te (if tend (min te tend) te))
@@ -417,7 +417,7 @@ Originally adapted from `org-closed-in-range'.
       (goto-char (point-min))
       (let ((prop-sum (org-balance-make-valu 0 unit))
 	    (prop-default (concat "default_" prop)))
-	(rxx-do-search-fwd closed closed-time
+	(rxx-do-search-fwd org-balance-closed-regexp closed-time
 	  (when (and (<= tstart closed-time) (<= closed-time tend))
 	    (save-excursion
 	      (save-match-data
@@ -468,7 +468,7 @@ Originally adapted from `org-closed-in-range'.
       (save-restriction
 	(let ((archive-locs (list (org-get-local-archive-location))))
 	  (org-narrow-to-subtree)
-	  (rxx-do-search-fwd archive loc
+	  (rxx-do-search-fwd org-balance-archive-regexp loc
 	    (message "found loc %s at %s" loc (point))
 	    (add-to-list 'archive-locs loc))
 	  (mapcar (lambda (loc) (make-org-balance-loc :file (org-balance-not-blank (org-extract-archive-file loc))
@@ -613,7 +613,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
       (save-restriction
 	(save-match-data
 	    ;; FIXOPT if goals specified, make regexp for them
-	  (rxx-do-search-fwd goal-prefix prop-ratio
+	  (rxx-do-search-fwd org-balance-goal-prefix-regexp prop-ratio
 	    (let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
 		   (parsed-goal
 		    (condition-case err
