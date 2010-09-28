@@ -392,7 +392,7 @@ as you were doing it.
     (save-excursion
       (save-match-data
 	(goto-char (point-min))
-	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
+	(rxx-do-search-fwd clock clock-interval
 	  (let* ((ts (car clock-interval)) (te (cdr clock-interval))
 		 (ts (if tstart (max ts tstart) ts))
 		 (te (if tend (min te tend) te))
@@ -400,8 +400,8 @@ as you were doing it.
 	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
     total-minutes))
 
-(defrxx closed (sep-by blanks bol (eval org-closed-string) (inactive-timestamp time))
-  time)
+(defrxx closed (sep-by blanks bol (eval org-closed-string) (inactive-timestamp closed-time))
+  closed-time)
 
 (defun org-balance-sum-org-property (prop tstart tend unit prop-default-val)
   "Fast summing of property.  Returns the sum of the property under the current restriction.
@@ -412,13 +412,12 @@ Originally adapted from `org-closed-in-range'.
   ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (declare (special org-balance-num-warnings))
-  (rxx-dbg "why" prop unit prop-default-val)
   (save-excursion
     (save-match-data
       (goto-char (point-min))
       (let ((prop-sum (org-balance-make-valu 0 unit))
 	    (prop-default (concat "default_" prop)))
-	(rxx-do-search-fwd org-balance-closed-regexp closed-time
+	(rxx-do-search-fwd closed closed-time
 	  (when (and (<= tstart closed-time) (<= closed-time tend))
 	    (save-excursion
 	      (save-match-data
@@ -444,14 +443,13 @@ Originally adapted from `org-closed-in-range'.
 
 (defun org-balance-sum-property (prop tstart tend unit prop-default-val)
   "Sum a property in the specified period, within the current file restriction."
-  (rxx-dbg "summing" (buffer-file-name (current-buffer)) (point) prop prop-default-val)
   (let ((result 
 	 (cond ((string= prop "clockedtime")
 		(org-balance-make-valu (org-balance-clock-sum tstart tend) 'minutes))
 	       ((string= prop "actualtime")
 		(org-balance-make-valu (- tend tstart) 'seconds))
 	       (t (org-balance-sum-org-property prop tstart tend unit prop-default-val)))))
-    (rxx-dbg prop unit (buffer-file-name (current-buffer)) (point) result)))
+    result))
 
 (defrxx archive (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl))) loc)
 
@@ -470,7 +468,7 @@ Originally adapted from `org-closed-in-range'.
       (save-restriction
 	(let ((archive-locs (list (org-get-local-archive-location))))
 	  (org-narrow-to-subtree)
-	  (rxx-do-search-fwd org-balance-archive-regexp loc
+	  (rxx-do-search-fwd archive loc
 	    (message "found loc %s at %s" loc (point))
 	    (add-to-list 'archive-locs loc))
 	  (mapcar (lambda (loc) (make-org-balance-loc :file (org-balance-not-blank (org-extract-archive-file loc))
@@ -489,7 +487,6 @@ Originally adapted from `org-closed-in-range'.
 
   (let ((prop-sum (org-balance-sum-property prop tstart tend unit nil))
 	(prop-default-val (org-entry-get nil (concat "default_" prop) 'inherit)))
-    (rxx-dbg (point) (buffer-file-name (current-buffer)) prop unit prop-sum prop-default-val)
     (when (not (string= prop "actualtime"))
       (let ((olpath-regexp (concat "^[ \t]+:ARCHIVE_OLPATH: " (mapconcat 'identity (org-get-outline-path) "/"))))
 	(dolist (loc (org-balance-find-all-archive-targets))
@@ -508,7 +505,6 @@ Originally adapted from `org-closed-in-range'.
 			     nil t)
 			(progn
 			  (goto-char (match-beginning 0))
-			  (rxx-dbg "we are at" (buffer-name (current-buffer)) (point))
 			  (org-narrow-to-subtree)))))
 		  
 		  (goto-char (if org-archive-reversed-order (point-min) (point-max)))
@@ -546,7 +542,7 @@ Originally adapted from `org-closed-in-range'.
 
 (defrxx goal-prefix
   (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) (opt priority)
-		   (prop-ratio prop-ratio))
+		   prop-ratio)
        blanks? ":" blanks?) prop-ratio)
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
@@ -617,7 +613,7 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
       (save-restriction
 	(save-match-data
 	    ;; FIXOPT if goals specified, make regexp for them
-	  (rxx-do-search-fwd org-balance-goal-prefix-regexp prop-ratio
+	  (rxx-do-search-fwd goal-prefix prop-ratio
 	    (let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
 		   (parsed-goal
 		    (condition-case err
@@ -890,29 +886,20 @@ we convert to the specified multiples of new unit."
   (lambda (match) (cdr-safe (assoc-string match org-balance-number-names))))
 
 (defrxx number
-  (seq
-   (zero-or-more whitespace)
-   
-   (or
-    ;; either an english number name
-       (org-balance-number-name-regexp named-number)
-       
-       ;; or a floating-point number, possibly in scientific notation
-       (seq
-	(opt (any "+-"))
-	(or (seq (one-or-more (any digit))
-		 (opt ".")
-		 (opt (one-or-more (any digit))))
-	    (seq "." (one-or-more (any digit))))
-	(opt
-	 (seq (any "eE")
-	      (opt (any "+-"))
-	      (one-or-more (any digit))))))
-   
-   (zero-or-more whitespace))
+  (seq blanks?
+       (or
+	number-name
+	(seq
+	 (opt (any "+-"))
+	 (or (seq digits (opt ".") (opt digits))
+	     (seq "." digits))
+	 (opt
+	  (seq (any "eE")
+	       (opt (any "+-"))
+	       digits))))
+       blanks?)
   (lambda (match)
-    (or named-number
-	(string-to-number match)))
+    (or number-name (string-to-number match)))
   "number")
 
 (defun org-balance-is-valid-number-p (s)
@@ -950,9 +937,9 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
-  (or (seq (opt (number val)) (unit unit))
-      (seq val (opt unit)))
-  (org-balance-make-valu (or val 1) (or unit "item"))
+  (or (seq (opt number) unit)
+      (seq number (opt unit)))
+  (org-balance-make-valu (or number 1) (or unit "item"))
   "value with unit")
 
 (defun org-balance-parse-valu (valu-str)
@@ -978,8 +965,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
   (rxx-parse org-balance-valu-range-regexp valu-str))
 
-(defrxxconst org-balance-ratio-words (list "per" "every" "each" "/" "a" "in a"))
-(defrxxconst org-balance-ratio-words-regexp (rxx (eval-regexp (regexp-opt org-balance-ratio-words 'words))))
+(defrxx ratio-word (or "per" "every" "each" "/" "a" "in a"))
 
 ;; Struct: org-balance-valu-ratio - a ratio of two valu's.
 (defstruct org-balance-valu-ratio num denom
@@ -989,7 +975,6 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 (defun org-balance-convert-valu-ratio (old-valu-ratio new-valu-ratio)
   "Convert a valu ratio to new units, e.g. minutes per day to hours per week.  We keep the denominator of the new ratio,
 changing only the numerator."
-  (rxx-dbg old-valu-ratio new-valu-ratio)
   (let ((new-num (org-balance-valu-ratio-num new-valu-ratio))
 	(new-denom (org-balance-valu-ratio-denom new-valu-ratio)))
     (make-org-balance-valu-ratio
@@ -1025,8 +1010,8 @@ changing only the numerator."
   ))
 
 (defrxx polarity
-  (or (named-grp atmost (eval-regexp (regexp-opt (list "at most") 'words)))
-      (named-grp atleast (eval-regexp (regexp-opt (list "at least") 'words))))
+  (or (named-grp atmost (or "at most"))
+      (named-grp atleast (or "at least")))
   (if atmost 'atmost 'atleast)
   "polarity")
 
@@ -1039,11 +1024,11 @@ changing only the numerator."
 (defrxx org-balance-goal-regexp
   (sep-by
    blanks
-   (opt (polarity polarity))
+   (opt polarity)
    (valu-range numerator)
-   (ratio-words ratio-word)
+   ratio-word
    (valu denominator)
-   (opt (margin margin)))
+   (opt margin))
   
   (lambda (goal-str)
     (make-org-balance-goal 
@@ -1060,10 +1045,9 @@ changing only the numerator."
 (defrxx goal-link (sep-by blanks (number factor) "of" (opt "actual") link)
   factor)
 
-(defrxx org-balance-goal-or-link-regexp
-  (or (goal goal)
-      (goal-link link))
-  (or goal link))
+(defrxx goal-or-link
+  (or goal goal-link)
+  (or goal goal-link))
 
 (defun org-balance-parse-goal-or-link-at-point ()
   "Parse goal or link at point"

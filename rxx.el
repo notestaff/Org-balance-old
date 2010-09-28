@@ -214,8 +214,8 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 	     (rxx-env (rxx-new-env old-rxx-env))  ;; within each named group, a new environment for group names
 	     (grp-def
 	      (or (and (symbolp grp-def-raw)
-		       (boundp grp-def-raw)
-		       (get-rxx-info (symbol-value grp-def-raw)))
+		       (boundp (rxx-symbol grp-def-raw))
+		       (get-rxx-info (symbol-value (rxx-symbol grp-def-raw))))
 		  (and (eq (car-safe grp-def-raw) 'regexp)
 		       (get-rxx-info (second grp-def-raw)))
 
@@ -472,10 +472,12 @@ Returns the value of the last expression."
 	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (rxx-symbol (first form))))))
 	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
 	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
-	  ((and (symbolp form) (boundp (rxx-symbol form)) (get-rxx-info (symbol-value (rxx-symbol form))))
+	  ((and (symbolp form) (boundp (rxx-symbol form)) (boundp 'rxx-env) (not (rxx-env-lookup (rxx-symbol form) rxx-env))
+		(get-rxx-info (symbol-value (rxx-symbol form))))
 	   (setq ad-return-value
+		 (rxx-process-named-grp (list 'named-grp form form))))
 		 ;; FIXME: what if recurs is used? need to regenerate from form
-		 (rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value (rxx-symbol form)))) 'no-group) '*)))
+		 ;(rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value (rxx-symbol form)))) 'no-group) '*)))
 	  (t ad-do-it))))
 
 (defun rxx-to-string (form &optional parser descr)
@@ -493,8 +495,9 @@ For detailed description, see `rxx'.
 	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				     (eval-regexp . (rxx-process-eval-regexp 1 1))
 				     (shy-grp . seq)
-				     (blanks . "[[:blank:]]+")
-				     (blanks? . "[[:blank:]]*")
+				     (blanks . "\\(?:[[:blank:]]+\\)")
+				     (digits . "\\(?:[[:digit:]]+\\)")
+				     (blanks? . "\\(?:[[:blank:]]*\\)")
 				     (sep-by . (rxx-process-sep-by 1 nil))
 				     (recurse . (rxx-process-recurse 1 nil))
 				     (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
@@ -527,20 +530,17 @@ For detailed description, see `rxx'.
      (let ((form-with-separators '(seq)) seen-non-optional)
        (dolist (seq-elem seq-elems form-with-separators)
 	 (let ((is-optional (and (consp seq-elem) (memq (first seq-elem) '(opt optional zero-or-one)))))
-	   (rxx-dbg "starting " seq-elem form-with-separators is-optional seen-non-optional)
 	   (setq form-with-separators
 		 (append form-with-separators
 			 (if is-optional
 			     (list
 			      (if (not seen-non-optional)
 				  (append seq-elem (when (> (length form) 3) (list separator)))
-				(progn
-				  (rxx-dbg seq-elem (first seq-elem) (list (first seq-elem)) (cdr seq-elem))
-				  (append (list (first seq-elem) separator) (cdr seq-elem)))))
+				  (append (list (first seq-elem) separator) (cdr seq-elem))))
 			   (if (not seen-non-optional) (list seq-elem)
 			     (list separator seq-elem)))))
 	   (unless is-optional (setq seen-non-optional t))
-	   (rxx-dbg seq-elem is-optional form-with-separators)))))))
+	   form-with-separators))))))
 
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
 
@@ -658,7 +658,7 @@ the parsed result in case of match, or nil in case of mismatch."
 (defmacro rxx-do-search-fwd (aregexp var &rest forms)
   "Search forward while matches"
   (declare (indent 2))
-  `(let (,var) (while (setq ,var (rxx-search-fwd ,aregexp (not 'boundary) 'no-error))
+  `(let (,var) (while (setq ,var (rxx-search-fwd ,(rxx-symbol aregexp) (not 'boundary) 'no-error))
 		 ,@forms)))
 
 (defun rxx-parse-fwd (aregexp &optional bound partial-match-ok)
@@ -734,14 +734,14 @@ the parsed result in case of match, or nil in case of mismatch."
 
 (defun rxx-remove-unneeded-shy-grps (re)
   "Remove shy groups that do nothing"
-  (while (and (>= (length re) 10) (string= (substring re 0 8) "\\(?:\\(?:")
+  (while (and nil (>= (length re) 10) (string= (substring re 0 8) "\\(?:\\(?:")
 	      (string= (substring re -4) "\\)\\)"))
     (setq re (substring re 4 -2)))
   re)
 
 (defun rxx-remove-outer-shy-grps (re)
   "Remove any outer shy groups."
-  (while (and (>= (length re) 6) (string= (substring re 0 4) "\\(?:")
+  (while (and nil (>= (length re) 6) (string= (substring re 0 4) "\\(?:")
 	      (string= (substring re -2) "\\)"))
     (setq re (substring re 4 -2)))
   re)
@@ -751,7 +751,6 @@ the parsed result in case of match, or nil in case of mismatch."
 
 (defmacro defrxxconst (symbol initvalue &optional docstring)
   `(eval-and-compile
-     (rxx-dbg (quote ,symbol) (and (boundp 'rxx-prefix) rxx-prefix))
      (defconst ,symbol ,initvalue ,docstring)))
 
 (defmacro defrxx (var regexp &optional parser descr)

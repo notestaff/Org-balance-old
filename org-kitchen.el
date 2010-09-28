@@ -1989,3 +1989,23 @@ appropriate parameters.
   (string-match org-balance-goal-prefix-regexp s)
   (match-string 0 s))
 
+(defrxx org-balance-goal-regexp
+  (sep-by
+   blanks
+   (opt polarity)
+   (valu-range numerator)
+   ratio-word
+   (valu denominator)
+   (opt margin))
+  
+  (lambda (goal-str)
+    (make-org-balance-goal 
+     :numer-min (car numerator)
+     :numer-max (cdr numerator)
+     :denom denominator
+     :polarity polarity
+     :margin margin
+     :text goal-str
+     :ratio-word ratio-word))
+  "value ratio goal")
+
