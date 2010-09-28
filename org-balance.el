@@ -398,8 +398,7 @@ as you were doing it.
 	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
     total-minutes))
 
-(defrxx org-balance-closed-regexp (seq bol blanks? (eval org-closed-string) blanks
-				       (org-balance-inactive-timestamp-regexp time))
+(defrxx org-balance-closed-regexp (sep-by blanks bol (eval org-closed-string) (org-balance-inactive-timestamp-regexp time))
   time)
 
 (defun org-balance-sum-org-property (prop tstart tend unit prop-default-val)
@@ -452,7 +451,7 @@ Originally adapted from `org-closed-in-range'.
 	       (t (org-balance-sum-org-property prop tstart tend unit prop-default-val)))))
     (rxx-dbg prop unit (buffer-file-name (current-buffer)) (point) result)))
 
-(defrxx org-balance-archive-regexp (seq bol blanks ":ARCHIVE:" blanks (named-grp loc (1+ nonl))) loc)
+(defrxx org-balance-archive-regexp (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl))) loc)
 
 (defstruct org-balance-loc file heading)
 
@@ -539,9 +538,12 @@ Originally adapted from `org-closed-in-range'.
   (seq (org-balance-prop-regexp num) (opt blanks? "/" blanks? (org-balance-prop-regexp denom)))
   (make-org-balance-prop-ratio :num num :denom (or denom (make-org-balance-prop :prop "actualtime"))))
 
+(defrxx org-balance-priority-regexp (seq "[#" (any upper digit) "]"))
+
 (defrxx org-balance-goal-prefix-regexp
-  (seq bol (1+ "*") blanks (eval org-balance-goal-todo-keyword) blanks (opt "[#" upper "]" blanks)
-       (org-balance-prop-ratio-regexp prop-ratio) blanks? ":" blanks?) prop-ratio)
+  (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) (opt org-balance-priority-regexp)
+		   (org-balance-prop-ratio-regexp prop-ratio))
+       blanks? ":" blanks?) prop-ratio)
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
   (save-excursion
@@ -1010,7 +1012,6 @@ changing only the numerator."
   denom
   polarity
   margin
-  priority
   ratio-word
   text)
 
@@ -1025,30 +1026,24 @@ changing only the numerator."
   ))
 
 (defrxx org-balance-polarity-regexp
-  (seq (zero-or-more whitespace)
-       (or (named-grp atmost (eval-regexp (regexp-opt (list "at most"))))
-	   (named-grp atleast (eval-regexp (regexp-opt (list "at least")))))
-       (zero-or-more whitespace))
+  (or (named-grp atmost (eval-regexp (regexp-opt (list "at most") 'words)))
+      (named-grp atleast (eval-regexp (regexp-opt (list "at least") 'words))))
   (if atmost 'atmost 'atleast)
   "polarity")
   
 (defrxx org-balance-goal-regexp
-  (seq
-   blanks?
-   (opt
-    (seq (named-grp priority (regexp "\\[#[A-Z0-9]\\]")) blanks?))
+  (sep-by
+   blanks
    (opt (org-balance-polarity-regexp polarity))
    (org-balance-valu-range-regexp numerator)
-   blanks (org-balance-ratio-words-regexp ratio-word) blanks
+   (org-balance-ratio-words-regexp ratio-word)
    (org-balance-valu-regexp denominator)
    (opt
     ;; specify margin
-    (seq
-     blanks "+-" blanks?
-     (or
-      (seq (org-balance-number-regexp margin) blanks? "%")
-      (org-balance-valu-regexp margin))))
-   blanks?)
+    "+-" blanks?
+    (or
+     (seq (org-balance-number-regexp margin) blanks? "%")
+     (org-balance-valu-regexp margin))))
   
   (lambda (goal-str)
     (make-org-balance-goal 
@@ -1057,17 +1052,17 @@ changing only the numerator."
      :denom denominator
      :polarity polarity
      :margin margin
-     :priority priority
      :text goal-str
      :ratio-word ratio-word))
   "value ratio goal")
 
 (defrxx org-balance-goal-link-regexp
-  (seq (org-balance-number-regexp factor)
-       blanks
-       "of"
-       blanks
-       org-balance-link-regexp)
+  (sep-by
+   blanks
+   (org-balance-number-regexp factor)
+   "of"
+   (opt "actual")
+   org-balance-link-regexp)
   factor)
 
 (defrxx org-balance-goal-or-link-regexp
