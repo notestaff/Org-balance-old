@@ -1070,7 +1070,8 @@ changing only the numerator."
     (valu "0" [cl-struct-org-balance-valu 0 item])
     (valu "week" [cl-struct-org-balance-valu 1 week])
     (valu-range "2-3 weeks" ([cl-struct-org-balance-valu 2 weeks] . [cl-struct-org-balance-valu 3 weeks]))
-;    (rxx-parse org-balance-valu-range-regexp "2-3 weeks")
+    (valu-range "2-3" ([cl-struct-org-balance-valu 2 item] . [cl-struct-org-balance-valu 3 item]))
+;    (rxx-parse org-balance-valu-range-regexp "2-3")
     (goal "once a month"
 	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item]
 				      [cl-struct-org-balance-valu 1 month] nil nil "a" "once a month"])
