@@ -541,8 +541,7 @@ Originally adapted from `org-closed-in-range'.
 (defrxx priority (seq "[#" (any upper digit) "]"))
 
 (defrxx goal-prefix
-  (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) (opt priority)
-		   prop-ratio)
+  (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) (opt priority) prop-ratio)
        blanks? ":" blanks?) prop-ratio)
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
@@ -894,7 +893,9 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
-  (or (sep-by blanks? (named-grp unit "$") number) (sep-by blanks (opt number) unit) (sep-by blanks number (opt unit)))
+  (or (sep-by blanks? (named-grp unit "$") number)
+      (sep-by blanks (opt number) unit)
+      (sep-by blanks number (opt unit)))
   (org-balance-make-valu (or number 1) (or unit "item"))
   "value with unit")
 
@@ -977,13 +978,12 @@ changing only the numerator."
 	(valu margin))) margin)
 
 (defrxx goal
-  (sep-by
-   blanks
-   (opt polarity)
-   (valu-range numerator)
-   ratio-word
-   (valu denominator)
-   (opt margin))
+  (sep-by blanks
+    (opt polarity)
+    (valu-range numerator)
+    ratio-word
+    (valu denominator)
+    (opt margin))
   
   (lambda (goal-str)
     (make-org-balance-goal 
@@ -1067,6 +1067,7 @@ changing only the numerator."
     (valu-range "2-3 weeks" ([cl-struct-org-balance-valu 2 weeks] . [cl-struct-org-balance-valu 3 weeks]))
     (valu-range "2-3" ([cl-struct-org-balance-valu 2 item] . [cl-struct-org-balance-valu 3 item]))
 ;    (rxx-parse org-balance-valu-range-regexp "2-3")
+;    (rxx-parse org-balance-goal-regexp "at least once every two weeks +- 11%")
     (goal "once a month"
 	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item]
 				      [cl-struct-org-balance-valu 1 month] nil nil "a" "once a month"])
@@ -1077,7 +1078,11 @@ changing only the numerator."
     (goal "at most 1200 dollars per year +- 100 dollars"
 	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1200 dollars] [cl-struct-org-balance-valu 1200 dollars]
 				      [cl-struct-org-balance-valu 1 year] atmost [cl-struct-org-balance-valu 100 dollars]
-				      "per" "at most 1200 dollars per year +- 100 dollars"])))
+				      "per" "at most 1200 dollars per year +- 100 dollars"])
+    (goal "at least once every two weeks +- 11%"
+	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item]
+				      [cl-struct-org-balance-valu 2 weeks] atleast 11
+				      "every" "at least once every two weeks +- 11%"])))
 
 
 (defun org-balance-test-parsing ()
