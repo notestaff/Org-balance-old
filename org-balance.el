@@ -1063,6 +1063,8 @@ changing only the numerator."
     (number ".012340" 0.01234)
     (number "1e-5" 1e-5)
     (number "1.35e5" 1.35e5)
+    (valu "$10.37" [cl-struct-org-balance-valu 10.37 $])
+;    (rxx-parse org-balance-valu-regexp "$10.37")
     (goal "once a month"
 	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item]
 				      [cl-struct-org-balance-valu 1 month] nil nil "a" "once a month"])
