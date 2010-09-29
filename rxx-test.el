@@ -96,7 +96,7 @@
   ;; But either a number or a unit must be given.
   (or (seq (optional (rxx-number-regexp val))
 	   (rxx-unit-regexp unit))
-      (seq val (optional unit)))
+      (seq (rxx-number-regexp val) (optional (rxx-unit-regexp unit))))
   (cons (or val 1) (or unit "item"))
   "value with unit")
 
