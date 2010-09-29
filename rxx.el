@@ -173,7 +173,8 @@ The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-ARE
 	  (error "The annotated regexp must be either passed in explicitly, or scoped in as `rxx-aregexp'.")))))))
 
 (defun rxx-make-shy (re)
-  "Make all groups in re shy; and wrap a shy group around the re."
+  "Make all groups in re shy; and wrap a shy group around the re.  WARNING: this will kill any backrefs!"
+  ;; FIXME: check for backrefs, throw error if any present
   (rx-group-if
    (save-match-data
      (replace-regexp-in-string
@@ -540,6 +541,8 @@ For detailed description, see `rxx'.
 	   (unless is-optional (setq seen-non-optional t))
 	   form-with-separators))))))
 
+(put 'sep-by lisp-indent-function 1)
+
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
 
 (defun rxx-process-named-grp-recurs (form)
@@ -715,9 +718,15 @@ the parsed result in case of match, or nil in case of mismatch."
       ;; notes:
       ;;   - what exactly happens if zero repetitions matched?
       (setq ad-return-value  (format "\\(?%d:%s\\)" grp-num ad-do-it))
-
+      
       (do-rxx-env (grp-name rxx-infos rxx-env)
+	  (let ((new-parser
+		 (lambda (match-str)
+		   (let ((repeat-regexp "") (num-repeats 0))
+		     
+		     )))))
 	  ))))
+
 
 (defadvice rx-or (around rxx-or first (form) activate compile)
   (unless (or (not (boundp 'rxx-env))
