@@ -468,16 +468,13 @@ Returns the value of the last expression."
   (declare (special rxx-env))
   (if (not (boundp 'rxx-env))
       ad-do-it
-    (cond ((and (consp form) (symbolp (first form)) (boundp (rxx-symbol (first form))) (get-rxx-info (symbol-value (rxx-symbol (first form)))))
+    (cond ((and (consp form) (symbolp (first form)) (boundp (rxx-symbol (first form)))
+		(get-rxx-info (symbol-value (rxx-symbol (first form)))))
 	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (rxx-symbol (first form))))))
-	  ((and (symbolp form) (boundp 'rxx-env) (rxx-env-lookup form rxx-env))
-	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp form))))
 	  ((and (symbolp form) (boundp (rxx-symbol form)) (boundp 'rxx-env) (not (rxx-env-lookup (rxx-symbol form) rxx-env))
 		(get-rxx-info (symbol-value (rxx-symbol form))))
 	   (setq ad-return-value
 		 (rxx-process-named-grp (list 'named-grp form form))))
-		 ;; FIXME: what if recurs is used? need to regenerate from form
-		 ;(rx-group-if (rx-to-string (rxx-info-form (get-rxx-info (symbol-value (rxx-symbol form)))) 'no-group) '*)))
 	  (t ad-do-it))))
 
 (defun rxx-to-string (form &optional parser descr)
