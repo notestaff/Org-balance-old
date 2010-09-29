@@ -1064,7 +1064,13 @@ changing only the numerator."
     (number "1e-5" 1e-5)
     (number "1.35e5" 1.35e5)
     (valu "$10.37" [cl-struct-org-balance-valu 10.37 $])
-;    (rxx-parse org-balance-valu-regexp "$10.37")
+    (valu "33" [cl-struct-org-balance-valu 33 item])
+    (valu "33 items" [cl-struct-org-balance-valu 33 items])
+    (valu "item" [cl-struct-org-balance-valu 1 item])
+    (valu "0" [cl-struct-org-balance-valu 0 item])
+    (valu "week" [cl-struct-org-balance-valu 1 week])
+    (valu-range "2-3 weeks" ([cl-struct-org-balance-valu 2 weeks] . [cl-struct-org-balance-valu 3 weeks]))
+;    (rxx-parse org-balance-valu-range-regexp "2-3 weeks")
     (goal "once a month"
 	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item]
 				      [cl-struct-org-balance-valu 1 month] nil nil "a" "once a month"])
