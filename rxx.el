@@ -495,6 +495,7 @@ For detailed description, see `rxx'.
 				     (blanks . "\\(?:[[:blank:]]+\\)")
 				     (digits . "\\(?:[[:digit:]]+\\)")
 				     (blanks? . "\\(?:[[:blank:]]*\\)")
+				     (digits? . "\\(?:[[:digit:]]*\\)")
 				     (sep-by . (rxx-process-sep-by 1 nil))
 				     (recurse . (rxx-process-recurse 1 nil))
 				     (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))

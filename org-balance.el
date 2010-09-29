@@ -847,18 +847,13 @@ we convert to the specified multiples of new unit."
   (lambda (match) (cdr-safe (assoc-string match org-balance-number-names))))
 
 (defrxx number
-  (seq blanks?
-       (or
-	number-name
-	(seq
-	 (opt (any "+-"))
-	 (or (seq digits (opt ".") (opt digits))
-	     (seq "." digits))
-	 (opt
-	  (seq (any "eE")
-	       (opt (any "+-"))
-	       digits))))
-       blanks?)
+  (or
+   number-name
+   (seq
+    (opt (any "+-"))
+    (or (seq digits (opt ".") digits?)
+	(seq "." digits))
+    (opt (any "eE") (opt (any "+-")) digits)))
   (lambda (match)
     (or number-name (string-to-number match)))
   "number")
