@@ -738,7 +738,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
   '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
 	     (workweek . 7200)
 	     (month . 43200) (year . 525600) (bluemoon 1e12)))
-    (money . ((dollar . 1) (cent . .01) (k . 1000)))
+    (money . ((dollar . 1) ($ . 1) (cent . .01) (k . 1000)))
     (count . ((item . 1) (time . 1)))))
 
 ;; for each unit, add plural form: make "seconds" mean the same thing as "second"
@@ -890,6 +890,7 @@ by whitespace, it throws an error rather than silently returning zero.
   "List of hooks for parsing valu strings (value with units), such as `5 hours'.  Can be used e.g. to parse currency
 such as $5 into the canonical form `5 dollars'.  Each hook must take a string as an argument and return either an
 `org-balance-valu' struct if it successfully parsed the string, or nil if it didn't.")
+;; FIXME: such hooks should also provide the regexp to much this.  so, an aregexp.
 
 (defrxx unit
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist)))))
@@ -898,8 +899,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
-  (or (seq (opt number) unit)
-      (seq number (opt unit)))
+  (or (sep-by blanks? (named-grp unit "$") number) (sep-by blanks (opt number) unit) (sep-by blanks number (opt unit)))
   (org-balance-make-valu (or number 1) (or unit "item"))
   "value with unit")
 
@@ -913,10 +913,9 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
-  (or (seq (opt (seq (number-range range) (one-or-more whitespace)))
-	   (unit unit))
-      (seq range (opt (one-or-more whitespace) unit)))
-  (let ((number-range (or range (cons 1 1)))
+  (or (sep-by blanks (opt number-range) unit)
+      (sep-by blanks number-range (opt unit)))
+  (let ((number-range (or number-range (cons 1 1)))
 	(unit (or unit "item")))
     (cons (org-balance-make-valu (car number-range) unit)
 	  (org-balance-make-valu (cdr number-range) unit)))
@@ -1064,10 +1063,17 @@ changing only the numerator."
     (number ".012340" 0.01234)
     (number "1e-5" 1e-5)
     (number "1.35e5" 1.35e5)
-    (goal "once a month" [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 month] nil nil "a" "once a month"])
-    (goal "at least 2-3 times a week" [cl-struct-org-balance-goal [cl-struct-org-balance-valu 2 times] [cl-struct-org-balance-valu 3 times] [cl-struct-org-balance-valu 1 week] atleast nil "a" "at least 2-3 times a week"])
-    (goal "at most 1200 dollars per year +- 100 dollars" [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1200 dollars] [cl-struct-org-balance-valu 1200 dollars]
-										     [cl-struct-org-balance-valu 1 year] atmost [cl-struct-org-balance-valu 100 dollars] "per" "at most 1200 dollars per year +- 100 dollars"])))
+    (goal "once a month"
+	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item]
+				      [cl-struct-org-balance-valu 1 month] nil nil "a" "once a month"])
+    (goal "at least 2-3 times a week"
+	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 2 times]
+				      [cl-struct-org-balance-valu 3 times]
+				      [cl-struct-org-balance-valu 1 week] atleast nil "a" "at least 2-3 times a week"])
+    (goal "at most 1200 dollars per year +- 100 dollars"
+	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1200 dollars] [cl-struct-org-balance-valu 1200 dollars]
+				      [cl-struct-org-balance-valu 1 year] atmost [cl-struct-org-balance-valu 100 dollars]
+				      "per" "at most 1200 dollars per year +- 100 dollars"])))
 
 
 (defun org-balance-test-parsing ()
