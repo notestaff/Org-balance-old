@@ -2296,3 +2296,23 @@ appropriate parameters.
     (when
 	(and nil (symbolp form) (rxx-ends-with (symbol-name form) "?"))
       (setq form (list 'opt (intern (substring (symbol-name form) 0 -1)))))
+
+
+(defun rxx-add-font-lock-keywords ()
+  (when (and nil (featurep 'font-lock))
+    (put 'defrxxconst 'doc-string-elt 3)
+    (put 'defrxx 'doc-string-elt 4)
+    (put 'defrxxrecurse 'doc-string-elt 5)
+    (font-lock-add-keywords
+     nil
+     `((,(rxx (seq bow (group (or "defrxx" "defrxxconst")) blanks (group (1+ (not space))))) .
+	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
+       (,(rxx (seq bow (group "defrxxrecurse") blanks (1+ digit) blanks (group (1+ (not space))))) .
+	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
+  
+(add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)
+
+(defun rxx-unload-function ()
+  "Remove any hooks pointing to rxx functions"
+  (ad-disable-regexp "rxx")
+  (remove-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords))
