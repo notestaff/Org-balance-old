@@ -829,6 +829,7 @@ the parsed result in case of match, or nil in case of mismatch."
   `(defrxxconst ,var ,(let ((rxx-recurs-depth depth))
 			(rxx-to-string regexp parser descr)) ,descr))
 
+
 (defun rxx-add-font-lock-keywords ()
   (when (featurep 'font-lock)
     (put 'defrxxconst 'doc-string-elt 3)
@@ -836,17 +837,13 @@ the parsed result in case of match, or nil in case of mismatch."
     (put 'defrxxrecurse 'doc-string-elt 5)
     (font-lock-add-keywords
      nil
-     `((,(rxx (seq bow (group (or "defrxx" "defrxxconst")) blanks (group (1+ (not space))))) .
+     `((,(rx (seq bow (group (or "defrxx" "defrxxconst")) (1+ blank) (group (1+ (not space))))) .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
-       (,(rxx (seq bow (group "defrxxrecurse") blanks (1+ digit) blanks (group (1+ (not space))))) .
+       (,(rx (seq bow (group "defrxxrecurse") (1+ blank) (1+ digit) (1+ blank) (group (1+ (not space))))) .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
   
 (add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)
 
-(defun rxx-unload-function ()
-  "Remove any hooks pointing to rxx functions"
-  (ad-disable-regexp "rxx")
-  (remove-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords))
 
 (provide 'rxx)
 
