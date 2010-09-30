@@ -2244,10 +2244,55 @@ appropriate parameters.
 
 (cl-prettyprint (rxx-info-parser (get-rxx-info (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) )))
 
+(let ((rxx-prefix "org-balance"))
+  (rxx-parse (rxx (1+ number blanks unit blanks)
+		  (list number-list unit-list)) "1 dollar 50 cents 30 k "))
+(require 'cl)
 
-
-
-
-
-
-
+(cl-prettyexpand (let ((rxx-prefix "org-balance"))
+  (rxx-info-parser (first (rxx-env-lookup 'number-list (rxx-info-env (get-rxx-info (rxx (1+ number blanks unit blanks)))))))))
+(function
+ (lambda (match-str)
+   (let ((expr-vals (list match-str)))
+     (if nil (apply 'message (append (list "match-str=%s ") expr-vals)))
+     (car-safe (with-no-warnings (last expr-vals))))
+   (let ((repeat-form '(seq))
+	 repeat-grp-names
+	 parse-result)
+     (while (not parse-result)
+       (let ((new-grp-name (make-symbol "new-grp")))
+	 (progn
+	   (setq repeat-grp-names (append repeat-grp-names
+					  (list new-grp-name)))
+	   new-grp-name)
+	 (progn
+	   (setq repeat-form (append repeat-form
+				     (list (list 'named-grp
+						 new-grp-name
+						 '(seq number blanks unit blanks)))))
+	   (list 'named-grp new-grp-name '(seq number blanks unit blanks)))
+	 (let ((expr-vals (list repeat-form new-grp-name repeat-grp-names)))
+	   (if nil
+	       (apply 'message
+		      (append (list "repeat-form=%s new-grp-name=%s repeat-grp-names=%s ")
+			      expr-vals)))
+	   (car-safe (with-no-warnings (last expr-vals))))
+	 (let ((save-match-data-internal (match-data)))
+	   (unwind-protect
+	       (setq parse-result (rxx-parse (rxx-to-string repeat-form
+							    (function
+							     (lambda (match-str)
+							       (mapcar (function
+									(lambda (repeat-grp-name)
+									  (rxx-match-val (list repeat-grp-name
+											       'number))))
+								       (if (boundp 'repeat-grp-names)
+									   repeat-grp-names)))))
+					     match-str
+					     (not 'partial-ok)
+					     'error-ok))
+	     (set-match-data save-match-data-internal 'evaporate)))))
+     parse-result)))
+    (when
+	(and nil (symbolp form) (rxx-ends-with (symbol-name form) "?"))
+      (setq form (list 'opt (intern (substring (symbol-name form) 0 -1)))))
