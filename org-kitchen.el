@@ -2009,3 +2009,245 @@ appropriate parameters.
      :ratio-word ratio-word))
   "value ratio goal")
 
+
+(cl-prettyprint '(lambda (match-str) (let ((repeat-form (quote (seq))) repeat-grp-names parse-result) (while (not parse-result) (when repeat-grp-names (rxx-push-end (quote blanks) repeat-form)) (let ((new-grp-name (make-symbol new-grp))) (rxx-push-end new-grp-name repeat-grp-names) (rxx-push-end repeat-form (list (quote named-grp) new-grp-name (list (quote seq) ((named-grp dgrp digit))))) (save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form (` (lambda (match-str) (mapcar (lambda (repeat-grp-name) (rxx-match-val (list repeat-grp-name (, grp-name)))) (, repeat-grp-names)))) (not (quote partial-ok)) (quote error-ok)) match-str))))) parse-result)) )
+(lambda (match-str)
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (when repeat-grp-names (rxx-push-end 'blanks repeat-form))
+      (let ((new-grp-name (make-symbol new-grp)))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end repeat-form
+		      (list 'named-grp
+			    new-grp-name
+			    (list 'seq ((named-grp dgrp digit)))))
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (\` (lambda (match-str)
+									    (mapcar (lambda (repeat-grp-name)
+										      (rxx-match-val (list repeat-grp-name
+													   (\, grp-name))))
+										    (\, repeat-grp-names))))
+								      (not 'partial-ok)
+								      'error-ok)
+						       match-str)))))
+    parse-result))
+
+(cl-prettyprint '(lambda (match-str) (let ((repeat-form (quote (seq))) repeat-grp-names parse-result) (while (not parse-result) (when repeat-grp-names (rxx-push-end (quote blanks) repeat-form)) (let ((new-grp-name (make-symbol new-grp))) (rxx-push-end new-grp-name repeat-grp-names) (rxx-push-end repeat-form (list (quote named-grp) new-grp-name (list (quote seq) ((named-grp dgrp digit))))) (save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form (lambda (match-str) (mapcar (lambda (repeat-grp-name) (rxx-match-val (list repeat-grp-name (dgrp [cl-struct-rxx-info digit \(?2:[[:digit:]]\) identity ((nil (nil (nil)) strange-13)) 2 nil])))) nil)) (not (quote partial-ok)) (quote error-ok)) match-str))))) parse-result)) )
+(lambda (match-str)
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (when repeat-grp-names (rxx-push-end 'blanks repeat-form))
+      (let ((new-grp-name (make-symbol new-grp)))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end repeat-form
+		      (list 'named-grp
+			    new-grp-name
+			    (list 'seq ((named-grp dgrp digit)))))
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (lambda (match-str)
+									(mapcar (lambda (repeat-grp-name)
+										  (rxx-match-val (list repeat-grp-name
+												       (dgrp [cl-struct-rxx-info digit \(\?2: [[:digit:]] \) identity ((nil (nil (nil)) strange-13)) 2 nil]))))
+										nil))
+								      (not 'partial-ok)
+								      'error-ok)
+						       match-str)))))
+    parse-result))
+
+(cl-prettyprint (rxx-info-parser (first (rxx-env-lookup 'dgrp-list (rxx-info-env (get-rxx-info (rxx (one-or-more (named-grp dgrp digit)) dgrp)))))))
+(lambda (match-str)
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (let ((new-grp-name (make-symbol "new-grp")))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end repeat-form
+		      (list 'named-grp
+			    new-grp-name
+			    (list 'seq ((named-grp dgrp digit)))))
+	(rxx-dbg repeat-form new-grp-name repeat-grp-names)
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (lambda (match-str)
+									(mapcar (lambda (repeat-grp-name)
+										  (rxx-match-val (list repeat-grp-name
+												       dgrp)))
+										nil))
+								      (not 'partial-ok)
+								      'error-ok)
+						       match-str)))))
+    parse-result))
+
+
+(cl-prettyprint (rxx-info-parser (first (rxx-env-lookup 'dgrp-list (rxx-info-env (get-rxx-info (rxx (one-or-more (named-grp dgrp digit)) dgrp)))))))
+(lambda (match-str)
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (let ((new-grp-name (make-symbol "new-grp")))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end repeat-form
+		      (list 'named-grp
+			    new-grp-name
+			    (list 'seq (named-grp dgrp digit))))
+	(rxx-dbg repeat-form new-grp-name repeat-grp-names)
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (lambda (match-str)
+									(mapcar (lambda (repeat-grp-name)
+										  (rxx-match-val (list repeat-grp-name
+												       'dgrp)))
+										nil))
+								      (not 'partial-ok)
+								      'error-ok)
+						       match-str)))))
+    parse-result))
+
+(lambda (match-str)
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (let ((new-grp-name (make-symbol "new-grp")))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end repeat-form
+		      (list 'named-grp
+			    new-grp-name
+			    (list 'seq (named-grp dgrp digit))))
+	(rxx-dbg repeat-form new-grp-name repeat-grp-names)
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (lambda (match-str)
+									(mapcar (lambda (repeat-grp-name)
+										  (rxx-match-val (list repeat-grp-name
+												       'dgrp)))
+										nil)))
+						       (not 'partial-ok)
+						       'error-ok)
+						       match-str))))
+    parse-result))
+(cl-prettyprint (rxx-info-parser (first (rxx-env-lookup 'dgrp-list (rxx-info-env (get-rxx-info (rxx (one-or-more (named-grp dgrp digit)) dgrp)))))))
+(lambda (match-str)
+
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (let ((new-grp-name (make-symbol "new-grp")))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end repeat-form
+		      (list 'named-grp
+			    new-grp-name
+			    (list 'seq '(named-grp dgrp digit))))
+	(rxx-dbg repeat-form new-grp-name repeat-grp-names)
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (lambda (match-str)
+									(mapcar (lambda (repeat-grp-name)
+										  (rxx-match-val (list repeat-grp-name
+												       'dgrp)))
+										(new-grp)))
+								      (not 'partial-ok)
+								      'error-ok)
+						       match-str)))))
+    parse-result))
+
+(cl-prettyprint (rxx-info-parser (first (rxx-env-lookup 'dgrp-list (rxx-info-env (get-rxx-info (rxx (one-or-more (named-grp dgrp digit)) dgrp)))))))
+(lambda (match-str)
+  (rxx-dbg match-str)
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (let ((new-grp-name (make-symbol "new-grp")))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end (list 'named-grp
+			    new-grp-name
+			    (list 'seq '(named-grp dgrp digit)))
+		      repeat-form)
+	(rxx-dbg repeat-form new-grp-name repeat-grp-names)
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (lambda (match-str)
+									(mapcar (lambda (repeat-grp-name)
+										  (rxx-match-val (list repeat-grp-name
+												       'dgrp)))
+										nil)))
+						       match-str
+						       (not 'partial-ok)
+						       'error-ok)))))
+    parse-result))
+ 
+
+
+(cl-prettyprint (rxx-info-parser (first (rxx-env-lookup 'dgrp-list (rxx-info-env (get-rxx-info (rxx (one-or-more (named-grp dgrp digit)) dgrp)))))))
+(lambda (match-str)
+  (rxx-dbg match-str)
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (let ((new-grp-name (make-symbol "new-grp")))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end (list 'named-grp
+			    new-grp-name
+			    (list 'seq '(named-grp dgrp digit)))
+		      repeat-form)
+	(rxx-dbg repeat-form new-grp-name repeat-grp-names)
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (lambda (match-str)
+									(mapcar (lambda (repeat-grp-name)
+										  (rxx-match-val (list repeat-grp-name
+												       'dgrp)))
+										nil)))
+						       match-str
+						       (not 'partial-ok)
+						       'error-ok)))))
+    parse-result))
+
+(cl-prettyprint (rxx-info-parser (first (rxx-env-lookup 'dgrp-list (rxx-info-env (get-rxx-info (rxx (one-or-more (named-grp dgrp digit)) dgrp)))))))
+(lambda (match-str)
+  (rxx-dbg match-str)
+  (let ((repeat-form '(seq))
+	repeat-grp-names
+	parse-result)
+    (while (not parse-result)
+      (let ((new-grp-name (make-symbol "new-grp")))
+	(rxx-push-end new-grp-name repeat-grp-names)
+	(rxx-push-end (list 'named-grp
+			    new-grp-name
+			    (list 'seq '(named-grp dgrp digit)))
+		      repeat-form)
+	(rxx-dbg repeat-form new-grp-name repeat-grp-names)
+	(save-match-data (setq parse-result (rxx-parse (rxx-to-string repeat-form
+								      (lambda (match-str)
+									(mapcar (lambda (repeat-grp-name)
+										  (rxx-match-val (list repeat-grp-name
+												       'dgrp)))
+										(when (boundp 'repeat-grp-names)
+										  repeat-grp-names))))
+						       match-str
+						       (not 'partial-ok)
+						       'error-ok)))))
+    parse-result))
+
+(funcall (rxx-info-parser (first (rxx-env-lookup 'dgrp-list (rxx-info-env (get-rxx-info (rxx (one-or-more (named-grp dgrp digit)) dgrp)))))) "123")
+(let ((s "12"))
+  (string-match (rxx (one-or-more (named-grp dgrp digit))) s)
+  (match-string 0 s))
+
+(let* ((re2 (rxx (seq "zz" (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace))) areg-list)))
+  (rxx-parse re2 "zz1 2 3 "))
+
+(rxx-parse (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) "1. .2    \t3.4 ")
+
+(cl-prettyprint (rxx-info-parser (get-rxx-info (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) )))
+
+
+
+
+
+
+
+

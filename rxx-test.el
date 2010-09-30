@@ -231,9 +231,9 @@ TIME defaults to the current time."
 (assert (equal (rxx-parse (rxx (seq (named-grp para (seq (named-grp cifry (1+ digit)) (named-grp bukvy (1+ alpha))))
 				    (named-backref (para cifry))) (rxx-match-val '(para cifry))) "1b1") "1"))
 
-(assert (equal
-	 (eval-when-compile (let* ((re2 (rxx (seq "zz" (named-grp hru (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)))) hru)))
-	   (rxx-parse re2 "zz1 2 3 "))) '("1 " "2 " "3 ")))
+;(assert (equal
+;;	 (eval-when-compile (let* ((re2 (rxx (seq "zz" (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace))) areg-list)))
+;	   (rxx-parse re2 "zz1 2 3 "))) '("1 " "2 " "3 ")))
 
 ;; (assert (equal (eval-when-compile (let* ((rexp (rxx (or (seq "(" (named-grp-recurs val rexp) ")")
 ;; 				     (rxx-number-regexp val)) val))
@@ -308,5 +308,9 @@ TIME defaults to the current time."
 (defrxxrecurse 3 rxx-expr3 (rxx-expr e) e)
 
 (assert (equal (rxx-parse rxx-expr3 "(+ 1 (* 2 3))") 7))
+
+(assert (equal
+	 (rxx-parse (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) "1. .2    \t3.4 ")
+	 '(1 0.2 3.4)))
 
 (message "All rxx tests seem to have passed")

@@ -154,8 +154,8 @@ environment RXX-ENV.  If already bound, add to the binding."
   (let ((cur-var (make-symbol "cur")))
     `(let ((,cur-var (cdr ,rxx-env)))
        (while ,cur-var
-	 (let ((,grp-name (car ,cur-var))
-	       (,rxx-infos (cdr ,cur-var)))
+	 (let ((,grp-name (car (car ,cur-var)))
+	       (,rxx-infos (cdr (car ,cur-var))))
 	   ,@forms)
 	 (setq ,cur-var (cdr ,cur-var))))))
 
@@ -246,7 +246,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 		  ;; first recursively analyze the repeated form(s)
 		  ;; 
 		  
-		  (and (eq (car-safe grp-def-raw) 'zero-or-more)
+		  (and nil (eq (car-safe grp-def-raw) 'zero-or-more)
 		       (make-rxx-info
 			:env (rxx-new-env) :form grp-def-raw
 			:parser
@@ -450,13 +450,15 @@ with this number.")
   "Print the values of exprs, so you can write e.g. (dbg a b) to print 'a=1 b=2'.
 Returns the value of the last expression."
   `(let ((expr-vals (list ,@exprs)))
-     (apply 'message
-	    (append (list ,(mapconcat (lambda (expr)
-					(concat (format "%s" expr) "=%s "))
-				      exprs
-				      ""))
-		    expr-vals))
+     (when nil (apply 'message
+		      (append (list ,(mapconcat (lambda (expr)
+						  (concat (format "%s" expr) "=%s "))
+						exprs
+						""))
+		    expr-vals)))
      (car-safe (with-no-warnings (last expr-vals)))))
+
+;(defmacro rxx-dbg (&rest exprs) (last exprs))
 
 (defmacro rxx-safe-val (x) `(if (boundp (quote ,x)) ,x 'unbound))
 
@@ -616,24 +618,29 @@ DESCR, if given, is used in error messages by `rxx-parse'.
 		      bindings)
 	(or (car-safe forms) (and bindings (car-safe (car-safe (last bindings)))))))
 
-(defun rxx-parse (aregexp s &optional partial-match-ok)
+(defun rxx-parse (aregexp s &optional partial-match-ok error-ok)
   "Match the string against the given extended regexp, and return
 the parsed result in case of match, or nil in case of mismatch."
   ;; add options to:
   ;;   - work with re-search-forward and re-search-bwd.
   ;;
+  (unless s (error "rxx-parse: nil string"))
   (save-match-data
     (let* ((rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp)))
 	   (error-msg (format "Error parsing \`%s\' as %s" s
 			      (or (rxx-info-descr rxx-info) (rxx-info-form rxx-info)))))
       (if (not (string-match aregexp s))
-	  (error "%s" error-msg)
+	  (unless error-ok (error "%s" error-msg))
+	(let (no-parse)
 	  (unless partial-match-ok
-	    (unless (= (match-beginning 0) 0) (error "%s: match starts at %d" error-msg (match-beginning 0)))
-	    (unless (= (match-end 0) (length s)) (error "%s: match ends at %d" error-msg (match-end 0))))
-	  (let* ((rxx-env (rxx-info-env rxx-info))
-		 (rxx-object s))
-	    (rxx-call-parser rxx-info (match-string 0 s)))))))
+	    (unless (= (match-beginning 0) 0)
+	      (if error-ok (setq no-parse t) (error "%s: match starts at %d" error-msg (match-beginning 0))))
+	    (unless (= (match-end 0) (length s))
+	      (if error-ok (setq no-parse t) (error "%s: match ends at %d" error-msg (match-end 0)))))
+	  (unless no-parse
+	    (let* ((rxx-env (rxx-info-env rxx-info))
+		   (rxx-object s))
+	      (rxx-call-parser rxx-info (match-string 0 s)))))))))
 
 (defun* rxx-search-fwd (aregexp &optional bound noerror (partial-match-ok t))
   "Match the current buffer against the given extended regexp, and return
@@ -698,13 +705,23 @@ the parsed result in case of match, or nil in case of mismatch."
     (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)
   ))
 
-(defadvice rx-kleene (around rxx-kleene first (form) ) ;activate compile
-  (if (not (boundp 'rxx-env))
+(defmacro rxx-push-end (elt lst)
+  "Push elt onto end of list, and return the elt"
+  `(progn
+     (setq ,lst (append ,lst (list ,elt)))
+     ,elt))
+  
+
+(defadvice rx-kleene (around rxx-kleene first (form) activate)
+  (declare (special rxx-env rxx-next-grp-num))
+  (if (or (not (boundp 'rxx-env)) (not (boundp 'rxx-next-grp-num)) (memq (first form) '(optional opt zero-or-one)))
       ad-do-it
-    (let* ((grp-num (incf rxx-next-grp-num))
-	   (parent-rxx-env rxx-env)
-	   (rxx-env (new-rxx-env parent-rxx-env)))
+    (let* ((wrap-grp-num (when (boundp 'rxx-next-grp-num) (incf rxx-next-grp-num)))
+	   (parent-rxx-env (when (boundp 'rxx-env) rxx-env))
+	   (rxx-env (rxx-new-env parent-rxx-env)))
+      (rxx-dbg form)
       ad-do-it
+      (setq ad-return-value (format "\\(?%d:%s\\)" wrap-grp-num ad-return-value))
       ;; now for each name in rxx-env,
       ;; put a name into parent-rxx-env with a parser that would:
       ;;   - for zero-or-one, just leave it.
@@ -717,15 +734,60 @@ the parsed result in case of match, or nil in case of mismatch."
       ;;
       ;; notes:
       ;;   - what exactly happens if zero repetitions matched?
-      (setq ad-return-value  (format "\\(?%d:%s\\)" grp-num ad-do-it))
-      
-      (do-rxx-env (grp-name rxx-infos rxx-env)
+      (progn
+	(do-rxx-env grp-name rxx-infos rxx-env
+	  (rxx-dbg grp-name rxx-infos)
 	  (let ((new-parser
-		 (lambda (match-str)
-		   (let ((repeat-regexp "") (num-repeats 0))
-		     
-		     )))))
-	  ))))
+		 `(lambda (match-str)
+		    (rxx-dbg match-str)
+		    (let ((repeat-form '(seq)) repeat-grp-names parse-result )
+		      ;; while not matched:
+		      ;;   -- if repeat-regexp is non-empty and we have a separator, append it to repeat-regexp
+		      ;;   -- take a shy-grped version of ad-return-value (or, call it with the option to make it shy-grped)
+		      ;;      (or, start with the highest grp number in it, plus one)
+		      ;;    optimization: if we have a separator, first try splitting the total match on the separator and
+					;      matching each part.   if fail, go to the fallback/default route.
+		      ;;   -- append this expr, wrapped in a known-numbered group.
+		      ;;   -- try matching
+		      ;;   -- if greedy, keep trying and save last match that worked; then re-run the match to fill the match data.
+		    ;;   -- so, we either have a non-trivial parser for the repeated subexpr itself or we don't.
+		      ;;      if we don't, the most we can give is
+		      
+		      ;; so, the default parser here might be: (sep-by blanks (1+ valu))
+		      ;;    say we have a parser for value
+		      ;; (defrxx values (seq first-valu (0+ blanks valu)) (lambda (match-str) (mapcar (lambda (x) (rxx-parse-valu x) (split-string match-str)))))
+		      ;; vs
+		      ;; (defrxx values (sep-by blanks (1+ valu)))
+		      (while (not parse-result)
+					;(when repeat-grp-names (rxx-push-end 'blanks repeat-form))
+			(let ((new-grp-name (make-symbol "new-grp")))
+			  (rxx-push-end new-grp-name repeat-grp-names)
+			  (rxx-push-end (list 'named-grp new-grp-name
+					      (list 'seq (quote ,@(cdr form)))) repeat-form)
+			  (rxx-dbg repeat-form new-grp-name repeat-grp-names)
+			  (save-match-data
+			    (setq parse-result
+				  (rxx-parse
+				   (rxx-to-string repeat-form
+						  ,`(lambda (match-str)
+						      (mapcar (lambda (repeat-grp-name)
+								(rxx-match-val (list repeat-grp-name (quote ,grp-name))))
+							      (when (boundp 'repeat-grp-names) repeat-grp-names))))
+				   match-str
+				   (not 'partial-ok) 'error-ok
+				   )))
+			  ))
+		      parse-result))))
+	    (rxx-dbg new-parser)
+	    
+	    (progn
+	      (rxx-env-bind (intern (concat (symbol-name grp-name) "-list"))
+			    (make-rxx-info :parser new-parser :env (rxx-new-env) :num wrap-grp-num)
+			    parent-rxx-env)
+					;(rxx-dbg "bound" grp-name parent-rxx-env)
+	      
+	      )
+	    ))))))
 
 
 (defadvice rx-or (around rxx-or first (form) activate compile)
