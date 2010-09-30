@@ -541,7 +541,7 @@ Originally adapted from `org-closed-in-range'.
 (defrxx priority (seq "[#" (any upper digit) "]"))
 
 (defrxx goal-prefix
-  (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) (opt priority) prop-ratio)
+  (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) priority? prop-ratio)
        blanks? ":" blanks?) prop-ratio)
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
@@ -894,8 +894,8 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
   (or (sep-by blanks? (named-grp unit "$") number)
-      (sep-by blanks (opt number) unit)
-      (sep-by blanks number (opt unit)))
+      (sep-by blanks number? unit)
+      (sep-by blanks number unit?))
   (org-balance-make-valu (or number 1) (or unit "item"))
   "value with unit")
 
@@ -909,8 +909,8 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
-  (or (sep-by blanks (opt number-range) unit)
-      (sep-by blanks number-range (opt unit)))
+  (or (sep-by blanks number-range? unit)
+      (sep-by blanks number-range  unit?))
   (let ((number-range (or number-range (cons 1 1)))
 	(unit (or unit "item")))
     (cons (org-balance-make-valu (car number-range) unit)
@@ -979,11 +979,11 @@ changing only the numerator."
 
 (defrxx goal
   (sep-by blanks
-    (opt polarity)
+    polarity?
     (valu-range numerator)
     ratio-word
     (valu denominator)
-    (opt margin))
+    margin?)
   
   (lambda (goal-str)
     (make-org-balance-goal 

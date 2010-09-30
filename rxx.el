@@ -467,10 +467,17 @@ Returns the value of the last expression."
       (intern (concat rxx-prefix "-" (symbol-name symbol) "-regexp"))
     symbol))
 
+(defun rxx-ends-with (s end)
+  "Test if S ends with END"
+  (and (>= (length s) (length end)) (string= (substring s (- (length s) (length end))) end)))
+
 (defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
   (declare (special rxx-env))
   (if (not (boundp 'rxx-env))
       ad-do-it
+
+    (when (and (symbolp form) (rxx-ends-with (symbol-name form) "?"))
+      (setq form (list 'opt (intern (substring (symbol-name form) 0 -1)))))
     (cond ((and (consp form) (symbolp (first form)) (boundp (rxx-symbol (first form)))
 		(get-rxx-info (symbol-value (rxx-symbol (first form)))))
 	   (setq ad-return-value (rxx-process-named-grp (list 'named-grp (second form) (rxx-symbol (first form))))))
@@ -530,6 +537,10 @@ For detailed description, see `rxx'.
     (rx-form
      (let ((form-with-separators '(seq)) seen-non-optional)
        (dolist (seq-elem seq-elems form-with-separators)
+
+	 (when (and (symbolp seq-elem) (rxx-ends-with (symbol-name seq-elem) "?"))
+	   (setq seq-elem (list 'opt (intern (substring (symbol-name seq-elem) 0 -1)))))
+	 
 	 (let ((is-optional (and (consp seq-elem) (memq (first seq-elem) '(opt optional zero-or-one)))))
 	   (setq form-with-separators
 		 (append form-with-separators
