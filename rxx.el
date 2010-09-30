@@ -763,7 +763,7 @@ the parsed result in case of match, or nil in case of mismatch."
 			(let ((new-grp-name (make-symbol "new-grp")))
 			  (rxx-push-end new-grp-name repeat-grp-names)
 			  (rxx-push-end (list 'named-grp new-grp-name
-					      (list 'seq (quote ,@(cdr form)))) repeat-form)
+					      (quote (seq ,@(cdr form)))) repeat-form)
 			  (rxx-dbg repeat-form new-grp-name repeat-grp-names)
 			  (save-match-data
 			    (setq parse-result
