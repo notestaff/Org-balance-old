@@ -838,6 +838,10 @@ the parsed result in case of match, or nil in case of mismatch."
   `(eval-and-compile
      (defconst ,symbol ,initvalue ,docstring)))
 
+(defmacro defrxxcustom (symbol initvalue docstring &rest args)
+  `(eval-and-compile
+     (defcustom ,symbol ,initvalue ,docstring ,@args)))
+
 (defmacro defrxx (var regexp &optional parser descr)
   `(defrxxconst ,(rxx-symbol var) (rxx ,regexp ,parser ,descr) ,descr))
 
@@ -853,7 +857,7 @@ the parsed result in case of match, or nil in case of mismatch."
     (put 'defrxxrecurse 'doc-string-elt 5)
     (font-lock-add-keywords
      nil
-     `((,(rx (seq bow (group (or "defrxx" "defrxxconst")) (1+ blank) (group (1+ (not space))))) .
+     `((,(rx (seq bow (group (or "defrxx" "defrxxconst" "defrxxcustom")) (1+ blank) (group (1+ (not space))))) .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
        (,(rx (seq bow (group "defrxxrecurse") (1+ blank) (1+ digit) (1+ blank) (group (1+ (not space))))) .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
