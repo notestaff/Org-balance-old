@@ -738,7 +738,9 @@ the parsed result in case of match, or nil in case of mismatch."
 	   (parent-rxx-env (when (boundp 'rxx-env) rxx-env))
 	   (rxx-env (rxx-new-env parent-rxx-env))
 	   (sep-by-form (when (eq (car-safe (cdr-safe form)) :sep-by) (third form)))
+	   (have-sep-by (not (null sep-by-form)))
 	   (body (cons 'seq (nthcdr (if sep-by-form 3 1) form)))
+	   (form-sans-sep-by (list (car form) body))
 	   (body-regexp (rx-to-string body))
 	   (body-repeat-regexp
 	    ;; remove sep-by if present
@@ -754,11 +756,10 @@ the parsed result in case of match, or nil in case of mismatch."
 			  sep-by-form
 			  (list 'regexp body-regexp)))))
 	      ad-do-it
-	      ad-return-value
-	      ))
+	      ad-return-value))
 	   (greedy-p (or (memq (first form) '(* + ?\s))
 			 (and rx-greedy-flag (memq (first form) '(zero-or-more 0+ one-or-more 1+ >= repeat **))))))
-      
+
       (when sep-by-form
 	(setq
 	 ad-return-value
@@ -778,12 +779,12 @@ the parsed result in case of match, or nil in case of mismatch."
 		    (rxx-dbg match-str)
 		    (let ((repeat-form '(seq)) repeat-grp-names parse-result )
 		      (while (not parse-result)
-			(when (and repeat-grp-names ,sep-by-form)
-			  (rxx-push-end ,sep-by-form repeat-form))
+			(when (and repeat-grp-names ,have-sep-by)
+			  (rxx-push-end (quote ,sep-by-form) repeat-form))
 			(let ((new-grp-name (make-symbol "new-grp")))
 			  (rxx-push-end new-grp-name repeat-grp-names)
 			  (rxx-push-end (list 'named-grp new-grp-name
-					      (quote (seq ,@(cdr form)))) repeat-form)
+					      (quote (seq ,@(cdr form-sans-sep-by)))) repeat-form)
 			  (rxx-dbg repeat-form new-grp-name repeat-grp-names)
 			  (save-match-data
 			    (setq parse-result
@@ -798,17 +799,9 @@ the parsed result in case of match, or nil in case of mismatch."
 				   )))
 			  ))
 		      parse-result))))
-	    (rxx-dbg new-parser)
-	    
-	    (progn
-	      (rxx-env-bind (intern (concat (symbol-name grp-name) "-list"))
-			    (make-rxx-info :parser new-parser :env (rxx-new-env) :num wrap-grp-num)
-			    parent-rxx-env)
-					;(rxx-dbg "bound" grp-name parent-rxx-env)
-	      
-	      )
-	    ))))))
-
+	    (rxx-env-bind (intern (concat (symbol-name grp-name) "-list"))
+			  (make-rxx-info :parser new-parser :env (rxx-new-env) :num wrap-grp-num)
+			  parent-rxx-env)))))))
 
 (defadvice rx-or (around rxx-or first (form) activate compile)
   (unless (or (not (boundp 'rxx-env))

@@ -2370,3 +2370,5 @@ appropriate parameters.
 (progn
   (ad-enable-advice 'rx-kleene 'around 'rxx-kleene)
   (ad-activate 'rx-kleene))
+
+(rxx-parse (rxx (1+ :sep-by blanks (named-grp d digit)) d-list) "1 2 3")
