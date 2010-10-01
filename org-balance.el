@@ -733,15 +733,22 @@ When called repeatedly, scroll the window that is displaying the buffer."
 ;; (amount per day).  There is also code to convert from the uniform representation back to the user's original
 ;; unit for display (e.g. from "8.57 minutes per day" to "1 hour a week").
 
-(defrxxconst org-balance-units
-  '((time . ((second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
-	     (workweek . 7200)
-	     (month . 43200) (year . 525600) (bluemoon 1e12)))
-    (money . ((dollar . 1) ($ . 1) (cent . .01) (k . 1000)))
-    (count . ((item . 1) (time . 1)))))
+(defrxxcustom org-balance-units
+  (quote ((time (second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
+		(workweek . 7200) (month . 43200) (year . 525600))
+	  (money (dollar . 1) ($ . 1) (cent . 0.01) (k . 1000))
+	  (count (item . 1) (time . 1))
+	  (unpleasantness (frog . 1))))
+  "Units and their relative values"
+  :group 'org-balance
+  :type '(alist :tag "Units used in org-balance"
+		:key-type (symbol :tag "Dimension")
+		:value-type
+		(alist :key-type (symbol :tag "Unit name")
+		       :value-type (number :tag "Relative value"))))
 
 ;; for each unit, add plural form: make "seconds" mean the same thing as "second"
-(defrxxconst org-balance-units
+(defrxxconst org-balance-units-with-plurals
   (mapcar
    (lambda (dimension-info)
      (cons (car dimension-info)
@@ -760,7 +767,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
    (mapcar
     (lambda (dimension-info)
       (mapcar (lambda (unit-info) (cons (car unit-info) (car dimension-info))) (cdr dimension-info)))
-    org-balance-units)))
+    org-balance-units-with-plurals)))
 
 (put 'org-balance-error 'error-conditions '(error org-balance-errors org-balance-error))
 (put 'org-balance-error 'error-message "org-balance error")
@@ -784,7 +791,7 @@ If ERROR-MESSAGE is given, and the key is not in the list, throws an error with 
   (org-balance-assoc-val unit org-balance-unit2dim-alist))
 
 ;; var: org-balance-unit2base-alist - assoc list mapping each unit to how many base units are in it
-(defconst org-balance-unit2base-alist (apply 'append (mapcar 'cdr org-balance-units)))
+(defconst org-balance-unit2base-alist (apply 'append (mapcar 'cdr org-balance-units-with-plurals)))
 
 (defun org-balance-unit2base (unit)
   "Return the number of base units in the given unit.  For each dimension we have a base unit in terms of which all other
