@@ -966,8 +966,8 @@ changing only the numerator."
   ))
 
 (defrxx polarity
-  (or (named-grp atmost (or "at most"))
-      (named-grp atleast (or "at least")))
+  (or (named-grp atmost (or "at most" "<=" "<"))
+      (named-grp atleast (or "at least" ">=" ">")))
   (if atmost 'atmost 'atleast)
   "polarity")
 
