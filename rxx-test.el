@@ -314,4 +314,10 @@ TIME defaults to the current time."
 	   (rxx-parse (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) "1. .2    \t3.4 ")
 	   '(1 0.2 3.4))))
 
+(let ((rxx-prefix "rxx-test"))
+  (defrxx num digits string-to-number)
+  (assert
+   (equal (rxx-parse (rxx (sep-by blanks? "(" (sep-by (seq "," blanks?) (1+ num)) ")") num-list) "( 1, 2,3 )" )
+	  '(1 2 3))))
+
 (message "All rxx tests seem to have passed")

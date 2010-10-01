@@ -2372,3 +2372,8 @@ appropriate parameters.
   (ad-activate 'rx-kleene))
 
 (rxx-parse (rxx (sep-by blanks (1+ (named-grp d digit))) d-list) "1 2 3")
+
+(defrxx num digits string-to-number)
+(rxx-parse num "123")
+
+(rxx-parse (rxx (sep-by blanks? "(" (sep-by (seq "," blanks?) (1+ num)) ")") num-list) "( 1, 2,3 )" )
