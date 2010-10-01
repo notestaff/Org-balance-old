@@ -309,8 +309,9 @@ TIME defaults to the current time."
 
 (assert (equal (rxx-parse rxx-expr3 "(+ 1 (* 2 3))") 7))
 
-(assert (equal
-	 (rxx-parse (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) "1. .2    \t3.4 ")
-	 '(1 0.2 3.4)))
+(when t
+  (assert (equal
+	   (rxx-parse (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) "1. .2    \t3.4 ")
+	   '(1 0.2 3.4))))
 
 (message "All rxx tests seem to have passed")
