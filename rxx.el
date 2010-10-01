@@ -159,6 +159,10 @@ environment RXX-ENV.  If already bound, add to the binding."
 	   ,@forms)
 	 (setq ,cur-var (cdr ,cur-var))))))
 
+(defun rxx-env-empty-p (rxx-env)
+  "Return true if there are no bindings"
+  (null (cdr rxx-env)))
+
 (defun rxx-named-grp-num (grp-name &optional aregexp)
   "Look up the explicitly numbered group number assigned to the given named group, for passing as the SUBEXP argument
 to routines such as `replace-match', `match-substitute-replacement' or `replace-regexp-in-string'.
@@ -502,6 +506,7 @@ For detailed description, see `rxx'.
 	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				     (eval-regexp . (rxx-process-eval-regexp 1 1))
 				     (shy-grp . seq)
+				     (& . seq)
 				     (blanks . "\\(?:[[:blank:]]+\\)")
 				     (digits . "\\(?:[[:digit:]]+\\)")
 				     (blanks? . "\\(?:[[:blank:]]*\\)")
@@ -541,7 +546,7 @@ For detailed description, see `rxx'.
 	 (when (and (symbolp seq-elem) (rxx-ends-with (symbol-name seq-elem) "?"))
 	   (setq seq-elem (list 'opt (intern (substring (symbol-name seq-elem) 0 -1)))))
 	 
-	 (let ((is-optional (and (consp seq-elem) (memq (first seq-elem) '(opt optional zero-or-one)))))
+	 (let ((is-optional (and (consp seq-elem) (memq (first seq-elem) '(opt optional zero-or-one ? ??)))))
 	   (setq form-with-separators
 		 (append form-with-separators
 			 (if is-optional
@@ -721,30 +726,50 @@ the parsed result in case of match, or nil in case of mismatch."
   `(progn
      (setq ,lst (append ,lst (list ,elt)))
      ,elt))
-  
+
+(defvar rx-greedy-flag)
 
 (defadvice rx-kleene (around rxx-kleene first (form) activate)
   (declare (special rxx-env rxx-next-grp-num))
-  (if (or (not (boundp 'rxx-env)) (not (boundp 'rxx-next-grp-num)) (memq (first form) '(optional opt zero-or-one)))
+  (if (or (not (boundp 'rxx-env)) (not (boundp 'rxx-next-grp-num))
+	  (memq (first form) '(optional opt zero-or-one ? ??)))
       ad-do-it
     (let* ((wrap-grp-num (when (boundp 'rxx-next-grp-num) (incf rxx-next-grp-num)))
 	   (parent-rxx-env (when (boundp 'rxx-env) rxx-env))
-	   (rxx-env (rxx-new-env parent-rxx-env)))
-      (rxx-dbg form)
-      ad-do-it
+	   (rxx-env (rxx-new-env parent-rxx-env))
+	   (sep-by-form (when (eq (car-safe (cdr-safe form)) :sep-by) (third form)))
+	   (body (cons 'seq (nthcdr (if sep-by-form 3 1) form)))
+	   (body-regexp (rx-to-string body))
+	   (body-repeat-regexp
+	    ;; remove sep-by if present
+	    ;; call the original with the body as (regexp ,body-regexp).
+	    ;; probably also later, factor out the common parts so that advice to
+	    ;; rx-kleene, rx-repeat etc can call this common code.
+	    (let ((form (delq
+			 nil
+			 (list
+			  (if sep-by-form
+			      (ecase (first form) ((1+ one-or-more 0+ zero-or-more) '0+) ((+ *) '*) ((+? *?) '*?))
+			    (first form))
+			  sep-by-form
+			  (list 'regexp body-regexp)))))
+	      ad-do-it
+	      ad-return-value
+	      ))
+	   (greedy-p (or (memq (first form) '(* + ?\s))
+			 (and rx-greedy-flag (memq (first form) '(zero-or-more 0+ one-or-more 1+ >= repeat **))))))
+      
+      (when sep-by-form
+	(setq
+	 ad-return-value
+	 (rx-to-string
+	   (ecase (first form)
+	     ((1+ one-or-more + +?)
+	      `(seq (regexp ,body-regexp) (regexp ,body-repeat-regexp)))
+	     ((0+ zero-or-more * *?)
+	      `(,(first form) (regexp ,body-regexp) (regexp ,body-repeat-regexp)))))))
+		  
       (setq ad-return-value (format "\\(?%d:%s\\)" wrap-grp-num ad-return-value))
-      ;; now for each name in rxx-env,
-      ;; put a name into parent-rxx-env with a parser that would:
-      ;;   - for zero-or-one, just leave it.
-      ;;   - determine the number of repetitions that matched
-      ;;     - take the shy version of ad-return
-      ;;     - wrap it into groups, and keep increasing number of copies until matched
-      ;;     - if greedy, keep increasing the number of copies until it stops matching
-      ;;     - now, take each match string, match the regexp against it, and call
-      ;;       
-      ;;
-      ;; notes:
-      ;;   - what exactly happens if zero repetitions matched?
       (progn
 	(do-rxx-env grp-name rxx-infos rxx-env
 	  (rxx-dbg grp-name rxx-infos)
@@ -752,25 +777,9 @@ the parsed result in case of match, or nil in case of mismatch."
 		 `(lambda (match-str)
 		    (rxx-dbg match-str)
 		    (let ((repeat-form '(seq)) repeat-grp-names parse-result )
-		      ;; while not matched:
-		      ;;   -- if repeat-regexp is non-empty and we have a separator, append it to repeat-regexp
-		      ;;   -- take a shy-grped version of ad-return-value (or, call it with the option to make it shy-grped)
-		      ;;      (or, start with the highest grp number in it, plus one)
-		      ;;    optimization: if we have a separator, first try splitting the total match on the separator and
-					;      matching each part.   if fail, go to the fallback/default route.
-		      ;;   -- append this expr, wrapped in a known-numbered group.
-		      ;;   -- try matching
-		      ;;   -- if greedy, keep trying and save last match that worked; then re-run the match to fill the match data.
-		    ;;   -- so, we either have a non-trivial parser for the repeated subexpr itself or we don't.
-		      ;;      if we don't, the most we can give is
-		      
-		      ;; so, the default parser here might be: (sep-by blanks (1+ valu))
-		      ;;    say we have a parser for value
-		      ;; (defrxx values (seq first-valu (0+ blanks valu)) (lambda (match-str) (mapcar (lambda (x) (rxx-parse-valu x) (split-string match-str)))))
-		      ;; vs
-		      ;; (defrxx values (sep-by blanks (1+ valu)))
 		      (while (not parse-result)
-					;(when repeat-grp-names (rxx-push-end 'blanks repeat-form))
+			(when (and repeat-grp-names ,sep-by-form)
+			  (rxx-push-end ,sep-by-form repeat-form))
 			(let ((new-grp-name (make-symbol "new-grp")))
 			  (rxx-push-end new-grp-name repeat-grp-names)
 			  (rxx-push-end (list 'named-grp new-grp-name
@@ -815,10 +824,10 @@ the parsed result in case of match, or nil in case of mismatch."
 (defun rxx-remove-unneeded-shy-grps (re)
   "Remove shy groups that do nothing"
   (while (and t (>= (length re) 10) (string= (substring re 0 8) "\\(?:\\(?:")
-	      (string= (substring re -4) "\\)\\)"))
+     	      (string= (substring re -4) "\\)\\)"))
     (setq re (substring re 4 -2)))
   re)
-
+  
 (defun rxx-remove-outer-shy-grps (re)
   "Remove any outer shy groups."
   (while (and nil (>= (length re) 6) (string= (substring re 0 4) "\\(?:")
