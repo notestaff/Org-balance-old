@@ -2316,3 +2316,57 @@ appropriate parameters.
   "Remove any hooks pointing to rxx functions"
   (ad-disable-regexp "rxx")
   (remove-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords))
+
+		      ;; while not matched:
+		      ;;   -- if repeat-regexp is non-empty and we have a separator, append it to repeat-regexp
+		      ;;   -- take a shy-grped version of ad-return-value (or, call it with the option to make it shy-grped)
+		      ;;      (or, start with the highest grp number in it, plus one)
+		      ;;    optimization: if we have a separator, first try splitting the total match on the separator and
+					;      matching each part.   if fail, go to the fallback/default route.
+		      ;;   -- append this expr, wrapped in a known-numbered group.
+		      ;;   -- try matching
+		      ;;   -- if greedy, keep trying and save last match that worked; then re-run the match to fill the match data.
+		    ;;   -- so, we either have a non-trivial parser for the repeated subexpr itself or we don't.
+		      ;;      if we don't, the most we can give is
+		      
+		      ;; so, the default parser here might be: (sep-by blanks (1+ valu))
+		      ;;    say we have a parser for value
+		      ;; (defrxx values (seq first-valu (0+ blanks valu)) (lambda (match-str) (mapcar (lambda (x) (rxx-parse-valu x) (split-string match-str)))))
+		      ;; vs
+		      ;; (defrxx values (sep-by blanks (1+ valu)))
+
+      ;; now for each name in rxx-env,
+      ;; put a name into parent-rxx-env with a parser that would:
+      ;;   - for zero-or-one, just leave it.
+      ;;   - determine the number of repetitions that matched
+      ;;     - take the shy version of ad-return
+      ;;     - wrap it into groups, and keep increasing number of copies until matched
+      ;;     - if greedy, keep increasing the number of copies until it stops matching
+      ;;     - now, take each match string, match the regexp against it, and call
+      ;;       
+      ;;
+      ;; notes:
+      ;;   - what exactly happens if zero repetitions matched?
+(defrxx nums (sep-by blanks "(" (1+ number) ")"))
+(defrxx nums (sep-by blanks "(" (sep-by (seq "," blanks?) (1+ number)) ")") number-list)
+
+	   (body-repeat-regexp
+	    ;; remove sep-by if present
+	    ;; call the original with the body as (regexp ,body-regexp).
+	    ;; probably also later, factor out the common parts so that advice to
+	    ;; rx-kleene, rx-repeat etc can call this common code.
+	    (let ((form (list (first form) (list 'regexp body-regexp))))
+	      ad-do-it
+	      ad-return-value
+	      ))
+
+
+;; can define e.g. a grammar for an org entry, or a drawer, etc.
+
+(progn
+  (ad-disable-advice 'rx-kleene 'around 'rxx-kleene)
+  (ad-activate 'rx-kleene))
+
+(progn
+  (ad-enable-advice 'rx-kleene 'around 'rxx-kleene)
+  (ad-activate 'rx-kleene))
