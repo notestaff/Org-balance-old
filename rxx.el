@@ -545,6 +545,9 @@ For detailed description, see `rxx'.
 
 	 (when (and (symbolp seq-elem) (rxx-ends-with (symbol-name seq-elem) "?"))
 	   (setq seq-elem (list 'opt (intern (substring (symbol-name seq-elem) 0 -1)))))
+
+	 (when (and (consp seq-elem) (memq (first seq-elem) '(0+ zero-or-more 1+ one-or-more * *? + +?)))
+	   (setq seq-elem (append (list (first seq-elem) :sep-by separator) (cdr seq-elem)))) 
 	 
 	 (let ((is-optional (and (consp seq-elem) (memq (first seq-elem) '(opt optional zero-or-one ? ??)))))
 	   (setq form-with-separators

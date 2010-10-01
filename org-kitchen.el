@@ -2371,4 +2371,4 @@ appropriate parameters.
   (ad-enable-advice 'rx-kleene 'around 'rxx-kleene)
   (ad-activate 'rx-kleene))
 
-(rxx-parse (rxx (1+ :sep-by blanks (named-grp d digit)) d-list) "1 2 3")
+(rxx-parse (rxx (sep-by blanks (1+ (named-grp d digit))) d-list) "1 2 3")

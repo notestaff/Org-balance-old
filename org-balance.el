@@ -541,7 +541,7 @@ Originally adapted from `org-closed-in-range'.
 (defrxx priority (seq "[#" (any upper digit) "]"))
 
 (defrxx goal-prefix
-  (seq bol (sep-by blanks (1+ "*") (eval org-balance-goal-todo-keyword) priority? prop-ratio)
+  (seq bol (sep-by blanks (seq (1+ "*")) (eval org-balance-goal-todo-keyword) priority? prop-ratio)
        blanks? ":" blanks?) prop-ratio)
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
