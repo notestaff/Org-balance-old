@@ -159,6 +159,12 @@ environment RXX-ENV.  If already bound, add to the binding."
 	   ,@forms)
 	 (setq ,cur-var (cdr ,cur-var))))))
 
+(defun rxx-env-groups (rxx-env)
+  (let (all-grps)
+    (do-rxx-env grp-name rxx-infos rxx-env
+      (push grp-name all-grps))
+    all-grps))
+
 (defun rxx-env-empty-p (rxx-env)
   "Return true if there are no bindings"
   (null (cdr rxx-env)))
@@ -466,9 +472,9 @@ Returns the value of the last expression."
 
 (defmacro rxx-safe-val (x) `(if (boundp (quote ,x)) ,x 'unbound))
 
-(defun rxx-symbol (symbol)
+(defun rxx-symbol (symbol &optional no-regexp)
   (if (and (boundp 'rxx-prefix) rxx-prefix (not (save-match-data (string-match "-regexp$" (symbol-name symbol)))))
-      (intern (concat rxx-prefix "-" (symbol-name symbol) "-regexp"))
+      (intern (concat rxx-prefix "-" (symbol-name symbol) (if no-regexp "" "-regexp")))
     symbol))
 
 (defun rxx-ends-with (s end)
@@ -668,12 +674,35 @@ the parsed result in case of match, or nil in case of mismatch."
   ;;   - work with re-search-forward and re-search-bwd.
   ;;
       (let* ((old-point (point))
+	     (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp)))
+	     (error-msg (format "Error parsing \`%s\' as %s"
+				(if (and bound (>= bound old-point) (< (- bound old-point) 100))
+				    (buffer-substring old-point bound)
+				  "buffer text") (rxx-info-form rxx-info))))
+	(if (not (re-search-forward aregexp bound 'noerror))
+	    (unless noerror (error "%s" error-msg))
+	  (unless (or noerror partial-match-ok)
+	    (unless (= (match-beginning 0) old-point) (error "%s: match starts at %d" error-msg (match-beginning 0)))
+	    (unless (= (match-end 0) bound) (error "%s: match ends at %d" error-msg (match-end 0))))
+	  (let* ((rxx-env (rxx-info-env rxx-info))
+		 rxx-object)
+	    (rxx-call-parser rxx-info (match-string 0))))))
+
+
+
+(defun* rxx-search-bwd (aregexp &optional bound noerror (partial-match-ok t))
+  "Match the current buffer against the given extended regexp, and return
+the parsed result in case of match, or nil in case of mismatch."
+  ;; add options to:
+  ;;   - work with re-search-forward and re-search-bwd.
+  ;;
+      (let* ((old-point (point))
 	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp)))
 	    (error-msg (format "Error parsing \`%s\' as %s"
 			       (if (and bound (>= bound old-point) (< (- bound old-point) 100))
 				   (buffer-substring old-point bound)
 				 "buffer text") aregexp)))
-	(if (not (re-search-forward aregexp bound 'noerror))
+	(if (not (re-search-backward aregexp bound 'noerror))
 	    (unless noerror (error "%s" error-msg))
 	  (unless (or noerror partial-match-ok)
 	    (unless (= (match-beginning 0) old-point) (error "%s: match starts at %d" error-msg (match-beginning 0)))
@@ -843,13 +872,19 @@ the parsed result in case of match, or nil in case of mismatch."
   `(eval-and-compile
      (defcustom ,symbol ,initvalue ,docstring ,@args)))
 
-(defmacro defrxx (var regexp &optional parser descr)
-  `(defrxxconst ,(rxx-symbol var) (rxx ,regexp ,parser ,descr) ,descr))
+(defmacro defrxx (var form &optional parser descr)
+  `(defrxxconst ,(rxx-symbol var) (rxx ,form ,parser ,descr) ,descr))
 
 (defmacro defrxxrecurse (depth var regexp &optional parser descr)
   `(defrxxconst ,var ,(let ((rxx-recurs-depth depth))
 			(rxx-to-string regexp parser descr)) ,descr))
 
+
+(defmacro defrxxstruct (var regexp &optional parser descr)
+  `(progn
+     (defrxxconst ,var ,regexp ,parser ,descr)
+     ;; need to get the list of top-level groups here.
+     (defstruct ,(rxx-symbol var 'no-regexp) ,@(rxx-env-groups (rxx-info-env (get-rxx-info (eval (rxx-symbol var))))))))
 
 (defun rxx-add-font-lock-keywords ()
   (when (featurep 'font-lock)
@@ -858,7 +893,8 @@ the parsed result in case of match, or nil in case of mismatch."
     (put 'defrxxrecurse 'doc-string-elt 5)
     (font-lock-add-keywords
      nil
-     `((,(rx (seq bow (group (or "defrxx" "defrxxconst" "defrxxcustom")) (1+ blank) (group (1+ (not space))))) .
+     `((,(rx (seq bow (group (or "defrxx" "defrxxconst" "defrxxcustom" "defrxxstruct"))
+		  (1+ blank) (group (1+ (not space))))) .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
        (,(rx (seq bow (group "defrxxrecurse") (1+ blank) (1+ digit) (1+ blank) (group (1+ (not space))))) .
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
