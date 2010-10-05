@@ -685,6 +685,7 @@ the parsed result in case of match, or nil in case of mismatch."
 (defmacro rxx-do-search-fwd (aregexp var &rest forms)
   "Search forward while matches"
   (declare (indent 2))
+  (unless var (setq var (make-symbol "dummy-var")))
   `(let (,var) (while (setq ,var (rxx-search-fwd ,(rxx-symbol aregexp) (not 'boundary) 'no-error))
 		 ,@forms)))
 
@@ -779,29 +780,29 @@ the parsed result in case of match, or nil in case of mismatch."
 	  (rxx-dbg grp-name rxx-infos)
 	  (let ((new-parser
 		 `(lambda (match-str)
-		    (rxx-dbg match-str)
-		    (let ((repeat-form '(seq)) repeat-grp-names parse-result )
-		      (while (not parse-result)
-			(when (and repeat-grp-names ,have-sep-by)
-			  (rxx-push-end (quote ,sep-by-form) repeat-form))
-			(let ((new-grp-name (make-symbol "new-grp")))
-			  (rxx-push-end new-grp-name repeat-grp-names)
-			  (rxx-push-end (list 'named-grp new-grp-name
-					      (quote (seq ,@(cdr form-sans-sep-by)))) repeat-form)
-			  (rxx-dbg repeat-form new-grp-name repeat-grp-names)
-			  (save-match-data
-			    (setq parse-result
-				  (rxx-parse
-				   (rxx-to-string repeat-form
-						  ,`(lambda (match-str)
-						      (mapcar (lambda (repeat-grp-name)
-								(rxx-match-val (list repeat-grp-name (quote ,grp-name))))
-							      (when (boundp 'repeat-grp-names) repeat-grp-names))))
-				   match-str
-				   (not 'partial-ok) 'error-ok
-				   )))
-			  ))
-		      parse-result))))
+		    (let ((rxx-prefix ,rxx-prefix))
+		      (rxx-dbg match-str)
+		      (let ((repeat-form '(seq)) repeat-grp-names parse-result )
+			(while (not parse-result)
+			  (when (and repeat-grp-names ,have-sep-by)
+			    (rxx-push-end (quote ,sep-by-form) repeat-form))
+			  (let ((new-grp-name (make-symbol "new-grp")))
+			    (rxx-push-end new-grp-name repeat-grp-names)
+			    (rxx-push-end (list 'named-grp new-grp-name
+						(quote (seq ,@(cdr form-sans-sep-by)))) repeat-form)
+			    (rxx-dbg repeat-form new-grp-name repeat-grp-names)
+			    (save-match-data
+			      (setq parse-result
+				    (rxx-parse
+				     (rxx-to-string repeat-form
+						    ,`(lambda (match-str)
+							(mapcar (lambda (repeat-grp-name)
+								  (rxx-match-val (list repeat-grp-name (quote ,grp-name))))
+								(when (boundp 'repeat-grp-names) repeat-grp-names))))
+				     match-str
+				     (not 'partial-ok) 'error-ok
+				     )))))
+		      parse-result)))))
 	    (rxx-env-bind (intern (concat (symbol-name grp-name) "-list"))
 			  (make-rxx-info :parser new-parser :env (rxx-new-env) :num wrap-grp-num)
 			  parent-rxx-env)))))))
