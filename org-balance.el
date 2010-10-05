@@ -529,20 +529,37 @@ Originally adapted from `org-closed-in-range'.
 (defrxx prop-name (1+ alnum))
 (defrxx link (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
 (defstruct org-balance-prop prop link)
-(defrxx prop (seq (prop-name prop)
-		  (opt blanks "at" blanks (link link)))
+(defrxx prop (seq (prop-name prop) (opt blanks "at" blanks link))
   (make-org-balance-prop :prop prop :link link))
+
+(defrxx ratio-word (or "per" "every" "each" "for every" "for each" "/" "a" "in a"))
 
 (defstruct org-balance-prop-ratio num denom)
 (defrxx prop-ratio
-  (seq (prop num) (opt blanks? "/" blanks? (prop denom)))
+  (seq (prop num) (opt blanks? ratio-word blanks? (prop denom)))
   (make-org-balance-prop-ratio :num num :denom (or denom (make-org-balance-prop :prop "actualtime"))))
 
 (defrxx priority (seq "[#" (any upper digit) "]"))
 
+;; (defrxx goal-prefix
+;;   (seq bol (sep-by blanks (seq (1+ "*")) (eval org-balance-goal-todo-keyword) priority? prop-ratio)
+;;        blanks? ":" blanks?) prop-ratio)
+
 (defrxx goal-prefix
-  (seq bol (sep-by blanks (seq (1+ "*")) (eval org-balance-goal-todo-keyword) priority? prop-ratio)
-       blanks? ":" blanks?) prop-ratio)
+  (seq bol (sep-by blanks (seq (1+ "*")) (seq bow (eval org-balance-goal-todo-keyword) eow) priority?)))
+
+(defrxx tag-name (1+ (any alnum "_@#%")))
+(defrxx tags (& blanks? (opt ":" (1+ (& tag-name ":")) eol)) tag-name-list)
+
+(defun org-balance-start-of-tags ()
+  "Return position where tags start on the current headline"
+  (save-match-data
+    (save-excursion
+      (goto-char (point-at-eol))
+      (rxx-search-bwd org-balance-tags-regexp (point-at-bol))
+      (point))))
+
+(defrxx goal-spec (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link) blanks? tags?) (cons prop-ratio goal-or-link))
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
   (save-excursion
@@ -612,14 +629,49 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
       (save-restriction
 	(save-match-data
 	    ;; FIXOPT if goals specified, make regexp for them
-	  (rxx-do-search-fwd org-balance-goal-prefix-regexp prop-ratio
-	    (let* ((goal-def-here (buffer-substring (point) (point-at-eol)))
-		   (parsed-goal
-		    (condition-case err
-			(org-balance-parse-goal-or-link-at-point)
-		      (error
+	  (rxx-do-search-fwd org-balance-goal-prefix-regexp nil
+	    (save-match-data
+	      (save-restriction
+		(save-excursion
+		  (condition-case err
+		      (let* ((goal-spec (rxx-parse-fwd org-balance-goal-spec-regexp (org-balance-start-of-tags)))
+			     (prop-ratio (car goal-spec))
+			     (parsed-goal (cdr goal-spec)))
+			
+			(save-match-data (org-toggle-tag "goal_error" 'off))
+			;;
+			;; Compute the actual usage under this subtree, and convert to the same
+			;; units as the goal, so we can compare them.
+			;;
+			(let (delta-val-and-percent)
+			  (save-match-data
+			    (save-excursion
+			      (save-restriction
+				(outline-up-heading 1 'invisible-ok)
+				(when (string= (upcase (org-get-heading)) "GOALS")
+				  (outline-up-heading 1 'invisible-ok))
+				(org-narrow-to-subtree)
+				(goto-char (point-min))
+				(setq delta-val-and-percent
+				      (org-balance-compute-delta
+				       parsed-goal prop-ratio
+				       (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))))))
+			  (let ((delta-val (car delta-val-and-percent))
+				(delta-percent (cdr delta-val-and-percent)))
+			    (cond ((< delta-val 0) (incf num-under))
+				  ((> delta-val 0) (incf num-over))
+				  ((= delta-val 0) (incf num-met)))
+			    (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
+			    (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
+			    ;; FIXME: include in goal_updated the period for which it was updated.
+			    (org-entry-put (point) "goal_updated"
+					   (format-time-string
+					    (org-time-stamp-format 'long 'inactive)
+					    (if (boundp 'goal-update-time) goal-update-time (current-time)))))))
+		    (error
+		     (unless (string= (upcase (org-get-heading)) "GOALS")
 		       (incf num-errors)
-		       (message "Error parsing %s" goal-def-here)
+		       (message "At %s: Error processing %s " (point) (buffer-substring (point) (point-at-eol)))
 		       (save-match-data
 			 (org-toggle-tag "goal_error" 'on)
 			 (org-entry-delete nil "goal_delta_val")
@@ -627,40 +679,9 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 			 (org-entry-put (point) "goal_updated"
 					(format-time-string
 					 (org-time-stamp-format 'long 'inactive)
-					 (if (boundp 'goal-update-time) goal-update-time (current-time)))))
-		       nil))))
-	      (when parsed-goal
-		(save-match-data (org-toggle-tag "goal_error" 'off))
-		;;
-		;; Compute the actual usage under this subtree, and convert to the same
-		;; units as the goal, so we can compare them.
-		;;
-		(let (delta-val-and-percent)
-		  (save-match-data
-		    (save-excursion
-		      (save-restriction
-			(outline-up-heading 1 'invisible-ok)
-			(when (string= (upcase (org-get-heading)) "GOALS")
-			  (outline-up-heading 1 'invisible-ok))
-			(org-narrow-to-subtree)
-			(goto-char (point-min))
-			(setq delta-val-and-percent
-			      (org-balance-compute-delta
-			       parsed-goal prop-ratio
-			       (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))))))
-		  (let ((delta-val (car delta-val-and-percent))
-			(delta-percent (cdr delta-val-and-percent)))
-		    (cond ((< delta-val 0) (incf num-under))
-			  ((> delta-val 0) (incf num-over))
-			  ((= delta-val 0) (incf num-met)))
-		    (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
-		    (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
-		    ;; FIXME: include in goal_updated the period for which it was updated.
-		    (org-entry-put (point) "goal_updated"
-				   (format-time-string
-				    (org-time-stamp-format 'long 'inactive)
-				    (if (boundp 'goal-update-time) goal-update-time (current-time))))))))))))
-	(message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
+					 (if (boundp 'goal-update-time) goal-update-time (current-time))))))
+		     nil)))))))))
+    (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
 (defun org-balance-do () (interactive)
   (message "--------------------------------")
@@ -928,7 +949,6 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   "Given a string representing a value range with units, parse it into an org-balance-valu structure."
   (rxx-parse org-balance-valu-range-regexp valu-str))
 
-(defrxx ratio-word (or "per" "every" "each" "/" "a" "in a"))
 
 ;; Struct: org-balance-valu-ratio - a ratio of two valu's.
 (defstruct org-balance-valu-ratio num denom
@@ -1003,39 +1023,30 @@ changing only the numerator."
      :ratio-word ratio-word))
   "value ratio goal")
 
+;(defrxxstruct goal-link (sep-by blanks (number factor) "of" (opt (named-grp actual "actual")) link))
+(defstruct org-balance-goal-link factor actual link)
+(defrxx goal-link (sep-by blanks (number factor) "of" (opt (named-grp actual "actual")) link)
+  (make-org-balance-goal-link :factor factor :actual actual :link link))
 
-(defrxx goal-link (sep-by blanks (number factor) "of" (opt "actual") link)
-  factor)
+
+(defrxx goal-prefix-with-spec (& blanks? goal-spec) (cdr goal-spec))
 
 (defrxx goal-or-link
-  (or goal goal-link)
-  (or goal goal-link))
-
-(defun org-balance-parse-goal-or-link-at-point ()
-  "Parse goal or link at point"
-  ;; so, we need to know what the goal was, so that we can look for the same goal at the target entry.
-  ;; and also, need to put in a check for infinite recursion.
-
-  ;;
-  ;; things to do:
-  ;;    - check for infinite recursion
-  ;;    - make sure the link we're following points to a file.  or is an internal link.
-  ;;    - recognize also parent links, and/or paths
-  ;;    - proper error reporting:
-  ;;         - if a goal does not parse
-  ;;         - if following a link fails to get us to an entry in an orgfile
-  ;;         - if that entry does not have the (number'th) requisite goal.
-  ;;    - factor out the follow-a-link code, so that we can use it 
-  (save-match-data
-    (let ((result (rxx-parse-fwd org-balance-goal-or-link-regexp (point-at-eol) 'partial-match-ok)))
-      (if (org-balance-goal-p result) result
-	(save-excursion
-	  (save-window-excursion
-	    (let ((org-link-search-must-match-exact-headline t))
-	      (org-open-at-point 'in-emacs))
+  (& blanks? (| goal goal-link) blanks?)
+  (or goal
+      (save-excursion
+	(save-window-excursion
+	  (let ((org-link-search-must-match-exact-headline t))
+	    (goto-char (org-balance-goal-link-link goal-link))
+	    (org-open-at-point 'in-emacs))
+	  ;; move to where the parsed-goal is.
+	  ;; on the other hand, for "actual", here need to call to get the ratio.
 	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	      (error "No goal found at link taget"))
-	    (org-balance-scale-goal result (org-balance-parse-goal-or-link-at-point))))))))
+	    (message "we are at %s" (point))
+	    (org-balance-scale-goal (org-balance-goal-link-factor goal-link)
+				    (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
+						   (org-balance-start-of-tags))))))) 
 
 (defun org-balance-remove-props ()
   (interactive)
