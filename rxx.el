@@ -350,6 +350,7 @@ Each symbol in the first list is bound to the corresponding value in the
 second list (or made unbound if VALUES is shorter than SYMBOLS); then the
 BODY forms are executed and their result is returned.  This is much like
 a `let' form, except that the list of symbols can be computed at run-time."
+  (declare (indent 2))
   (list 'let '((rxx-progv-save nil))
 	(list 'unwind-protect
 	      (list* 'progn (list 'rxx-progv-before symbols values) body)
@@ -900,6 +901,16 @@ the parsed result in case of match, or nil in case of mismatch."
 	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
   
 (add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)
+
+;; additional forms:
+;;   seq-any-order
+;;   sep-by-any-order
+;;
+;; debug/better-error-messaging facilities
+;; enumerate matches
+;; default parsers: if only one named grp, the value of that; if two or more, make a struct with these fields as names.
+
+;; better support for defining these things at runtime.
 
 
 (provide 'rxx)
