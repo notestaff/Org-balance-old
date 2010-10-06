@@ -810,7 +810,7 @@ the parsed result in case of match, or nil in case of mismatch."
 	  (rxx-dbg grp-name rxx-infos)
 	  (let ((new-parser
 		 `(lambda (match-str)
-		    (let ((rxx-prefix ,rxx-prefix))
+		    (let ((rxx-prefix ,(when (boundp 'rxx-prefix) rxx-prefix)))
 		      (rxx-dbg match-str)
 		      (let ((repeat-form '(seq)) repeat-grp-names parse-result )
 			(while (not parse-result)
@@ -873,8 +873,21 @@ the parsed result in case of match, or nil in case of mismatch."
   `(eval-and-compile
      (defcustom ,symbol ,initvalue ,docstring ,@args)))
 
-(defmacro defrxx (var form &optional parser descr)
-  `(defrxxconst ,(rxx-symbol var) (rxx ,form ,parser ,descr) ,descr))
+(defmacro defrxx (var &rest args)
+  (let (form parser descr)
+    (cond
+     ((stringp (nth 0 args))
+      (setq descr (nth 0 args)
+	    form (nth 1 args)
+	    parser (nth 2 args)))
+     ((stringp (nth 1 args))
+      (setq form (nth 0 args)
+	    descr (nth 1 args)
+	    parser (nth 2 args)))
+     (t (setq form (nth 0 args)
+	      parser (nth 1 args)
+	      descr (nth 2 args))))
+    `(defrxxconst ,(rxx-symbol var) (rxx ,form ,parser ,descr) ,descr)))
 
 (defmacro defrxxrecurse (depth var regexp &optional parser descr)
   `(defrxxconst ,var ,(let ((rxx-recurs-depth depth))
