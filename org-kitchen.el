@@ -2377,3 +2377,190 @@ appropriate parameters.
 (rxx-parse num "123")
 
 (rxx-parse (rxx (sep-by blanks? "(" (sep-by (seq "," blanks?) (1+ num)) ")") num-list) "( 1, 2,3 )" )
+
+(defrxx goal
+  (sep-by blanks
+    polarity?
+    (valu-range numerator)
+    ratio-word
+    (valu denominator)
+    margin?)
+  
+  (lambda (goal-str)
+    (make-org-balance-goal 
+     :numer-min (org-balance-valu-range-from numerator)
+     :numer-max (org-balance-valu-range-to numerator)
+     :denom denominator
+     :polarity polarity
+     :margin margin
+     :text goal-str
+     :ratio-word ratio-word))
+  "value ratio goal")
+
+(cl-prettyexpand '(org-balance-make-vec 3 (make-vector 2 2)))
+(let ((v (make-vector 3 nil)))
+  (block nil
+    (let ((--cl-dotimes-temp-- 3)
+	  (i 0))
+      (while (< i --cl-dotimes-temp--)
+	(aset v i (make-vector 2 2))
+	(setq i (1+ i)))
+      v)))
+
+(let ((v (make-vector 3 nil)))
+  (block nil
+    (let ((--cl-dotimes-temp-- 3)
+	  (i 0))
+      (while (< i --cl-dotimes-temp--)
+	(aset v i 1)
+	(setq i (1+ i)))
+      v)))
+
+(cl-prettyexpand '(let ((ints (make-org-balance-intervals :start 0 :width 2 :step 1 :nsteps 3)))
+		    (org-balance-do-intervals ints i tstart tend (message "%s %s %s" i tstart tend)
+					      )))
+(let ((ints (make-org-balance-intervals :start 0 :width 2 :step 1 :nsteps 3)))
+  (block nil
+    (let ((--cl-dotimes-temp-- (org-balance-intervals-nsteps ints))
+	  (i 0))
+      (while (< i --cl-dotimes-temp--)
+	(let ((tstart (+ (org-balance-intervals-start ints)
+			 (* i (org-balance-intervals-step ints))))
+	      (tend (+ tstart (org-balance-intervals-width ints))))
+	  (message "%s %s %s" i tstart tend))
+	(setq i (1+ i)))
+      nil)))
+
+
+
+(cl-prettyexpand '(org-balance-do-intervals a b c d))
+(block nil
+  (let ((--cl-dotimes-temp-- (org-balance-intervals-nsteps a))
+	(b 0))
+    (while (< b --cl-dotimes-temp--)
+      (let ((c (+ (org-balance-intervals-start a)
+		  (* i (org-balance-intervals-step a))))
+	    (d (+ c (org-balance-intervals-width a))))
+	nil)
+      (setq b (1+ b)))
+    nil))
+
+
+
+(block nil
+  (let ((--cl-dotimes-temp-- (org-balance-intervals-nsteps a))
+	(b 0))
+    (while (< b --cl-dotimes-temp--)
+      (let ((c (+ (org-balance-intervals-start a)
+		  (* i (org-balance-intervals-step a))))
+	    (d (+ c (org-balance-intervals-width a)))))
+      (setq b (1+ b)))
+    nil))
+
+
+
+
+(block nil
+  (let ((--cl-dotimes-temp-- (org-balance-intervals-nsteps my-intervals))
+	(my-i 0))
+    (while (< my-i --cl-dotimes-temp--)
+      (let ((my-tstart (+ (org-balance-intervals-start my-intervals)
+			  (* i (org-balance-intervals-step my-intervals))))
+	    (my-tend (+ my-tstart (org-balance-intervals-width my-intervals)))))
+      (setq my-i (1+ my-i)))
+    nil))
+
+
+
+(block nil
+  (let ((--cl-dotimes-temp-- (org-balance-intervals-nsteps my-intervals))
+	(my-i 0))
+    (while (< my-i --cl-dotimes-temp--)
+      (let ((my-tstart (+ (org-balance-intervals-start my-intervals)
+			  (* i (org-balance-intervals-step my-intervals))))
+	    (my-tend (+ my-tstart (org-balance-intervals-width my-intervals)))))
+      (setq my-i (1+ my-i)))
+    nil))
+
+
+
+(block nil
+  (let ((--cl-dotimes-temp-- (org-balance-intervals-nsteps my-intervals))
+	(my-i 0))
+    (while (< my-i --cl-dotimes-temp--)
+      (let ((my-tstart (+ (org-balance-intervals-start my-intervals)
+			  (* i (org-balance-intervals-step my-intervals))))
+	    (my-tend (+ my-tstart (org-balance-intervals-width my-intervals)))))
+      (setq my-i (1+ my-i)))
+    nil))
+
+
+(cl-prettyexpand '(org-balance-with (make-org-balance-goal :numer-min 1 :numer-max 2 :denom 3) (numer-min numer-max denom) 
+				     (list numer-min numer-max denom)))
+
+(org-balance-with org-balance-goal (numer-min numer-max denom) (make-org-balance-goal :numer-min 1 :numer-max 2 :denom 3)
+  (list numer-min numer-max denom))
+
+(setq my-goal (make-org-balance-goal :numer-min 100 :numer-max 200))
+my-goal
+(org-balance-set-fields org-balance-goal (copy-org-balance-goal my-goal) :numer-min 1)
+
+(org-balance-modified-struct org-balance-goal my-goal :numer-min (1+ numer-min))
+
+my-goal
+
+(let ((my-struct (copy-org-balance-goal my-goal)))
+  (progn
+    (or (and (vectorp my-struct)
+	     (>= (length my-struct) 8)
+	     (memq (aref my-struct 0) cl-struct-org-balance-goal-tags))
+	(error "org-balance-goal-numer-min storing a non-org-balance-goal"))
+    (aset my-struct 1 1))
+  my-struct)
+
+
+
+
+
+
+(progn
+  (progn
+    (or (and (memq (aref my-struct 0) cl-struct-org-balance-goal-tags))
+	(error "org-balance-goal-numer-min storing a non-org-balance-goal"))
+    (aset my-struct 1 1))
+  (progn
+    (or (and (memq (aref my-struct 0) cl-struct-org-balance-goal-tags))
+	(error "org-balance-goal-numer-max storing a non-org-balance-goal"))
+    (aset my-struct 2 2)))
+
+nil
+
+nil
+
+
+(defmacro rxx-flet (bindings &rest body)
+  "Temporarily replace functions, making previous definitions available.  Also, lets you use a function symbol
+for the replacement function definition."
+  (declare (indent 1))
+  `(let 
+       ,(mapcar (lambda (binding)
+		  (let ((orig-func-symbol (intern (concat (symbol-name (first binding)) "-orig"))))
+		    (list orig-func-symbol
+			  `(if (boundp (quote ,orig-func-symbol)) ,orig-func-symbol
+			     (when (fboundp (quote ,(first binding)))
+			       (symbol-function (quote ,(first binding)))))))) bindings)
+     (flet ,(append
+	     (mapcar
+	      (lambda (binding)
+		(let ((orig-fn (intern (concat (symbol-name (first binding)) "-orig"))))
+		  (list orig-fn '(&rest args) `(apply (symbol-value (quote ,orig-fn)) args))))
+	      bindings)
+	     (mapcar
+	      (lambda (binding)
+		(if (and (= (length binding) 2)
+			 (symbolp (second binding)))
+		    (list (first binding) '(&rest args) `(apply (quote ,(second binding)) args))
+		  binding))
+	      bindings))
+       ,@body)))
+
