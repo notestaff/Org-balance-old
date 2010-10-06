@@ -28,6 +28,9 @@
 ;;
 ;; org-balance: orgmode tools for setting goals for how much time/effort you want to spend on various
 ;; areas of life, and tracking how well you meet them.
+;;
+;; See info node for this.
+;;
 ;; Lets you set goals for how much time/effort to spend on various areas,
 ;; at various levels of granularity.  E.g. you can say "read or try something new" on average
 ;; once a week, and be very flexible about how you meet that.
@@ -43,6 +46,7 @@
 ;;   Recording:
 ;;
 ;;      org-balance-record-time - record time spent under the current entry.
+;;      org-balance-record-
 ;;
 ;;   Reporting:
 ;;
@@ -52,6 +56,9 @@
 ;;      org-balance-show-non-neglected-time - show things on which you spend enough time
 ;;      org-balance-show-neglected-val - show things where you get less done than you want
 ;;
+
+;; misc things to add:
+;;   describe-structure
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Section: external dependencies
@@ -116,6 +123,20 @@ before today."
     (((background dark)) (:foreground "black")))
   "Face used for showing malformed goals"
   )
+
+
+(defconst org-balance-custom-commands
+  (quote (("b" . "Org-balance commands")
+	  ("bn" "Neglected items" tags "goal_delta_val<0/!GOAL"
+	   ((org-agenda-overriding-header "Org-balance neglected items")
+	    (org-agenda-sorting-strategy (quote (priority-down
+						 category-keep
+						 user-defined-up)))
+	    (org-agenda-cmp-user-defined (quote org-balance-cmp))
+	    (org-agenda-before-sorting-filter-function (quote org-balance-save-amt-neglected))
+	    (org-show-hierarchy-above (quote ((agenda . t))))))
+	  ("bs" "Neglected goals in current file" tags-tree "goal_delta_val<0/!GOAL" nil)))
+  "Custom agenda commands for accessing org results")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -217,6 +238,57 @@ Return an a-list mapping keys to items with that key.  "
 	  (push (cons k nil) result))
 	(push x (cdr (first result)))))
     (reverse result)))
+
+(defmacro org-balance-make-vector (length init)
+  "Make a vector, evaluating the INIT expression for each element rather than once."
+  (let ((v (make-symbol "v")) (i (make-symbol "i")))
+    `(let ((,v (make-vector ,length nil)))
+       (dotimes (,i ,length ,v) (aset ,v ,i ,init)))))
+
+(defmacro org-balance-gen-vector (i n &rest forms)
+  "Construct a vector from expression for its i'th element"
+  (declare (indent 2))
+  (let ((save-n (make-symbol "save-n"))
+	(result (make-symbol "result")))
+    `(let* ((,save-n ,n)
+	    (,result (make-vector ,save-n nil)))
+       (dotimes (,i ,save-n ,result)
+	 (aset ,result ,i (progn ,@forms))))))
+       
+(defmacro org-balance-with (struct-type struct fields  &rest body)
+  "Locally bind fields of structure STRUCT for easy access"
+  (declare (indent 3))
+  (let ((my-struct (make-symbol "my-struct")))
+    (append (list 'let* (cons (list my-struct struct)
+		      (mapcar (lambda (field)
+				(list field
+				      (list (intern (concat (symbol-name struct-type)
+							    "-" (symbol-name field))) my-struct))) fields)))
+	    body)))
+
+(defmacro org-balance-set-fields (struct-type struct &rest clauses)
+  "Set multiple fields of a structure"
+  (let ((my-struct (make-symbol "my-struct")))
+    (let (result)
+      (while clauses
+	(message "clause is %s %s" (first clauses) (second clauses))
+	(push (list 'setf (list (intern (concat (symbol-name struct-type) "-"
+						(substring (symbol-name (first clauses)) 1))) my-struct)
+		    (second clauses)) result)
+	(setq clauses (cddr clauses)))
+      (append (list 'let (list (list my-struct struct)))
+	      (nreverse result) (list my-struct)))))
+
+(defmacro org-balance-modified-struct (struct-type struct &rest clauses)
+  (declare (indent 2))
+  `(org-balance-with ,struct-type ,struct
+		     ,(delq nil
+			    (mapcar
+			     (lambda (clause)
+			       (when (keywordp clause) (intern (substring (symbol-name clause) 1)))) clauses))
+     (org-balance-set-fields ,struct-type (,(intern (concat "copy-" (symbol-name struct-type))) ,struct) ,@clauses)))
+
+
   
 (defun org-balance-get-property (prop &optional default-val)
   "Get the value of a property, represented either as text property or org property,
@@ -299,6 +371,44 @@ Adapted from `org-closed-in-range' from org.el."
     ;; make tree, check each match with the callback
     (message "%s matches here" (org-occur "CLOSED: +\\[\\(.*?\\)\\]" nil callback))) )
 
+(defun org-balance-display (&optional tstart tend total-only)
+  "Show subtree times in the entire buffer.
+If TOTAL-ONLY is non-nil, only show the total time for the entire file
+in the echo area."
+  (interactive)
+  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  (unless tend (setq tend (org-float-time (org-current-time))))
+  (let ((prop (read-string "Property"))
+	(unit (intern (read-string "Unit"))))
+    (org-balance-remove-overlays)
+    (org-balance-sum-property-with-archives prop tstart tend unit)
+    (let (time h m p)
+      (unless total-only
+	(save-excursion
+	  (goto-char (point-min))
+	  (while (or (and (equal (setq p (point)) (point-min))
+			  (get-text-property p :org-balance-minutes))
+		     (setq p (next-single-property-change
+			      (point) :org-balance-minutes)))
+	    (goto-char p)
+	    (when (setq time (get-text-property p :org-balance-minutes))
+	      (org-balance-put-overlay time (funcall outline-level))))
+	  ;;(setq h (/ org-balance-file-total-minutes 60)
+		;;m (- org-balance-file-total-minutes (* 60 h)))
+	  ;; Arrange to remove the overlays upon next change.
+	  (when org-remove-highlights-with-change
+	    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
+			  nil 'local))))
+      (if org-time-clocksum-use-fractional
+	  (message (concat "Total file time: " org-time-clocksum-fractional-format
+			   " (%d hours and %d minutes)")
+		   (/ (+ (* h 60.0) m) 60.0) h m)
+	(message (concat "Total file time: " org-time-clocksum-format
+			 " (%d hours and %d minutes)") h m h m)))))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun org-balance-record-time (&optional hours ago)
   "Record the given amount of time as time spent under the current org entry.
@@ -356,6 +466,11 @@ as you were doing it.
 (defconst org-balance-minutes-per-hour 60)
 
 (defun org-balance-record-done (&optional hours-ago)
+  "Mark the current Org headline as DONE a specified time ago.
+Useful for recording things done when you were not at the computer,
+since for org-balance purposes it matters _when_ things got done.
+See also `org-balance-record-time' and Info node `(org) MobileOrg'.
+"
   (interactive)
   (save-excursion
     (org-back-to-heading 'invis-ok)
@@ -367,10 +482,18 @@ as you were doing it.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defrxx inactive-timestamp (seq "[" (named-grp time (1+ nonl)) "]" )
+(defrxx inactive-timestamp
+  "An Org-mode inactive timestamp, such as '[2010-09-07 Tue 18:30]'.
+Parsed as a floating-point value of time in seconds."
+  (seq "[" (named-grp time (1+ nonl)) "]" )
   (org-float-time (apply 'encode-time (org-parse-time-string time))))
 
-(defrxx clock (seq bol blanks? (eval org-clock-string) blanks?
+(defrxx clock
+  "An Org-mode clock line giving a time interval, such as when
+logging work time (see Info node `(org)Clocking work time').
+E.g. '	CLOCK: [2010-09-09 Thu 06:30]--[2010-09-09 Thu 12:46] =>  6:16'.
+Parsed as a cons of the start and end times."
+  (seq bol blanks? (eval org-clock-string) blanks?
 		   (inactive-timestamp from) (1+ "-")
 		   (inactive-timestamp to)
 		   " => " (1+ nonl))
@@ -400,10 +523,42 @@ as you were doing it.
 	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
     total-minutes))
 
-(defrxx closed (sep-by blanks bol (eval org-closed-string) (inactive-timestamp closed-time))
+
+(defun org-balance-clock-sum2 (tstart tend)
+  "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
+  (let ((total-minutes 0))
+    ;; Include time on the currently running clock, if needed.
+    (when (and
+	   org-clock-report-include-clocking-task
+	   (equal (org-clocking-buffer) (current-buffer))
+	   (<= (point-min) (marker-position org-clock-hd-marker))
+	   (<= (marker-position org-clock-hd-marker) (point-max)))
+      (let* ((cs (org-float-time org-clock-start-time))
+	     (ts (max tstart cs))
+	     (te (min tend (org-float-time)))
+	     (dt (- te ts)))
+	(when (> dt 0) (setq total-minutes (floor (/ dt 60))))))
+    (save-excursion
+      (save-match-data
+	(goto-char (point-min))
+	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
+	  (let* ((ts (car clock-interval)) (te (cdr clock-interval))
+		 (ts (if tstart (max ts tstart) ts))
+		 (te (if tend (min te tend) te))
+		 (dt (- te ts)))
+	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
+    total-minutes))
+
+
+
+
+(defrxx closed
+  "An Org-mode line indicating when an entry was closed.
+Parsed as the floating-point time."
+  (sep-by blanks bol (eval org-closed-string) (inactive-timestamp closed-time))
   closed-time)
 
-(defun org-balance-sum-org-property (prop tstart tend unit prop-default-val)
+(defun org-balance-sum-org-property-old (prop tstart tend unit prop-default-val)
   "Fast summing of property.  Returns the sum of the property under the current restriction.
 
 Originally adapted from `org-closed-in-range'.
@@ -412,6 +567,7 @@ Originally adapted from `org-closed-in-range'.
   ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (declare (special org-balance-num-warnings))
+  (message "gathered: %s" (org-balance-gather-org-property prop tstart tend unit prop-default-val))
   (save-excursion
     (save-match-data
       (goto-char (point-min))
@@ -423,7 +579,8 @@ Originally adapted from `org-closed-in-range'.
 	      (save-match-data
 		(org-back-to-heading 'invis-ok)
 		(let*
-		    ((prop-here
+		    ((pos-here (point))
+		     (prop-here
 		      (or (org-entry-get nil prop)
 			  (org-entry-get nil prop-default 'inherit)
 			  prop-default-val
@@ -439,7 +596,67 @@ Originally adapted from `org-closed-in-range'.
 			 nil))))
 		  (when prop-valu-here
 		    (setq prop-sum (org-balance-add-valu prop-sum prop-valu-here))))))))
+	(message "summed: %s" prop-sum)
 	prop-sum))))
+
+(defun org-balance-gather-org-property (prop tstart tend unit prop-default-val)
+  "Fast summing of property.  Returns the sum of the property under the current restriction.
+
+Originally adapted from `org-closed-in-range'.
+"
+
+  ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
+  ;; FIXME: find also state changes to DONE, or to any done state.
+  (declare (special org-balance-num-warnings))
+  (save-excursion
+    (save-match-data
+      (goto-char (point-min))
+      (let (prop-occurrences
+	    (prop-default (concat "default_" prop)))
+	(rxx-do-search-fwd org-balance-closed-regexp closed-time
+	  (when (and (<= tstart closed-time) (<= closed-time tend))
+	    (save-excursion
+	      (save-match-data
+		(org-back-to-heading 'invis-ok)
+		(let*
+		    ((pos-here (point))
+		     (prop-here
+		      (or (org-entry-get nil prop)
+			  (org-entry-get nil prop-default 'inherit)
+			  prop-default-val
+			  "1"))
+		     (prop-valu-here
+		      (condition-case err
+			  (org-balance-parse-valu prop-here)
+			(error
+			 (message
+			  "Warning: at line %d of file %s, could not add %s to list for goal %s; list-so-far is %s"
+			  (line-number-at-pos (point)) (buffer-file-name (current-buffer)) prop-here prop prop-occurrences)
+			 (incf org-balance-num-warnings)
+			 nil))))
+		  (when (and prop-valu-here (not (zerop (org-balance-valu-val prop-valu-here))))
+		    (push (cons pos-here prop-valu-here) prop-occurrences)))))))
+	prop-occurrences))))
+
+
+
+(defun org-balance-do-sum (start-value seq)
+  (let ((result
+	 (dolist (v seq start-value)
+	   (setq start-value (org-balance-add-valu start-value v)))))
+    result))
+    
+;; (defun org-balance-sum-org-property2 (prop tstart tend unit prop-default-val)
+;;   (org-balance-reduce (org-balance-make-valu 0 unit)
+;; 		      (mapcar 'cdr (org-balance-gather-org-property
+;; 				    prop tstart tend unit prop-default-val))))
+
+
+(defun org-balance-sum-org-property (prop tstart tend unit prop-default-val)
+  (org-balance-do-sum (org-balance-make-valu 0 unit)
+		      (mapcar 'cdr (org-balance-gather-org-property
+				    prop tstart tend unit prop-default-val))))
+
 
 (defun org-balance-sum-property (prop tstart tend unit prop-default-val)
   "Sum a property in the specified period, within the current file restriction."
@@ -451,9 +668,15 @@ Originally adapted from `org-closed-in-range'.
 	       (t (org-balance-sum-org-property prop tstart tend unit prop-default-val)))))
     result))
 
-(defrxx archive (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl))) loc)
+(defrxx archive
+  "The archive location, specified as a property of an Org entry.
+See Info node `(org) Archiving' and variable `org-archive-location'.
+Parsed as the archive location."
+  (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl))) loc)
 
-(defstruct org-balance-loc file heading)
+(defstruct org-balance-loc
+  "A destination for archived trees: an org file, and a heading within that file."
+  file heading)
 
 (defun org-balance-not-blank (s)
   "Return nil if s is nil or a blank string, else return s"
@@ -519,6 +742,108 @@ Originally adapted from `org-closed-in-range'.
 											 prop-default-val))))))))))))))
     prop-sum))
 
+(defun org-balance-detailed-sum (prop-name &optional tstart tend headline-filter)
+  "Sum the specified property PROP-NAME for each subtree.
+Puts the resulting valu's as a text property on each headline.
+TSTART and TEND can mark a time range to be considered.  HEADLINE-FILTER is a
+zero-arg function that, if specified, is called for each headline in the time
+range with point at the headline.  Headlines for which HEADLINE-FILTER returns
+nil are excluded from the clock summation.
+
+Adapted from `org-balance-clock-sum'.
+"
+  (interactive)
+  (let* ((bmp (buffer-modified-p))
+	 (re (concat "^\\(\\*+\\)[ \t]\\|^[ \t]*"
+		     org-clock-string
+		     "[ \t]*\\(?:\\(\\[.*?\\]\\)-+\\(\\[.*?\\]\\)\\|=>[ \t]+\\([0-9]+\\):\\([0-9]+\\)\\)"))
+	 (lmax 30)
+	 (ltimes (make-vector lmax 0))
+	 (t1 0)
+	 (level 0)
+	 ts te dt
+	 time)
+    (if (stringp tstart) (setq tstart (org-time-string-to-seconds tstart)))
+    (if (stringp tend) (setq tend (org-time-string-to-seconds tend)))
+    (if (consp tstart) (setq tstart (org-float-time tstart)))
+    (if (consp tend) (setq tend (org-float-time tend)))
+    (remove-text-properties (point-min) (point-max)
+                            '(:org-clock-minutes t
+                              :org-clock-force-headline-inclusion t))
+    (save-excursion
+      (goto-char (point-max))
+      (while (re-search-backward re nil t)
+	(cond
+	 ((match-end 2)
+	  ;; Two time stamps
+	  (setq ts (match-string 2)
+		te (match-string 3)
+		ts (org-float-time
+		    (apply 'encode-time (org-parse-time-string ts)))
+		te (org-float-time
+		    (apply 'encode-time (org-parse-time-string te)))
+		ts (if tstart (max ts tstart) ts)
+		te (if tend (min te tend) te)
+		dt (- te ts)
+		t1 (if (> dt 0) (+ t1 (floor (/ dt 60))) t1)))
+	 ((match-end 4)
+	  ;; A naked time
+	  (setq t1 (+ t1 (string-to-number (match-string 5))
+		      (* 60 (string-to-number (match-string 4))))))
+	 (t ;; A headline
+	  ;; Add the currently clocking item time to the total
+	  (when (and org-clock-report-include-clocking-task
+		     (equal (org-clocking-buffer) (current-buffer))
+		     (equal (marker-position org-clock-hd-marker) (point))
+		     tstart
+		     tend
+		     (>= (org-float-time org-clock-start-time) tstart)
+		     (<= (org-float-time org-clock-start-time) tend))
+	    (let ((time (floor (- (org-float-time)
+				  (org-float-time org-clock-start-time)) 60)))
+	      (setq t1 (+ t1 time))))
+	  (let* ((headline-forced
+		  (get-text-property (point)
+                                     :org-clock-force-headline-inclusion))
+                 (headline-included
+                  (or (null headline-filter)
+                      (save-excursion
+                        (save-match-data (funcall headline-filter))))))
+	    (setq level (- (match-end 1) (match-beginning 1)))
+	    (when (or (> t1 0) (> (aref ltimes level) 0))
+	      (when (or headline-included headline-forced)
+                (if headline-included
+                    (loop for l from 0 to level do
+                          (aset ltimes l (+ (aref ltimes l) t1))))
+		(setq time (aref ltimes level))
+		(goto-char (match-beginning 0))
+		(put-text-property (point) (point-at-eol) :org-clock-minutes time)
+                (if headline-filter
+                    (save-excursion
+                      (save-match-data
+                        (while
+                            (> (funcall outline-level) 1)
+                          (outline-up-heading 1 t)
+                          (put-text-property
+                           (point) (point-at-eol)
+                           :org-clock-force-headline-inclusion t))))))
+	      (setq t1 0)
+	      (loop for l from level to (1- lmax) do
+		    (aset ltimes l 0)))))))
+      (setq org-clock-file-total-minutes (aref ltimes 0)))
+    (set-buffer-modified-p bmp)))
+
+(defun org-clock-sum-current-item (&optional tstart)
+  "Return time, clocked on current item in total."
+  (save-excursion
+    (save-restriction
+      (org-narrow-to-subtree)
+      (org-clock-sum tstart)
+      org-clock-file-total-minutes)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defrxxconst org-balance-goal-todo-keyword "GOAL")
 
 ;; struct: org-balance-goal-delta - information about how well one goal is being met.
@@ -526,20 +851,30 @@ Originally adapted from `org-closed-in-range'.
 ;;      presents it in a list.
 (defstruct org-balance-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
 
-(defrxx prop-name (1+ alnum))
-(defrxx link (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
+(defrxx prop-name "A valid name of an Org entry property" (& alpha (0+ (any alnum "_-"))))
+(defrxx link "An Org link; we're only interested in links that point to a GOAL entry.
+Parsed as the buffer position of the start of the link."
+  (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
 (defstruct org-balance-prop prop link)
-(defrxx prop (seq (prop-name prop) (opt blanks "at" blanks link))
-  (make-org-balance-prop :prop prop :link link))
+(defrxx prop
+  "The name of a property to be summed for a subtree, optionally followed by a link to the subtree.
+The property can be an Org property name, 'clockedtime' or 'actualtime'.  Parsed as a 
+struct with fields for the property name and the link."
+  (& prop-name (opt blanks "at" blanks link))
+  (make-org-balance-prop :prop prop-name :link link))
 
-(defrxx ratio-word (or "per" "every" "each" "for every" "for each" "/" "a" "in a"))
+(defrxx ratio-word "A word separating the numerator and denominator of a fraction."
+  (or "per" "every" "each" "for every" "for each" "/" "a" "in a"))
 
 (defstruct org-balance-prop-ratio num denom)
 (defrxx prop-ratio
+  "The ratio of two properties.   The denominator, if not given, defaults to 'actualtime'."
   (seq (prop num) (opt blanks? ratio-word blanks? (prop denom)))
   (make-org-balance-prop-ratio :num num :denom (or denom (make-org-balance-prop :prop "actualtime"))))
 
-(defrxx priority (seq "[#" (any upper digit) "]"))
+(defrxx priority
+  "A priority cookie on an Org headline.   Parsed as the entire cookie (e.g. [#A])."
+  (seq "[#" (any upper digit) "]"))
 
 ;; (defrxx goal-prefix
 ;;   (seq bol (sep-by blanks (seq (1+ "*")) (eval org-balance-goal-todo-keyword) priority? prop-ratio)
@@ -558,8 +893,6 @@ Originally adapted from `org-closed-in-range'.
       (goto-char (point-at-eol))
       (rxx-search-bwd org-balance-tags-regexp (point-at-bol))
       (point))))
-
-(defrxx goal-spec (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link) blanks? tags?) (cons prop-ratio goal-or-link))
 
 (defun org-balance-compute-actual-prop (prop tstart tend unit)
   (save-excursion
@@ -829,8 +1162,8 @@ units are measured; for example, for time we use minutes."
 
 (defun org-balance-scale-valu (factor valu)
   "Return the value scaled by the factor"
-  (new-org-balance-valu (* factor (org-balance-valu-val valu)) (org-balance-valu-unit valu)) 
-  )
+  (org-balance-modified-struct org-balance-valu valu
+    :val (* factor val)))
 
 (defun org-balance-make-valu (val unit)
   (if (and (numberp val) (org-balance-is-unit unit))
@@ -850,7 +1183,8 @@ we convert to the specified multiples of new unit."
 				 multiples-of-new-unit) :unit new-unit))
 
 (defun org-balance-add-valu (valu1 valu2)
-  "Add two values with units, converting them to a common unit"
+  "Add two values with units, converting them to a common unit.  Returns
+a newly created valu representing the sum of VALU1 and VALU2."
   (let* ((unit1 (org-balance-valu-unit valu1))
 	 (unit2 (org-balance-valu-unit valu2))
 	 (smaller-unit (if (< (org-balance-unit2base unit1) (org-balance-unit2base unit2))
@@ -861,6 +1195,12 @@ we convert to the specified multiples of new unit."
 			      (org-balance-valu-val conv2))
 			   smaller-unit)))
 
+(defun org-balance-sub-valu (valu1 valu2)
+  "Subtract two values with units, converting them to a common unit.  Returns
+a newly created valu representing the difference of VALU1 and VALU2."
+  (org-balance-add-valu valu1 (org-balance-scale-valu -1 valu2)))
+
+
 (put 'org-balance-parse-error 'error-conditions '(error org-balance-errors org-balance-parse-error))
 (put 'org-balance-parse-error 'error-message "org-balance: Could not parse")
 
@@ -870,10 +1210,16 @@ we convert to the specified multiples of new unit."
     (ten . 10)))
 
 (defrxx number-name
+  "The string name of a number, for the few numbers often written as words.
+Parsed as the numeric value of the number."
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-number-names))))
   (lambda (match) (cdr-safe (assoc-string match org-balance-number-names))))
 
 (defrxx number
+  "A general number -- floating-point or integer.
+Some frequently-used numbers can also be written in English;
+see variable `org-balance-number-names'.
+Parsed as the numeric value of the number."
   (or
    number-name
    (seq
@@ -882,8 +1228,7 @@ we convert to the specified multiples of new unit."
 	(seq "." digits))
     (opt (any "eE") (opt (any "+-")) digits)))
   (lambda (match)
-    (or number-name (string-to-number match)))
-  "number")
+    (or number-name (string-to-number match))))
 
 (defun org-balance-is-valid-number-p (s)
   "Test if s is a number or a string representing a valid number (ignoring leading or trailing whitespace).
@@ -905,6 +1250,9 @@ by whitespace, it throws an error rather than silently returning zero.
 (defalias 'org-balance-parse-number 'org-balance-string-to-number)
 
 (defrxx number-range
+  "A range of two numbers separated by a dash; or a single number,
+in which case the range contains just that number.   
+Parsed as a cons of range start and end."
   (seq (number range-start) (opt "-" (number range-end)))
   (cons range-start (or range-end range-start)))
 
@@ -915,6 +1263,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
 ;; FIXME: such hooks should also provide the regexp to much this.  so, an aregexp.
 
 (defrxx unit
+  "A unit name.   See customization variable "
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-balance-unit2dim-alist)))))
 
 (defrxx valu
@@ -1028,9 +1377,6 @@ changing only the numerator."
 (defrxx goal-link (sep-by blanks (number factor) "of" (opt (named-grp actual "actual")) link)
   (make-org-balance-goal-link :factor factor :actual actual :link link))
 
-
-(defrxx goal-prefix-with-spec (& blanks? goal-spec) (cdr goal-spec))
-
 (defrxx goal-or-link
   (& blanks? (| goal goal-link) blanks?)
   (or goal
@@ -1047,6 +1393,10 @@ changing only the numerator."
 	    (org-balance-scale-goal (org-balance-goal-link-factor goal-link)
 				    (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
 						   (org-balance-start-of-tags))))))) 
+
+(defrxx goal-spec (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link) blanks? tags?) (cons prop-ratio goal-or-link))
+
+(defrxx goal-prefix-with-spec (& blanks? goal-spec) (cdr goal-spec))
 
 (defun org-balance-remove-props ()
   (interactive)
