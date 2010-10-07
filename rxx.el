@@ -366,11 +366,10 @@ a `let' form, except that the list of symbols can be computed at run-time."
 			 symbols))
 	   (parser (rxx-info-parser rxx-info)))
       (rxx-progv symbols symbol-vals
-	(let ((parser-result
-	       (if (functionp parser)
-		   (funcall parser match-str)
-		 (eval parser))))
-	  parser-result)))))
+	(save-match-data
+	  (if (functionp parser)
+	      (funcall parser match-str)
+	    (eval parser)))))))
 
 (defun rxx-match-aux (code)
   "Common code of `rxx-match-val', `rxx-match-string', `rxx-match-beginning' and `rxx-match-end'.  Looks up the rxx-info
