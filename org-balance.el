@@ -289,7 +289,11 @@ Return an a-list mapping keys to items with that key.  "
      (org-balance-set-fields ,struct-type (,(intern (concat "copy-" (symbol-name struct-type))) ,struct) ,@clauses)))
 
 
-  
+(defun org-balance-not-blank (s)
+  "Return nil if s is nil or a blank string, else return s"
+  (when (and s (save-match-data (string-match (rx (not blank)) s)))
+    s))
+
 (defun org-balance-get-property (prop &optional default-val)
   "Get the value of a property, represented either as text property or org property,
 at point.  If PROP is a symbol or keyword it is assumed
@@ -668,35 +672,36 @@ Originally adapted from `org-closed-in-range'.
 	       (t (org-balance-sum-org-property prop tstart tend unit prop-default-val)))))
     result))
 
-(defrxx archive
-  "The archive location, specified as a property of an Org entry.
-See Info node `(org) Archiving' and variable `org-archive-location'.
-Parsed as the archive location."
-  (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl))) loc)
-
-(defstruct org-balance-loc
+(defstruct
+  (org-balance-archive-loc
+   (:constructor nil)
+   (:constructor
+    create-org-balance-archive-loc
+    (loc
+     &aux
+     (file (org-balance-not-blank (org-extract-archive-file loc)))
+     (heading (org-balance-not-blank (org-extract-archive-heading loc))))))
   "A destination for archived trees: an org file, and a heading within that file."
   file heading)
 
-(defun org-balance-not-blank (s)
-  "Return nil if s is nil or a blank string, else return s"
-  (when (and s (save-match-data (string-match (rx (not blank)) s)))
-    s))
+(defrxx archive-loc
+  "The archive location, specified as a property of an Org entry.
+See Info node `(org) Archiving' and variable `org-archive-location'.
+Parsed as the archive location."
+  (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl)))
+  (create-org-balance-archive-loc loc))
+
 
 (defun org-balance-find-all-archive-targets ()
   "Find all the places where an entry from the current subtree could have been archived"
-
   (save-excursion
     (save-window-excursion
       (save-restriction
-	(let ((archive-locs (list (org-get-local-archive-location))))
+	(let ((archive-locs (list (create-org-balance-archive-loc (org-get-local-archive-location)))))
 	  (org-narrow-to-subtree)
 	  (rxx-do-search-fwd org-balance-archive-regexp loc
-	    (message "found loc %s at %s" loc (point))
 	    (add-to-list 'archive-locs loc))
-	  (mapcar (lambda (loc) (make-org-balance-loc :file (org-balance-not-blank (org-extract-archive-file loc))
-						      :heading (org-balance-not-blank (org-extract-archive-heading loc))))
-		  archive-locs))))))
+	  archive-locs)))))
 
 (defvar org-archive-reversed-order)
 
@@ -717,13 +722,13 @@ Parsed as the archive location."
 	    (save-window-excursion
 	      (save-restriction
 		(save-match-data
-		  (when (org-balance-loc-file loc)
-		    (find-file (org-balance-loc-file loc)))
+		  (when (org-balance-archive-loc-file loc)
+		    (find-file (org-balance-archive-loc-file loc)))
 		  (widen)
-		  (when (org-balance-loc-heading loc)
+		  (when (org-balance-archive-loc-heading loc)
 		    (save-match-data
 		      (when (re-search-forward
-			     (concat "^" (regexp-quote (org-balance-loc-heading loc))
+			     (concat "^" (regexp-quote (org-balance-archive-loc-heading loc))
 				     (org-re "[ \t]*\\(:[[:alnum:]_@#%:]+:\\)?[ \t]*\\($\\|\r\\)"))
 			     nil t)
 			(progn
@@ -1004,7 +1009,8 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 		    (error
 		     (unless (string= (upcase (org-get-heading)) "GOALS")
 		       (incf num-errors)
-		       (message "At %s: Error processing %s " (point) (buffer-substring (point) (point-at-eol)))
+		       (message "At %s: Error processing %s : %s " (point) (buffer-substring (point) (point-at-eol))
+				err)
 		       (save-match-data
 			 (org-toggle-tag "goal_error" 'on)
 			 (org-entry-delete nil "goal_delta_val")
