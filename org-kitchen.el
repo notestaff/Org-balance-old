@@ -2645,3 +2645,13 @@ for the replacement function definition."
 	   (last-interval-start (+ from (* shift (1- n))))
 	   (last-interval-end (+ last-interval-start width)) (last-interval-idx (- n (/ (- last-interval-end 0.5) shift))) (dummy (message "first interval is %d" first-interval-idx)))
       first-interval-idx)))
+
+(let ((s "	 :ARCHIVE:  %s_archive::work archive"))
+  (rxx-parse org-balance-archive-loc-regexp s))
+
+(equal (rxx-parse org-balance-archive-loc-regexp "	 :ARCHIVE:  %s_archive::work archive")
+       '[cl-struct-org-balance-archive-loc "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-kitchen.el_archive"
+						    "work archive"]
+
+(equal '[cl-struct-org-balance-archive-loc "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-kitchen.el_archive" work archive]
+'[cl-struct-org-balance-archive-loc /cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-balance.el_archive work archive])
