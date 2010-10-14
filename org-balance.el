@@ -393,7 +393,7 @@ Fields:
 number to I, interval start to TSTART and interval end to TEND for each interval, then execute FORMS"
   (declare (indent 5))
   (org-balance-make-symbols (first-interval-idx last-interval-start last-interval-end last-interval-idx
-						from n shift width dummy)
+						from n shift width)
     `(org-balance-with org-balance-intervals intervals (,from ,n ,shift ,width)
        (when (and (<= ,from ,p) (< ,p (org-balance-intervals-end ,intervals (1- ,n))))
 	 (let* ((,first-interval-idx (floor (/ (- ,p ,from) ,shift)))
@@ -403,8 +403,34 @@ number to I, interval start to TSTART and interval end to TEND for each interval
 		(,tstart (org-balance-intervals-start ,intervals ,first-interval-idx))
 		(,tend (+ ,tstart ,width))
 		(,i ,first-interval-idx))
-	   (while (<= ,tstart ,last-interval-start)
-	     (when (and (<= ,tstart ,p) (<= ,p ,tend))
+	   (while (<= ,i ,last-interval-idx)
+	     (when (and (<= ,tstart ,p) (< ,p ,tend))
+	       ,@forms)
+	     (incf ,tstart ,width)
+	     (incf ,tend ,width)
+	     (incf ,i)))))))
+
+(defun org-balance-intervals-intersect-p (amin amax bmin bmax)
+  "Test if two half-open intervals [AMIN,AMAX) and [BIN,BMAX) intersect."
+  (and (< bmin amax) (< amin bmax)))
+
+(defmacro do-org-balance-intervals-overlapping-interval (intervals pmin pmax i tstart tend &rest forms)
+  "Iterate over intervals in INTERVALS which intersect the interval [pmin,pmax).   Assign interval
+number to I, interval start to TSTART and interval end to TEND for each interval, then execute FORMS"
+  (declare (indent 6))
+  (org-balance-make-symbols (first-interval-idx last-interval-start last-interval-end last-interval-idx
+						from n shift width dummy)
+    `(org-balance-with org-balance-intervals intervals (,from ,n ,shift ,width)
+       (when (org-balance-intervals-intersect-p ,pmin ,pmax ,from (org-balance-intervals-end ,intervals (1- ,n)))
+	 (let* ((,first-interval-idx (floor (/ (- ,pmin ,from) ,shift)))
+		(,last-interval-start (+ ,from (* ,shift (1- ,n))))
+		(,last-interval-end (+ ,last-interval-start ,width))
+		(,last-interval-idx (- ,n (floor (/ (- ,last-interval-end ,pmax) ,shift))))
+		(,tstart (org-balance-intervals-start ,intervals ,first-interval-idx))
+		(,tend (+ ,tstart ,width))
+		(,i ,first-interval-idx))
+	   (while (<= ,i ,last-interval-idx)
+	     (when (org-balance-intervals-intersect-p ,pmin ,pmax ,tstart ,tend)
 	       ,@forms)
 	     (incf ,tstart ,width)
 	     (incf ,tend ,width)

@@ -2567,8 +2567,8 @@ for the replacement function definition."
 (org-balance-make-symbols (a b)
 		`(+ ,a ,b))
 
-(let ((intervals (make-org-balance-intervals :from 0 :n 5 :shift 1 :width 1)))
-  (do-org-balance-intervals-containing-point intervals +.000001 i tstart tend
+(let ((intervals (make-org-balance-intervals :from 0 :n 5000 :shift 1 :width 1)))
+  (do-org-balance-intervals-containing-point intervals 100 i tstart tend
       (message "%s" (list i tstart tend))))
 
 (cl-prettyexpand '(do-org-balance-intervals-containing-point intervals .5 i tstart tend
