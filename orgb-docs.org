@@ -148,10 +148,16 @@ Org-Balance Documentation
   
 * Configuring org-balance preferences
 
+  Put all these vars into the additional group, org-balance-vars?
+
 *** Possibly relevant org vars
 
 ***** org-log-done-with-time
 ***** org-log-done
+		
+***** org-clock-out-when-done
+		and other things in org-clock.el
+		
   	 	
   	 	
 
