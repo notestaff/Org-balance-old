@@ -260,11 +260,20 @@ Return an a-list mapping keys to items with that key.  "
   (declare (indent 3))
   (let ((my-struct (make-symbol "my-struct")))
     (append (list 'let* (cons (list my-struct struct)
-		      (mapcar (lambda (field)
-				(list field
-				      (list (intern (concat (symbol-name struct-type)
-							    "-" (symbol-name field))) my-struct))) fields)))
+			      (mapcar (lambda (field)
+					(list field
+					      (list (intern (concat (symbol-name struct-type)
+								    "-" (symbol-name field))) my-struct))) fields)))
 	    body)))
+
+
+(defmacro org-balance-make-symbols (symbols &rest forms)
+  "Bind each symbol in SYMBOLS to a newly created uninterned symbol, and execute FORMS."
+  (declare (indent 1))
+  (append (list 'let (mapcar (lambda (symbol)
+			      (list symbol `(make-symbol ,(symbol-name symbol))))
+			    symbols))
+	  forms))
 
 (defmacro org-balance-set-fields (struct-type struct &rest clauses)
   "Set multiple fields of a structure"
@@ -350,6 +359,56 @@ is not set (and is removed if it was set before and CLEAR-WHEN_DEFAULT is non-ni
   (and (string-match re s)
        (= (match-beginning 0) 0)
        (= (match-end 0) (length s))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;
+(defstruct org-balance-intervals
+  "A set of intervals, with operations for quickly finding
+intervals intersecting a given point or interval.
+
+Currently works only for a set of same-size, regularly spaced intervals.
+
+Fields:
+
+   FROM - start of first interval
+   N - number of intervals
+   SHIFT - distance between starts of adjacent intervals
+   WIDTH - width of each interval.
+"
+  from n shift width)
+
+(defun org-balance-intervals-start (intervals i)
+  "Return start of I'th interval in interval set INTERVALS"
+  (org-balance-with org-balance-intervals intervals (from shift n)
+    (assert (and (integerp i) (<= 0 i) (< i n)))
+    (+ from (* i shift))))
+
+(defun org-balance-intervals-end (intervals i)
+  "Return end of I'th interval in interval set INTERVALS"
+  (+ (org-balance-intervals-start intervals i) (org-balance-intervals-width intervals)))
+
+(defmacro do-org-balance-intervals-containing-point (intervals p i tstart tend &rest forms)
+  "Iterate over intervals in INTERVALS which contain point P.   Assign interval
+number to I, interval start to TSTART and interval end to TEND for each interval, then execute FORMS"
+  (declare (indent 5))
+  (org-balance-make-symbols (first-interval-idx last-interval-start last-interval-end last-interval-idx
+						from n shift width dummy)
+    `(org-balance-with org-balance-intervals intervals (,from ,n ,shift ,width)
+       (when (and (<= ,from ,p) (< ,p (org-balance-intervals-end ,intervals (1- ,n))))
+	 (let* ((,first-interval-idx (floor (/ (- ,p ,from) ,shift)))
+		(,last-interval-start (+ ,from (* ,shift (1- ,n))))
+		(,last-interval-end (+ ,last-interval-start ,width))
+		(,last-interval-idx (- ,n (floor (/ (- ,last-interval-end ,p) ,shift))))
+		(,tstart (org-balance-intervals-start ,intervals ,first-interval-idx))
+		(,tend (+ ,tstart ,width))
+		(,i ,first-interval-idx))
+	   (while (<= ,tstart ,last-interval-start)
+	     (when (and (<= ,tstart ,p) (<= ,p ,tend))
+	       ,@forms)
+	     (incf ,tstart ,width)
+	     (incf ,tend ,width)
+	     (incf ,i)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

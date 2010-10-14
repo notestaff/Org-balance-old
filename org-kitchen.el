@@ -2564,3 +2564,84 @@ for the replacement function definition."
 	      bindings))
        ,@body)))
 
+(org-balance-make-symbols (a b)
+		`(+ ,a ,b))
+
+(let ((intervals (make-org-balance-intervals :from 0 :n 5 :shift 1 :width 1)))
+  (do-org-balance-intervals-containing-point intervals +.000001 i tstart tend
+      (message "%s" (list i tstart tend))))
+
+(cl-prettyexpand '(do-org-balance-intervals-containing-point intervals .5 i tstart tend
+      (list i tstart tend)))
+
+(let ((intervals (make-org-balance-intervals :from 1 :n 5 :shift 1 :width 1)) i tstart tend)
+
+(let* ((my-struct intervals)
+       (from (org-balance-intervals-from my-struct))
+       (n (org-balance-intervals-n my-struct))
+       (shift (org-balance-intervals-shift my-struct))
+       (width (org-balance-intervals-width my-struct)))
+  (let* ((first-interval-idx (/ (- 0.5 from) shift))
+	 (last-interval-start (+ from (* shift (1- n))))
+	 (last-interval-end (+ last-interval-start width))
+	 (last-interval-idx (- n (/ (- last-interval-end 0.5) shift)))
+	 (dummy (message "first interval is %d" first-interval-idx))
+	 (tstart (org-balance-intervals-start intervals first-interval-idx))
+	 (tend (+ tstart width))
+	 (i first-interval-idx))
+    (while (<= tstart last-interval-start)
+      (if (and (<= tstart 0.5) (<= 0.5 tend))
+	  (progn
+	    (message "i is %d" i)
+	    (list i tstart tend)))
+      (setq tstart (+ tstart width))
+      (setq tend (+ tend width))
+      (setq i (1+ i))))))
+
+
+(let ((intervals (make-org-balance-intervals :from 1 :n 5 :shift 1 :width 1)) i tstart tend)
+
+(let ((i 0) (n 5))
+    (message "i=%d n=%d cond=%s" i n (and (<= 0 i) (< i n)))
+
+  (and (<= 0 i) (< i n)))v
+
+(cl-prettyexpand '(let ((intervals (make-org-balance-intervals :from 1 :n 5 :shift 1 :width 1)))
+  (do-org-balance-intervals-containing-point intervals .5 i tstart tend
+      (list i tstart tend))))
+
+(message "%s"
+	 (macroexpand-all '
+	  (let ((intervals (make-org-balance-intervals :from 1 :n 5 :shift 1 :width 1)))
+	    (let* ((my-struct intervals)
+		   (from (org-balance-intervals-from my-struct))
+		   (n (org-balance-intervals-n my-struct))
+		   (shift (org-balance-intervals-shift my-struct))
+		   (width (org-balance-intervals-width my-struct)))
+	      (let* ((first-interval-idx (/ (- 0.5 from) shift))
+		     (last-interval-start (+ from (* shift (1- n))))
+		     (last-interval-end (+ last-interval-start width))
+		     (last-interval-idx (- n (/ (- last-interval-end 0.5) shift)))
+		     (dummy (message "first interval is %d" first-interval-idx))
+		     (tstart (org-balance-intervals-start intervals first-interval-idx))
+		     (tend (+ tstart width))
+		     (i first-interval-idx))
+		(while (<= tstart last-interval-start)
+		  (if (and (<= tstart 0.5) (<= 0.5 tend))
+		      (progn
+			(message "i is %d" i)
+			(list i tstart tend)))
+		  (setq tstart (+ tstart width))
+		  (setq tend (+ tend width))
+		  (setq i (1+ i))))))))
+
+
+
+(let ((intervals (make-org-balance-intervals :from 0 :n 5 :shift 1 :width 1)))
+  (let* ((my-struct intervals)
+	 (from (org-balance-intervals-from my-struct))
+	 (n (org-balance-intervals-n my-struct)) (shift (org-balance-intervals-shift my-struct)) (width (org-balance-intervals-width my-struct)))
+    (let* ((first-interval-idx (/ (- 0.5 from) shift))
+	   (last-interval-start (+ from (* shift (1- n))))
+	   (last-interval-end (+ last-interval-start width)) (last-interval-idx (- n (/ (- last-interval-end 0.5) shift))) (dummy (message "first interval is %d" first-interval-idx)))
+      first-interval-idx)))
