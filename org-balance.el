@@ -759,7 +759,6 @@ Originally adapted from `org-closed-in-range'.
 
 (defstruct
   (org-balance-archive-loc
-   (:constructor nil)
    (:constructor
     create-org-balance-archive-loc
     (loc
@@ -784,7 +783,7 @@ Parsed as the archive location."
       (save-restriction
 	(let ((archive-locs (list (create-org-balance-archive-loc (org-get-local-archive-location)))))
 	  (org-narrow-to-subtree)
-	  (rxx-do-search-fwd org-balance-archive-regexp loc
+	  (rxx-do-search-fwd org-balance-archive-loc-regexp loc
 	    (add-to-list 'archive-locs loc))
 	  archive-locs)))))
 
@@ -1510,7 +1509,9 @@ changing only the numerator."
   '((inactive-timestamp "[2010-09-28 Tue 16:11]" 1285704660.0)
     (clock "		 CLOCK: [2010-09-07 Tue 21:07]--[2010-09-08 Wed 00:07] =>  3:00" (1283908020.0 . 1283918820.0))
     (closed "			 	CLOSED: [2009-08-27 Thu 11:58]" 1251388680.0)
-    (archive "	 :ARCHIVE:  %s_archive::work archive" "%s_archive::work archive")
+    (archive-loc "	 :ARCHIVE:  %s_archive::work archive"
+		 [cl-struct-org-balance-archive-loc "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-balance.el_archive"
+						    "work archive"])
     (number "three" 3)
     (number "3." 3)
     (number "3.3737" 3.3737)
@@ -1548,11 +1549,14 @@ changing only the numerator."
   (interactive)
   (let ((num-ok 0))
     (dolist (parse-test org-balance-parse-test-defs)
-      (assert (equal (rxx-parse
-		      (symbol-value
-		       (intern (concat "org-balance-" (symbol-name (first parse-test)) "-regexp")))
-		      (second parse-test))
-		     (third parse-test)))
+      (let ((parse-result (rxx-parse
+			   (symbol-value
+			    (intern (concat "org-balance-" (symbol-name (first parse-test)) "-regexp")))
+			   (second parse-test))))
+	(unless (equal parse-result
+		     (third parse-test))
+	  (message "failed test: %s %s" parse-test parse-result)
+	  (assert nil)))
       (incf num-ok))
     (message "%d parsing tests ok" num-ok)))
 
