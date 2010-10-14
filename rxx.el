@@ -126,7 +126,7 @@ several lisp symbols, without having to find and rebind all the symbols."
 either a symbol, or a list of symbols indicating a path through nested named groups.  Since multiple groups may be
 bound to the same name in an environment, this returns a list."
   (when (symbolp grp-name) (setq grp-name (list grp-name)))
-  (if (eq (first grp-name) '..)
+  (if (eq (first grp-name) (intern ".."))
       (rxx-env-lookup (cdr grp-name) (rxx-parent-env rxx-env))
     (let ((grp-infos (cdr-safe (assq (first grp-name) (cdr rxx-env)))))
       (apply 'append
@@ -904,13 +904,14 @@ the parsed result in case of match, or nil in case of mismatch."
     (put 'defrxxconst 'doc-string-elt 3)
     (put 'defrxx 'doc-string-elt 4)
     (put 'defrxxrecurse 'doc-string-elt 5)
-    (font-lock-add-keywords
-     nil
-     `((,(rx (seq bow (group (or "defrxx" "defrxxconst" "defrxxcustom" "defrxxstruct"))
-		  (1+ blank) (group (1+ (not space))))) .
-	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
-       (,(rx (seq bow (group "defrxxrecurse") (1+ blank) (1+ digit) (1+ blank) (group (1+ (not space))))) .
-	((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))))))
+	 (when (fboundp 'font-lock-add-keywords)
+		(font-lock-add-keywords
+		 nil
+		 `((,(rx (seq bow (group (or "defrxx" "defrxxconst" "defrxxcustom" "defrxxstruct"))
+						  (1+ blank) (group (1+ (not space))))) .
+						  ((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
+			(,(rx (seq bow (group "defrxxrecurse") (1+ blank) (1+ digit) (1+ blank) (group (1+ (not space))))) .
+			 ((1 font-lock-keyword-face) (2 font-lock-variable-name-face))))))))
   
 (add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)
 
