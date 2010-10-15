@@ -155,7 +155,11 @@ Org-Balance Documentation
 	 
 ***** org-global-properties
 ***** org-file-properties
-	 	
+
+
+		
+***** org-todo-keywords
+		
 ***** org-log-done-with-time
 ***** org-log-done
 		
