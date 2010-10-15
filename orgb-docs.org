@@ -152,6 +152,10 @@ Org-Balance Documentation
 
 *** Possibly relevant org vars
 
+	 
+***** org-global-properties
+***** org-file-properties
+	 	
 ***** org-log-done-with-time
 ***** org-log-done
 		
