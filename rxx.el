@@ -121,6 +121,12 @@ several lisp symbols, without having to find and rebind all the symbols."
 
 (defun rxx-parent-env (rxx-env) (cdr (first rxx-env)))
 
+(defun rxx-uniquify (list)
+  "Remove duplicate elements from LIST.  Taken from `org-uniquify'."
+  (let (res)
+    (mapc (lambda (x) (add-to-list 'res x 'append)) list)
+    res))
+
 (defun rxx-env-lookup (grp-name rxx-env)
   "Lookup the rxx-info for the named group GRP-NAME in the environment RXX-ENV, or return nil if not found.  GRP-NAME is
 either a symbol, or a list of symbols indicating a path through nested named groups.  Since multiple groups may be
@@ -129,14 +135,15 @@ bound to the same name in an environment, this returns a list."
   (if (eq (first grp-name) (intern ".."))
       (rxx-env-lookup (cdr grp-name) (rxx-parent-env rxx-env))
     (let ((grp-infos (cdr-safe (assq (first grp-name) (cdr rxx-env)))))
-      (apply 'append
-	     (mapcar
-	      (lambda (grp-info)
-		(if (cdr grp-name)
-		    (rxx-env-lookup (cdr grp-name)
-				    (rxx-info-env grp-info))
-		  (list grp-info)))
-	      grp-infos)))))
+      (rxx-uniquify
+       (apply 'append
+	      (mapcar
+	       (lambda (grp-info)
+		 (if (cdr grp-name)
+		     (rxx-env-lookup (cdr grp-name)
+				     (rxx-info-env grp-info))
+		   (list grp-info)))
+	       grp-infos))))))
 
 (defun rxx-env-bind (grp-name rxx-info rxx-env)
   "Bind group name GRP-NAME to group annotation RXX-INFO in the
@@ -205,7 +212,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
   ; if the form is a symbol, and not one of the reserved ones in rx,
   ; evaluate it as a variable.
   ;
-  (declare (special rxx-next-grp-num rxx-env))
+  (declare (special rxx-next-grp-num rxx-num-grps rxx-env))
   (rx-check form)
   (or
    (and (boundp 'rxx-replace-named-grps)
@@ -219,7 +226,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 			  (when (or (null grp-def-raw)  (equal (rxx-info-form old-grp-def) grp-def-raw))
 			    old-grp-def))
 			old-grp-defs))))
-    (if equiv-old-grp-defs (rxx-info-regexp (first equiv-old-grp-defs))
+    (if (and nil equiv-old-grp-defs) (rxx-info-regexp (first equiv-old-grp-defs))
       (let* ((grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
 	     (old-rxx-env rxx-env)
 	     (rxx-env (rxx-new-env old-rxx-env))  ;; within each named group, a new environment for group names
@@ -435,9 +442,11 @@ with this number.")
 
 (defun rxx-process-eval-regexp (form &optional rx-parent)
   "Parse and produce code from FORM, which is `(eval-regexp FORM)'."
+  (declare (special rxx-num-grps))
   (rx-check form)
-  (rx-group-if (eval (cadr form)) rx-parent))
-
+  (let ((regexp (eval (second form))))
+    (incf rxx-num-grps (regexp-opt-depth regexp))
+    (rx-group-if regexp rx-parent)))
 
 (defmacro rxx-replace-posix (s)
   "Replace posix classes in regular expression.  Taken from `org-re' in `org-macs.el'."
@@ -497,6 +506,12 @@ Returns the value of the last expression."
 		 (rxx-process-named-grp (list 'named-grp form form))))
 	  (t ad-do-it))))
 
+(defadvice rx-submatch (before rxx-submatch first (form) activate compile)
+  (when (boundp 'rxx-num-grps) (incf rxx-num-grps)))
+
+(defadvice rx-regexp (after rxx-regexp first (form) activate compile)
+  (when (boundp 'rxx-num-grps) (incf rxx-num-grps (regexp-opt-depth (second form)))))
+
 (defun rxx-to-string (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
 extensions.  The extensions, taken together, allow specifying simple grammars
@@ -508,6 +523,7 @@ For detailed description, see `rxx'.
   (rxx-remove-unneeded-shy-grps
    (let* ((rxx-env (rxx-new-env))
 	  (rxx-next-grp-num rxx-first-grp-num)
+	  (rxx-num-grps 0)
 	  ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
 	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
 				     (eval-regexp . (rxx-process-eval-regexp 1 1))
@@ -732,8 +748,7 @@ the parsed result in case of match, or nil in case of mismatch."
   (let* ((rxx-recurs-depth max-recurs-depth)
 	 (unwound-aregexp (rxx-to-string `(named-grp top-grp
 						     ,aregexp))))
-    (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)
-  ))
+    (rxx-parse (rxx-to-string unwound-aregexp) s partial-match-ok)))
 
 (defmacro rxx-push-end (elt lst)
   "Push elt onto end of list, and return the elt"
@@ -744,11 +759,12 @@ the parsed result in case of match, or nil in case of mismatch."
 (defvar rx-greedy-flag)
 
 (defadvice rx-kleene (around rxx-kleene first (form) activate)
-  (declare (special rxx-env rxx-next-grp-num))
+  (declare (special rxx-env rxx-next-grp-num rxx-num-grps))
   (if (or (not (boundp 'rxx-env)) (not (boundp 'rxx-next-grp-num))
 	  (memq (first form) '(optional opt zero-or-one ? ??)))
       ad-do-it
     (let* ((wrap-grp-num (when (boundp 'rxx-next-grp-num) (incf rxx-next-grp-num)))
+	   (dummy (when (boundp 'rxx-num-grps) (incf rxx-num-grps)))
 	   (parent-rxx-env (when (boundp 'rxx-env) rxx-env))
 	   (rxx-env (rxx-new-env parent-rxx-env))
 	   (sep-by-form (when (eq (car-safe (cdr-safe form)) :sep-by) (third form)))
@@ -858,6 +874,7 @@ in larger regexps."
      (defcustom ,symbol ,initvalue ,docstring ,@args)))
 
 (defmacro defrxx (var &rest args)
+  "Define a regexp and a parser for it."
   (let (form parser descr)
     (cond
      ((stringp (nth 0 args))
