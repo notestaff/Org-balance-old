@@ -2655,3 +2655,76 @@ for the replacement function definition."
 
 (equal '[cl-struct-org-balance-archive-loc "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-kitchen.el_archive" work archive]
 '[cl-struct-org-balance-archive-loc /cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-balance.el_archive work archive])
+
+(defun org-balance-sum-org-property-old (prop intervals unit prop-default-val)
+  "Fast summing of property.  Returns the sum of the property under the current restriction.
+
+Originally adapted from `org-closed-in-range'.
+"
+
+  ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
+  ;; FIXME: find also state changes to DONE, or to any done state.
+  (declare (special org-balance-num-warnings))
+  (message "gathered: %s" (org-balance-gather-org-property prop intervals unit prop-default-val))
+  (save-excursion
+    (save-match-data
+      (goto-char (point-min))
+      (let ((prop-sum (org-balance-make-valu 0 unit))
+	    (prop-default (concat "default_" prop)))
+	(rxx-do-search-fwd org-balance-closed-regexp closed-time
+	  (when (and (<= tstart closed-time) (<= closed-time tend))
+	    (save-excursion
+	      (save-match-data
+		(org-back-to-heading 'invis-ok)
+		(let*
+		    ((pos-here (point))
+		     (prop-here
+		      (or (org-entry-get nil prop)
+			  (org-entry-get nil prop-default 'inherit)
+			  prop-default-val
+			  "1"))
+		     (prop-valu-here
+		      (condition-case err
+			  (org-balance-parse-valu prop-here)
+			(error
+			 (message
+			  "Warning: at line %d of file %s, could not add %s to sum for goal %s; sum-so-far is %s"
+			  (line-number-at-pos (point)) (buffer-file-name (current-buffer)) prop-here prop prop-sum)
+			 (incf org-balance-num-warnings)
+			 nil))))
+		  (when prop-valu-here
+		    (setq prop-sum (org-balance-add-valu prop-sum prop-valu-here))))))))
+	(message "summed: %s" prop-sum)
+	prop-sum))))
+
+(let ((intervals (make-org-balance-intervals :from 0 :width 1 :n 2 :shift 0)))
+  (rxx-parse org-balance-goal-or-link-regexp "once a month"))
+
+
+(defun org-balance-clock-sum2 (tstart tend)
+  "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
+  (let ((total-minutes 0))
+    ;; Include time on the currently running clock, if needed.
+    (when (and
+	   org-clock-report-include-clocking-task
+	   (equal (org-clocking-buffer) (current-buffer))
+	   (<= (point-min) (marker-position org-clock-hd-marker))
+	   (<= (marker-position org-clock-hd-marker) (point-max)))
+      (let* ((cs (org-float-time org-clock-start-time))
+	     (ts (max tstart cs))
+	     (te (min tend (org-float-time)))
+	     (dt (- te ts)))
+	(when (> dt 0) (setq total-minutes (floor (/ dt 60))))))
+    (save-excursion
+      (save-match-data
+	(goto-char (point-min))
+	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
+	  (let* ((ts (car clock-interval)) (te (cdr clock-interval))
+		 (ts (if tstart (max ts tstart) ts))
+		 (te (if tend (min te tend) te))
+		 (dt (- te ts)))
+	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
+    total-minutes))
+
+
+(org-balance-scale-valu-vec 2 (vector (org-balance-make-valu 1 'item) (org-balance-make-valu 2 'item)))
