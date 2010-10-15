@@ -29,8 +29,7 @@
 
 (defrxx rxx-number-regexp
      (seq
-      (zero-or-more whitespace)
-      
+      blanks?
       (or
        ;; either an english number name
        (named-grp number-name (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car rxx-number-names)))))
