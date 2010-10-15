@@ -75,7 +75,12 @@
 
 (rxx-set-prefix org-balance)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Section: External variables referenced by org-balance module
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defvar org-clock-report-include-clocking-task)
+(defvar org-archive-reversed-order)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Section: org-balance customizations
@@ -124,6 +129,19 @@ before today."
   "Face used for showing malformed goals"
   )
 
+(defrxxcustom org-balance-units
+  (quote ((time (second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
+		(workweek . 7200) (month . 43200) (year . 525600))
+	  (money (dollar . 1) ($ . 1) (cent . 0.01) (k . 1000))
+	  (count (item . 1) (time . 1))
+	  (unpleasantness (frog . 1))))
+  "Units and their relative values"
+  :group 'org-balance
+  :type '(alist :tag "Units used in org-balance"
+		:key-type (symbol :tag "Dimension")
+		:value-type
+		(alist :key-type (symbol :tag "Unit name")
+		       :value-type (number :tag "Relative value"))))
 
 (defconst org-balance-custom-commands
   (quote (("b" . "Org-balance commands")
@@ -225,7 +243,6 @@ from the `before-change-functions' in the current buffer."
 ;; General-purpose utility routines used in org-balance module
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-
 (defun org-balance-groupby (z key-func)
   "Group items in a list by their key, using the specified key extractor.
 Return an a-list mapping keys to items with that key.  "
@@ -240,7 +257,8 @@ Return an a-list mapping keys to items with that key.  "
     (reverse result)))
 
 (defmacro org-balance-with (struct-type struct fields  &rest body)
-  "Locally bind fields of structure STRUCT for easy access"
+  "Locally bind fields FIELDS of structure STRUCT of type STRUCT-TYPE (defined by `defstruct') for easy access.
+FIELDS is a list of fields; each field is bound to a local variable of the same name, then BODY forms are executed."
   (declare (indent 3))
   (let ((my-struct (make-symbol "my-struct")))
     (append (list 'let* (cons (list my-struct struct)
@@ -252,7 +270,8 @@ Return an a-list mapping keys to items with that key.  "
 
 
 (defmacro org-balance-with-new-symbols (symbols &rest forms)
-  "Bind each symbol in SYMBOLS to a newly created uninterned symbol, and execute FORMS."
+  "Bind each symbol in SYMBOLS to a newly created uninterned symbol, and execute FORMS.  Useful for defining temp vars
+used in macros."
   (declare (indent 1))
   (append (list 'let (mapcar (lambda (symbol)
 			      (list symbol `(make-symbol ,(symbol-name symbol))))
@@ -260,13 +279,13 @@ Return an a-list mapping keys to items with that key.  "
 	  forms))
 
 (defmacro org-balance-make-vector (length init)
-  "Make a vector, evaluating the INIT expression for each element rather than once."
+  "Make a vector, evaluating the INIT expression for each element rather than just once."
   (org-balance-with-new-symbols (i v)
     `(let ((,v (make-vector ,length nil)))
        (dotimes (,i ,length ,v) (aset ,v ,i ,init)))))
 
 (defmacro org-balance-gen-vector (i n &rest forms)
-  "Construct a vector from expression for its i'th element"
+  "Construct a vector of size N from the expression for its I'th element."
   (declare (indent 2))
   (org-balance-with-new-symbols (save-n result)
     `(let* ((,save-n ,n)
@@ -276,7 +295,7 @@ Return an a-list mapping keys to items with that key.  "
 
 
 (defun org-balance-mapcar-many (cl-func cl-seqs)
-  "Copy  of `cl-mapcar-many'"
+  "Copy  of `cl-mapcar-many', used by `org-balance-mapcar'."
   (if (cdr (cdr cl-seqs))
       (let* ((cl-res nil)
 	     (cl-n (apply 'min (mapcar 'length cl-seqs)))
@@ -328,7 +347,7 @@ Copied from `mapcar*'.
     (mapcar cl-func cl-x)))
 
 (defun org-balance-map-vectors (function &rest vecs)
-  "Same as `org-balance-mapcar*' but return vector result"
+  "Map a function over one or more vectors, and return the result as a vector."
   (apply 'vector (apply 'org-balance-mapcar* (cons function vecs))))
 
 (defmacro org-balance-set-fields (struct-type struct &rest clauses)
@@ -345,6 +364,8 @@ Copied from `mapcar*'.
 	      (nreverse result) (list my-struct)))))
 
 (defmacro org-balance-modified-struct (struct-type struct &rest clauses)
+  "Return a copy of the given structure STRUCT of type STRUCT-TYPE, with specified fields given new values and the
+remaining fields taking values from STRUCT.   CLAUSES has the form :field1 val1 :field2 val2 ..."
   (declare (indent 2))
   `(org-balance-with ,struct-type ,struct
 		     ,(delq nil
@@ -355,7 +376,7 @@ Copied from `mapcar*'.
 
 
 (defun org-balance-not-blank (s)
-  "Return nil if s is nil or a blank string, else return s"
+  "Return nil if S is nil or a blank string, else return S."
   (when (and s (save-match-data (string-match (rx (not blank)) s)))
     s))
 
@@ -416,9 +437,14 @@ is not set (and is removed if it was set before and CLEAR-WHEN_DEFAULT is non-ni
        (= (match-beginning 0) 0)
        (= (match-end 0) (length s))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Section: Intervals
+;;
+;; Code for dealing with lists of time intervals.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;;;;;
 (defstruct org-balance-intervals
   "A set of intervals, with operations for quickly finding
 intervals intersecting a given point or interval.
@@ -617,7 +643,8 @@ See also `org-balance-record-time' and Info node `(org) MobileOrg'.
   (interactive)
   (save-excursion
     (org-back-to-heading 'invis-ok)
-    (unless hours-ago (setq hours-ago (float (string-to-number (read-string "Finished how long ago (in hours)? " nil nil 0)))))
+    (unless hours-ago
+      (setq hours-ago (float (string-to-number (read-string "Finished how long ago (in hours)? " nil nil 0)))))
     (let* ((seconds-ago (* hours-ago org-balance-minutes-per-hour org-balance-seconds-per-minute))
 	   (done-time (time-subtract (org-current-time) (seconds-to-time seconds-ago))))
       (flet ((org-current-time () done-time))
@@ -643,7 +670,7 @@ Parsed as a cons of the start and end times."
   (cons from to))
 
 (defun org-balance-clock-sum-add-interval (intervals totals tmin tmax)
-  "Add the time in the interval [TSTART,TEND) to the TOTALS"
+  "Add the time in the interval [TSTART,TEND) to the TOTALS.  Used by `org-balance-clock-sum'."
   (do-org-balance-intervals-overlapping-interval intervals tmin tmax i tstart tend
     (incf (aref totals i) (- tend tstart))))
 
@@ -671,9 +698,8 @@ Parsed as the floating-point time."
   (sep-by blanks bol (eval org-closed-string) (inactive-timestamp closed-time))
   closed-time)
 
-(defun org-balance-gather-org-property (prop intervals unit prop-default-val)
-  "Fast summing of property.  Returns the sum of the property under the current restriction.
-
+(defun org-balance-gather-org-property (prop intervals prop-default-val)
+  "For each interval in INTERVALS, compute the list of values of Org property PROP from items closed in that interval.
 Originally adapted from `org-closed-in-range'.
 "
   
@@ -713,6 +739,7 @@ Originally adapted from `org-closed-in-range'.
 
 
 (defun org-balance-do-sum (start-value seq)
+  "Sum a sequence SEQ of valus, starting with START-VALUE."
   (let ((result
 	 (dolist (v seq start-value)
 	   (setq start-value (org-balance-add-valu start-value v)))))
@@ -725,16 +752,18 @@ Originally adapted from `org-closed-in-range'.
 
 
 (defun org-balance-sum-org-property (prop intervals unit prop-default-val)
+  "For each interval in INTERVALS, compute the sum of values of Org property PROP from items closed in that interval.
+The sum will be represented in unit UNIT.  The sum is computed within the current restriction, if any."
   (org-balance-map-vectors
    (lambda (vals)
      (org-balance-do-sum (org-balance-make-valu 0 unit)
 			 (mapcar 'cdr vals)))
    (org-balance-gather-org-property
-    prop intervals unit prop-default-val)))
+    prop intervals prop-default-val)))
 
 
 (defun org-balance-sum-property (prop intervals unit prop-default-val)
-  "Sum a property in the specified period, within the current file restriction."
+  "For each interval in INTERVALS, compute the sum of property PROP for that time interval."
   (let ((result 
 	 (cond ((string= prop "clockedtime")
 		(org-balance-clock-sum intervals))
@@ -758,13 +787,13 @@ Originally adapted from `org-closed-in-range'.
 (defrxx archive-loc
   "The archive location, specified as a property of an Org entry.
 See Info node `(org) Archiving' and variable `org-archive-location'.
-Parsed as the archive location."
+Parsed as the structure `org-balance-archive-loc'."
   (sep-by blanks bol ":ARCHIVE:" (named-grp loc (1+ nonl)))
   (create-org-balance-archive-loc loc))
 
 
 (defun org-balance-find-all-archive-targets ()
-  "Find all the places where an entry from the current subtree could have been archived"
+  "Find all the places where an entry from the current subtree could have been archived."
   (save-excursion
     (save-window-excursion
       (save-restriction
@@ -774,7 +803,6 @@ Parsed as the archive location."
 	    (add-to-list 'archive-locs loc))
 	  archive-locs)))))
 
-(defvar org-archive-reversed-order)
 
 (defun org-balance-sum-property-with-archives (prop intervals unit)
   "Sum a property in the specified period.  Include any entries that may have been archived from the current subtree."
@@ -1166,19 +1194,6 @@ When called repeatedly, scroll the window that is displaying the buffer."
 ;; (amount per day).  There is also code to convert from the uniform representation back to the user's original
 ;; unit for display (e.g. from "8.57 minutes per day" to "1 hour a week").
 
-(defrxxcustom org-balance-units
-  (quote ((time (second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
-		(workweek . 7200) (month . 43200) (year . 525600))
-	  (money (dollar . 1) ($ . 1) (cent . 0.01) (k . 1000))
-	  (count (item . 1) (time . 1))
-	  (unpleasantness (frog . 1))))
-  "Units and their relative values"
-  :group 'org-balance
-  :type '(alist :tag "Units used in org-balance"
-		:key-type (symbol :tag "Dimension")
-		:value-type
-		(alist :key-type (symbol :tag "Unit name")
-		       :value-type (number :tag "Relative value"))))
 
 ;; for each unit, add plural form: make "seconds" mean the same thing as "second"
 (defrxxconst org-balance-units-with-plurals
