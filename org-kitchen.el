@@ -2728,3 +2728,24 @@ Originally adapted from `org-closed-in-range'.
 
 
 (org-balance-scale-valu-vec 2 (vector (org-balance-make-valu 1 'item) (org-balance-make-valu 2 'item)))
+
+
+(rxx-parse org-balance-prop-regexp "done at [[herelink]] (+good)")
+(message "%s" (org-no-properties (copy-sequence org-balance-prop-regexp)))
+
+(rxx (& alpha (0+ (any alnum "_-"))))
+org-balance-prop-name-regexp
+
+(regexp-opt-depth org-balance-prop-regexp)
+
+(regexp-opt-depth (rxx (or (named-grp a digit) (named-grp a alpha)) (rxx-match-val '(a .. a))))
+
+(rxx-env-lookup '(a .. a)
+		(rxx-info-env (get-rxx-info (rxx (or (named-grp a digit) (named-grp a alpha)) (rxx-match-val '(a .. a))))))
+
+(let ((rxx-first-grp-num 10))
+  (identity (rxx (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))))))
+
+(rxx-make-shy2 (rxx-make-shy2 "\\(\\(?2:\\(?3:hi\\)\\)\\)"))
+
+(rx (not (any "?")))
