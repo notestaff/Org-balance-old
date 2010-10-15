@@ -843,6 +843,10 @@ the parsed result in case of match, or nil in case of mismatch."
   re)
 
 (defmacro rxx-set-prefix (prefix)
+  "Specify a prefix to be automatically prepended to aregexps defined by `defrxx'.  Typically this would be the
+name of the module in which the aregexps are being defined.   So, if you do (rxx-set-prefix my-module) then
+(defrxx val ...) defines aregexp named my-module-val-regexp; it can be referred to as simply `val' when used
+in larger regexps."
   `(defrxxconst rxx-prefix (when (quote ,prefix) (symbol-name (quote ,prefix)))))
 
 (defmacro defrxxconst (symbol initvalue &optional docstring)
