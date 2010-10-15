@@ -515,11 +515,8 @@ For detailed description, see `rxx'.
 				     (& . seq)
 				     (blanks . "\\(?:[[:blank:]]+\\)")
 				     (digits . "\\(?:[[:digit:]]+\\)")
-				     (blanks? . "\\(?:[[:blank:]]*\\)")
-				     (digits? . "\\(?:[[:digit:]]*\\)")
 				     (sep-by . (rxx-process-sep-by 1 nil))
 				     (recurse . (rxx-process-recurse 1 nil))
-				     (named-grp-recurs . (rxx-process-named-grp-recurs 1 nil))
 				     (named-group . named-grp) (shy-group . shy-grp)
 				     (named-backref . (rxx-process-named-backref 1 1)))
 				   rx-constituents))
@@ -571,22 +568,6 @@ For detailed description, see `rxx'.
 (put 'sep-by lisp-indent-function 1)
 
 (defconst rxx-never-match (rx (not (any ascii nonascii))))
-
-(defun rxx-process-named-grp-recurs (form)
-  "Process named-grp-recurs"
-  (declare (special rxx-recurs-depth rxx-env))
-  (if
-      (or (not (boundp (quote rxx-recurs-depth)))
-	  (< rxx-recurs-depth 1))
-      (progn
-	(rxx-env-bind (second form) (make-rxx-info :form `(regexp ,rxx-never-match)
-						   :env (rxx-new-env) :num 0
-						   :parser (lambda (match) nil))
-		      rxx-env)
-	rxx-never-match)
-    (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
-      (rxx-process-named-grp `(named-grp ,(second form) (eval-regexp ,(third form)))))))
-
 
 (defun rxx-process-recurse (form)
   "Process recurse"
