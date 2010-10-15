@@ -189,9 +189,55 @@ The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-ARE
       (or aregexp (when (boundp 'rxx-aregexp) rxx-aregexp)
 	  (error "The annotated regexp must be either passed in explicitly, or scoped in as `rxx-aregexp'.")))))))
 
-(defun rxx-make-shy (re)
-  "Make all groups in re shy; and wrap a shy group around the re.  WARNING: this will kill any backrefs!"
+
+(defun rxx-subregexp-context-p (regexp pos &optional start)
+  "Return non-nil if POS is in a normal subregexp context in REGEXP.
+A subregexp context is one where a sub-regexp can appear.
+A non-subregexp context is for example within brackets, or within a
+repetition bounds operator `\\=\\{...\\}', or right after a `\\'.
+If START is non-nil, it should be a position in REGEXP, smaller
+than POS, and known to be in a subregexp context.
+
+Taken from `subregexp-context-p'."
+  ;; Here's one possible implementation, with the great benefit that it
+  ;; reuses the regexp-matcher's own parser, so it understands all the
+  ;; details of the syntax.  A disadvantage is that it needs to match the
+  ;; error string.
+  (save-match-data
+    (condition-case err
+	(progn
+	  (string-match (substring regexp (or start 0) pos) "")
+	  t)
+      (invalid-regexp
+       (not (member (cadr err) '("Unmatched [ or [^"
+				 "Unmatched \\{"
+				 "Trailing backslash")))))))
+
+
+(defun rxx-make-shy (regexp)
+  "Make all groups in re shy; and wrap a shy group around the re.  WARNING: this will kill any backrefs!
+Adapted from `regexp-opt-depth'."
   ;; FIXME: check for backrefs, throw error if any present
+  (save-match-data
+    ;; Hack to signal an error if REGEXP does not have balanced parentheses.
+    (string-match regexp "")
+    ;; Count the number of open parentheses in REGEXP.
+    
+      ;; so, you need to replace non-shy groups.
+      ;; under emacs, you also need to replace numbered groups.
+    (unless (featurep 'xemacs)
+      ;; remove explicitly numbered groups
+      (while (and (string-match (rx (seq "\\(?" (group (1+ digit)) ":")) regexp)
+		  (rxx-subregexp-context-p regexp (match-beginning 0)))
+	(setq regexp (replace-match "" 'fixedcase 'literal regexp 1))))
+    ;; remove unnumbered, non-shy groups
+    (while (and (string-match (rx (seq "\\(" (group "") (not (any "?")))) regexp)
+		(rxx-subregexp-context-p regexp (match-beginning 0)))
+      (setq regexp (replace-match "?:" 'fixedcase 'literal regexp 1)))
+    regexp))
+      
+
+(defun rxx-make-shy-old (re)
   (rx-group-if
    (save-match-data
      (replace-regexp-in-string
@@ -228,6 +274,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 			old-grp-defs))))
     (if (and nil equiv-old-grp-defs) (rxx-info-regexp (first equiv-old-grp-defs))
       (let* ((grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
+	     (dummy (incf rxx-num-grps))
 	     (old-rxx-env rxx-env)
 	     (rxx-env (rxx-new-env old-rxx-env))  ;; within each named group, a new environment for group names
 	     (grp-def
@@ -552,6 +599,7 @@ For detailed description, see `rxx'.
 		     :env rxx-env :descr descr :regexp regexp
 		     )))
      (put-rxx-info regexp rxx-info)
+     (assert (= rxx-num-grps (regexp-opt-depth regexp)))
      (rxx-replace-posix regexp))))
 
 (defun rxx-process-sep-by (form)
@@ -759,12 +807,30 @@ the parsed result in case of match, or nil in case of mismatch."
 (defvar rx-greedy-flag)
 
 (defadvice rx-kleene (around rxx-kleene first (form) activate)
+  "When processing repeat constructs such as `zero-or-more' and `one-or-more',
+turn each named group GRP inside the repeat into a corresponding named group GRP-LIST
+whose parser returns the list of parsed individual matches.   So, a construct
+such as (1+ num) containing the named group `num' that parses into a number
+will have a named group `num-list' that parses into the list of numbered matched
+by the repeat.   Note that this is in contrast to `match-string' which returns
+only the last copy of the repeated expression.
+
+Also, extend the syntax to allow specifying a separator regexp, e.g. 
+\(zero-or-more :sep-by REGEXP-FORM ...).  Then the copies of the repeat
+are required to be separated by strings matching REGEXP-FORM.
+The parsers that we construct for each named group return parsed matches
+of the repeat contents only, not of the separators.
+So, for the construct (1+ :sep-by blanks num), the parser for `num-list' would
+return the list of parsed numbers, omitting the blanks.   See also
+`rxx-process-sep-by'.
+"
   (declare (special rxx-env rxx-next-grp-num rxx-num-grps))
   (if (or (not (boundp 'rxx-env)) (not (boundp 'rxx-next-grp-num))
 	  (memq (first form) '(optional opt zero-or-one ? ??)))
       ad-do-it
     (let* ((wrap-grp-num (when (boundp 'rxx-next-grp-num) (incf rxx-next-grp-num)))
 	   (dummy (when (boundp 'rxx-num-grps) (incf rxx-num-grps)))
+	   (rxx-num-grps (when (boundp 'rxx-num-grps) rxx-num-grps))
 	   (parent-rxx-env (when (boundp 'rxx-env) rxx-env))
 	   (rxx-env (rxx-new-env parent-rxx-env))
 	   (sep-by-form (when (eq (car-safe (cdr-safe form)) :sep-by) (third form)))
@@ -800,7 +866,7 @@ the parsed result in case of match, or nil in case of mismatch."
 	     ((0+ zero-or-more * *?)
 	      `(,(first form) (regexp ,body-regexp) (regexp ,body-repeat-regexp)))))))
 		  
-      (setq ad-return-value (format "\\(?%d:%s\\)" wrap-grp-num ad-return-value))
+      (setq ad-return-value (format "\\(?%d:%s\\)" wrap-grp-num (rxx-make-shy ad-return-value)))
       (progn
 	(do-rxx-env grp-name rxx-infos rxx-env
 	  (rxx-dbg grp-name rxx-infos)
