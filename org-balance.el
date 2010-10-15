@@ -239,22 +239,6 @@ Return an a-list mapping keys to items with that key.  "
 	(push x (cdr (first result)))))
     (reverse result)))
 
-(defmacro org-balance-make-vector (length init)
-  "Make a vector, evaluating the INIT expression for each element rather than once."
-  (let ((v (make-symbol "v")) (i (make-symbol "i")))
-    `(let ((,v (make-vector ,length nil)))
-       (dotimes (,i ,length ,v) (aset ,v ,i ,init)))))
-
-(defmacro org-balance-gen-vector (i n &rest forms)
-  "Construct a vector from expression for its i'th element"
-  (declare (indent 2))
-  (let ((save-n (make-symbol "save-n"))
-	(result (make-symbol "result")))
-    `(let* ((,save-n ,n)
-	    (,result (make-vector ,save-n nil)))
-       (dotimes (,i ,save-n ,result)
-	 (aset ,result ,i (progn ,@forms))))))
-       
 (defmacro org-balance-with (struct-type struct fields  &rest body)
   "Locally bind fields of structure STRUCT for easy access"
   (declare (indent 3))
@@ -267,13 +251,85 @@ Return an a-list mapping keys to items with that key.  "
 	    body)))
 
 
-(defmacro org-balance-make-symbols (symbols &rest forms)
+(defmacro org-balance-with-new-symbols (symbols &rest forms)
   "Bind each symbol in SYMBOLS to a newly created uninterned symbol, and execute FORMS."
   (declare (indent 1))
   (append (list 'let (mapcar (lambda (symbol)
 			      (list symbol `(make-symbol ,(symbol-name symbol))))
 			    symbols))
 	  forms))
+
+(defmacro org-balance-make-vector (length init)
+  "Make a vector, evaluating the INIT expression for each element rather than once."
+  (org-balance-with-new-symbols (i v)
+    `(let ((,v (make-vector ,length nil)))
+       (dotimes (,i ,length ,v) (aset ,v ,i ,init)))))
+
+(defmacro org-balance-gen-vector (i n &rest forms)
+  "Construct a vector from expression for its i'th element"
+  (declare (indent 2))
+  (org-balance-with-new-symbols (save-n result)
+    `(let* ((,save-n ,n)
+	    (,result (make-vector ,save-n nil)))
+       (dotimes (,i ,save-n ,result)
+	 (aset ,result ,i (progn ,@forms))))))
+
+
+(defun org-balance-mapcar-many (cl-func cl-seqs)
+  "Copy  of `cl-mapcar-many'"
+  (if (cdr (cdr cl-seqs))
+      (let* ((cl-res nil)
+	     (cl-n (apply 'min (mapcar 'length cl-seqs)))
+	     (cl-i 0)
+	     (cl-args (copy-sequence cl-seqs))
+	     cl-p1 cl-p2)
+	(setq cl-seqs (copy-sequence cl-seqs))
+	(while (< cl-i cl-n)
+	  (setq cl-p1 cl-seqs cl-p2 cl-args)
+	  (while cl-p1
+	    (setcar cl-p2
+		    (if (consp (car cl-p1))
+			(prog1 (car (car cl-p1))
+			  (setcar cl-p1 (cdr (car cl-p1))))
+		      (aref (car cl-p1) cl-i)))
+	    (setq cl-p1 (cdr cl-p1) cl-p2 (cdr cl-p2)))
+	  (push (apply cl-func cl-args) cl-res)
+	  (setq cl-i (1+ cl-i)))
+	(nreverse cl-res))
+    (let ((cl-res nil)
+	  (cl-x (car cl-seqs))
+	  (cl-y (nth 1 cl-seqs)))
+      (let ((cl-n (min (length cl-x) (length cl-y)))
+	    (cl-i -1))
+	(while (< (setq cl-i (1+ cl-i)) cl-n)
+	  (push (funcall cl-func
+			    (if (consp cl-x) (pop cl-x) (aref cl-x cl-i))
+			    (if (consp cl-y) (pop cl-y) (aref cl-y cl-i)))
+		   cl-res)))
+      (nreverse cl-res))))
+
+(defun org-balance-mapcar* (cl-func cl-x &rest cl-rest)
+  "Apply FUNCTION to each element of SEQ, and make a list of the results.
+If there are several SEQs, FUNCTION is called with that many arguments,
+and mapping stops as soon as the shortest list runs out.  With just one
+SEQ, this is like `mapcar'.  With several, it is like the Common Lisp
+`mapcar' function extended to arbitrary sequence types.
+\n(fn FUNCTION SEQ...)
+
+Copied from `mapcar*'.
+"
+  (if cl-rest
+      (if (or (cdr cl-rest) (nlistp cl-x) (nlistp (car cl-rest)))
+	  (org-balance-mapcar-many cl-func (cons cl-x cl-rest))
+	(let ((cl-res nil) (cl-y (car cl-rest)))
+	  (while (and cl-x cl-y)
+	    (push (funcall cl-func (pop cl-x) (pop cl-y)) cl-res))
+	  (nreverse cl-res)))
+    (mapcar cl-func cl-x)))
+
+(defun org-balance-map-vectors (function &rest vecs)
+  "Same as `org-balance-mapcar*' but return vector result"
+  (apply 'vector (apply 'org-balance-mapcar* (cons function vecs))))
 
 (defmacro org-balance-set-fields (struct-type struct &rest clauses)
   "Set multiple fields of a structure"
@@ -388,53 +444,51 @@ Fields:
   "Return end of I'th interval in interval set INTERVALS"
   (+ (org-balance-intervals-start intervals i) (org-balance-intervals-width intervals)))
 
-(defmacro do-org-balance-intervals-containing-point (intervals p i tstart tend &rest forms)
-  "Iterate over intervals in INTERVALS which contain point P.   Assign interval
-number to I, interval start to TSTART and interval end to TEND for each interval, then execute FORMS"
-  (declare (indent 5))
-  (org-balance-make-symbols (first-interval-idx last-interval-start last-interval-end last-interval-idx
-						from n shift width)
-    `(org-balance-with org-balance-intervals intervals (,from ,n ,shift ,width)
-       (when (and (<= ,from ,p) (< ,p (org-balance-intervals-end ,intervals (1- ,n))))
-	 (let* ((,first-interval-idx (floor (/ (- ,p ,from) ,shift)))
-		(,last-interval-start (+ ,from (* ,shift (1- ,n))))
-		(,last-interval-end (+ ,last-interval-start ,width))
-		(,last-interval-idx (- ,n (floor (/ (- ,last-interval-end ,p) ,shift))))
-		(,tstart (org-balance-intervals-start ,intervals ,first-interval-idx))
-		(,tend (+ ,tstart ,width))
-		(,i ,first-interval-idx))
-	   (while (<= ,i ,last-interval-idx)
-	     (when (and (<= ,tstart ,p) (< ,p ,tend))
-	       ,@forms)
-	     (incf ,tstart ,width)
-	     (incf ,tend ,width)
-	     (incf ,i)))))))
-
 (defun org-balance-intervals-intersect-p (amin amax bmin bmax)
   "Test if two half-open intervals [AMIN,AMAX) and [BIN,BMAX) intersect."
   (and (< bmin amax) (< amin bmax)))
+
+(defun org-balance-let (varlist body)
+  "Assign vars that are not null"
+  (append (list 'let
+		(org-remove-if
+		 (lambda (var-assignment)
+		   (null (car-safe var-assignment)))
+		 varlist))
+	  body))
 
 (defmacro do-org-balance-intervals-overlapping-interval (intervals pmin pmax i tstart tend &rest forms)
   "Iterate over intervals in INTERVALS which intersect the interval [pmin,pmax).   Assign interval
 number to I, interval start to TSTART and interval end to TEND for each interval, then execute FORMS"
   (declare (indent 6))
-  (org-balance-make-symbols (first-interval-idx last-interval-start last-interval-end last-interval-idx
-						from n shift width dummy)
+  (org-balance-with-new-symbols
+   (first-interval-idx last-interval-start last-interval-end last-interval-idx from n shift width dummy)
     `(org-balance-with org-balance-intervals intervals (,from ,n ,shift ,width)
-       (when (org-balance-intervals-intersect-p ,pmin ,pmax ,from (org-balance-intervals-end ,intervals (1- ,n)))
-	 (let* ((,first-interval-idx (floor (/ (- ,pmin ,from) ,shift)))
+       (when (and (> (org-balance-intervals-n intervals) 0)
+		  (org-balance-intervals-intersect-p ,pmin ,pmax ,from (org-balance-intervals-end ,intervals (1- ,n))))
+	 (let* ((,first-interval-idx (if (and ,shift (> ,shift 0)) (floor (/ (- ,pmin ,from) ,shift)) 0))
 		(,last-interval-start (+ ,from (* ,shift (1- ,n))))
 		(,last-interval-end (+ ,last-interval-start ,width))
-		(,last-interval-idx (- ,n (floor (/ (- ,last-interval-end ,pmax) ,shift))))
+		(,last-interval-idx (if (and ,shift (> ,shift 0))
+					(- ,n (floor (/ (- ,last-interval-end ,pmax) ,shift)))
+				      0))
 		(,tstart (org-balance-intervals-start ,intervals ,first-interval-idx))
 		(,tend (+ ,tstart ,width))
 		(,i ,first-interval-idx))
 	   (while (<= ,i ,last-interval-idx)
 	     (when (org-balance-intervals-intersect-p ,pmin ,pmax ,tstart ,tend)
-	       ,@forms)
+	       (let ((,tstart (max ,tstart ,pmin))
+		     (,tend (min ,tend ,pmax)))
+		 ,@forms))
 	     (incf ,tstart ,width)
 	     (incf ,tend ,width)
 	     (incf ,i)))))))
+
+
+(defmacro do-org-balance-intervals-containing-point (intervals p i tstart tend &rest forms)
+  "Iterate over intervals in INTERVALS which contain the point p.   Assign interval
+number to I, interval start to TSTART and interval end to TEND for each interval, then execute FORMS"
+  `(do-org-balance-intervals-overlapping-interval ,intervals ,p ,p ,i ,tstart ,tend ,forms))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -460,17 +514,17 @@ Adapted from `org-closed-in-range' from org.el."
     ;; make tree, check each match with the callback
     (message "%s matches here" (org-occur "CLOSED: +\\[\\(.*?\\)\\]" nil callback))) )
 
-(defun org-balance-display (&optional tstart tend total-only)
+(defun org-balance-display (&optional intervals total-only)
   "Show subtree times in the entire buffer.
 If TOTAL-ONLY is non-nil, only show the total time for the entire file
 in the echo area."
   (interactive)
-  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
-  (unless tend (setq tend (org-float-time (org-current-time))))
+  ;(unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  ;(unless tend (setq tend (org-float-time (org-current-time))))
   (let ((prop (read-string "Property"))
 	(unit (intern (read-string "Unit"))))
     (org-balance-remove-overlays)
-    (org-balance-sum-property-with-archives prop tstart tend unit)
+    (org-balance-sum-property-with-archives prop intervals unit)
     (let (time h m p)
       (unless total-only
 	(save-excursion
@@ -588,58 +642,28 @@ Parsed as a cons of the start and end times."
 		   " => " (1+ nonl))
   (cons from to))
 
-(defun org-balance-clock-sum (tstart tend)
+(defun org-balance-clock-sum-add-interval (intervals totals tmin tmax)
+  "Add the time in the interval [TSTART,TEND) to the TOTALS"
+  (do-org-balance-intervals-overlapping-interval intervals tmin tmax i tstart tend
+    (incf (aref totals i) (- tend tstart))))
+
+(defun org-balance-clock-sum (intervals)
   "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
-  (let ((total-minutes 0))
+  (let ((total-seconds (make-vector (org-balance-intervals-n intervals) 0)))
     (when (and
 	   org-clock-report-include-clocking-task
 	   (equal (org-clocking-buffer) (current-buffer))
 	   (<= (point-min) (marker-position org-clock-hd-marker))
 	   (<= (marker-position org-clock-hd-marker) (point-max)))
-      (let* ((cs (org-float-time org-clock-start-time))
-	     (ts (max tstart cs))
-	     (te (min tend (org-float-time)))
-	     (dt (- te ts)))
-	(when (> dt 0) (setq total-minutes (floor (/ dt 60))))))
+      (org-balance-clock-sum-add-interval intervals total-seconds (org-float-time org-clock-start-time) (org-float-time)))
     (save-excursion
       (save-match-data
 	(goto-char (point-min))
 	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
-	  (let* ((ts (car clock-interval)) (te (cdr clock-interval))
-		 (ts (if tstart (max ts tstart) ts))
-		 (te (if tend (min te tend) te))
-		 (dt (- te ts)))
-	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
-    total-minutes))
-
-
-(defun org-balance-clock-sum2 (tstart tend)
-  "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
-  (let ((total-minutes 0))
-    ;; Include time on the currently running clock, if needed.
-    (when (and
-	   org-clock-report-include-clocking-task
-	   (equal (org-clocking-buffer) (current-buffer))
-	   (<= (point-min) (marker-position org-clock-hd-marker))
-	   (<= (marker-position org-clock-hd-marker) (point-max)))
-      (let* ((cs (org-float-time org-clock-start-time))
-	     (ts (max tstart cs))
-	     (te (min tend (org-float-time)))
-	     (dt (- te ts)))
-	(when (> dt 0) (setq total-minutes (floor (/ dt 60))))))
-    (save-excursion
-      (save-match-data
-	(goto-char (point-min))
-	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
-	  (let* ((ts (car clock-interval)) (te (cdr clock-interval))
-		 (ts (if tstart (max ts tstart) ts))
-		 (te (if tend (min te tend) te))
-		 (dt (- te ts)))
-	    (when (> dt 0) (incf total-minutes(floor (/ dt 60))))))))
-    total-minutes))
-
-
-
+	  (org-balance-clock-sum-add-interval intervals total-seconds (car clock-interval) (cdr clock-interval)))))
+    (let ((result (make-vector (length total-seconds) nil)))
+      (dotimes (i (length total-seconds) result)
+	(aset result i (org-balance-make-valu (aref total-seconds i) 'seconds))))))
 
 (defrxx closed
   "An Org-mode line indicating when an entry was closed.
@@ -647,63 +671,22 @@ Parsed as the floating-point time."
   (sep-by blanks bol (eval org-closed-string) (inactive-timestamp closed-time))
   closed-time)
 
-(defun org-balance-sum-org-property-old (prop tstart tend unit prop-default-val)
+(defun org-balance-gather-org-property (prop intervals unit prop-default-val)
   "Fast summing of property.  Returns the sum of the property under the current restriction.
 
 Originally adapted from `org-closed-in-range'.
 "
-
-  ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
-  ;; FIXME: find also state changes to DONE, or to any done state.
-  (declare (special org-balance-num-warnings))
-  (message "gathered: %s" (org-balance-gather-org-property prop tstart tend unit prop-default-val))
-  (save-excursion
-    (save-match-data
-      (goto-char (point-min))
-      (let ((prop-sum (org-balance-make-valu 0 unit))
-	    (prop-default (concat "default_" prop)))
-	(rxx-do-search-fwd org-balance-closed-regexp closed-time
-	  (when (and (<= tstart closed-time) (<= closed-time tend))
-	    (save-excursion
-	      (save-match-data
-		(org-back-to-heading 'invis-ok)
-		(let*
-		    ((pos-here (point))
-		     (prop-here
-		      (or (org-entry-get nil prop)
-			  (org-entry-get nil prop-default 'inherit)
-			  prop-default-val
-			  "1"))
-		     (prop-valu-here
-		      (condition-case err
-			  (org-balance-parse-valu prop-here)
-			(error
-			 (message
-			  "Warning: at line %d of file %s, could not add %s to sum for goal %s; sum-so-far is %s"
-			  (line-number-at-pos (point)) (buffer-file-name (current-buffer)) prop-here prop prop-sum)
-			 (incf org-balance-num-warnings)
-			 nil))))
-		  (when prop-valu-here
-		    (setq prop-sum (org-balance-add-valu prop-sum prop-valu-here))))))))
-	(message "summed: %s" prop-sum)
-	prop-sum))))
-
-(defun org-balance-gather-org-property (prop tstart tend unit prop-default-val)
-  "Fast summing of property.  Returns the sum of the property under the current restriction.
-
-Originally adapted from `org-closed-in-range'.
-"
-
+  
   ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (declare (special org-balance-num-warnings))
   (save-excursion
     (save-match-data
       (goto-char (point-min))
-      (let (prop-occurrences
+      (let ((prop-occurrences (make-vector (org-balance-intervals-n intervals) nil))
 	    (prop-default (concat "default_" prop)))
 	(rxx-do-search-fwd org-balance-closed-regexp closed-time
-	  (when (and (<= tstart closed-time) (<= closed-time tend))
+	  (do-org-balance-intervals-overlapping-interval intervals closed-time closed-time i tstart tend
 	    (save-excursion
 	      (save-match-data
 		(org-back-to-heading 'invis-ok)
@@ -724,7 +707,7 @@ Originally adapted from `org-closed-in-range'.
 			 (incf org-balance-num-warnings)
 			 nil))))
 		  (when (and prop-valu-here (not (zerop (org-balance-valu-val prop-valu-here))))
-		    (push (cons pos-here prop-valu-here) prop-occurrences)))))))
+		    (push (cons pos-here prop-valu-here) (aref prop-occurrences i))))))))
 	prop-occurrences))))
 
 
@@ -741,20 +724,24 @@ Originally adapted from `org-closed-in-range'.
 ;; 				    prop tstart tend unit prop-default-val))))
 
 
-(defun org-balance-sum-org-property (prop tstart tend unit prop-default-val)
-  (org-balance-do-sum (org-balance-make-valu 0 unit)
-		      (mapcar 'cdr (org-balance-gather-org-property
-				    prop tstart tend unit prop-default-val))))
+(defun org-balance-sum-org-property (prop intervals unit prop-default-val)
+  (org-balance-map-vectors
+   (lambda (vals)
+     (org-balance-do-sum (org-balance-make-valu 0 unit)
+			 (mapcar 'cdr vals)))
+   (org-balance-gather-org-property
+    prop intervals unit prop-default-val)))
 
 
-(defun org-balance-sum-property (prop tstart tend unit prop-default-val)
+(defun org-balance-sum-property (prop intervals unit prop-default-val)
   "Sum a property in the specified period, within the current file restriction."
   (let ((result 
 	 (cond ((string= prop "clockedtime")
-		(org-balance-make-valu (org-balance-clock-sum tstart tend) 'minutes))
+		(org-balance-clock-sum intervals))
 	       ((string= prop "actualtime")
-		(org-balance-make-valu (- tend tstart) 'seconds))
-	       (t (org-balance-sum-org-property prop tstart tend unit prop-default-val)))))
+		(make-vector (org-balance-intervals-n intervals)
+			     (org-balance-make-valu (org-balance-intervals-width intervals) 'seconds)))
+	       (t (org-balance-sum-org-property prop intervals unit prop-default-val)))))
     result))
 
 (defstruct
@@ -789,7 +776,7 @@ Parsed as the archive location."
 
 (defvar org-archive-reversed-order)
 
-(defun org-balance-sum-property-with-archives (prop tstart tend unit)
+(defun org-balance-sum-property-with-archives (prop intervals unit)
   "Sum a property in the specified period.  Include any entries that may have been archived from the current subtree."
 
   ;; special-case for actualtime: do not go to archives.
@@ -797,7 +784,7 @@ Parsed as the archive location."
   ;; if num and denom are for same subtree, go over the archives only once.
   ;; (and determine which closed items intersect this).
 
-  (let ((prop-sum (org-balance-sum-property prop tstart tend unit nil))
+  (let ((prop-sum (org-balance-sum-property prop intervals unit nil))
 	(prop-default-val (org-entry-get nil (concat "default_" prop) 'inherit)))
     (when (not (string= prop "actualtime"))
       (let ((olpath-regexp (concat "^[ \t]+:ARCHIVE_OLPATH: " (mapconcat 'identity (org-get-outline-path) "/"))))
@@ -827,8 +814,10 @@ Parsed as the archive location."
 			(save-match-data
 			  (org-back-to-heading 'invisible-ok)
 			  (setq prop-sum
-				(org-balance-add-valu prop-sum (org-balance-sum-property prop tstart tend unit
-											 prop-default-val))))))))))))))
+				(org-balance-add-valu-vec
+				 prop-sum
+				 (org-balance-sum-property prop intervals unit
+							   prop-default-val))))))))))))))
     prop-sum))
 
 (defun org-balance-detailed-sum (prop-name &optional tstart tend headline-filter)
@@ -983,69 +972,67 @@ struct with fields for the property name and the link."
       (rxx-search-bwd org-balance-tags-regexp (point-at-bol))
       (point))))
 
-(defun org-balance-compute-actual-prop (prop tstart tend unit)
+(defun org-balance-compute-actual-prop (prop intervals unit)
   (save-excursion
     (save-window-excursion
       (save-match-data
 	(when (org-balance-prop-link prop)
 	  (let ((org-link-search-must-match-exact-headline t))
 	    (org-open-at-point 'in-emacs)))
-	(org-balance-sum-property-with-archives (org-balance-prop-prop prop) tstart tend unit)))))
+	(org-balance-sum-property-with-archives (org-balance-prop-prop prop) intervals unit)))))
 
-(defun org-balance-compute-actual-prop-ratio (prop-ratio tstart tend parsed-goal)
-  (org-balance-convert-valu-ratio
-   (make-org-balance-valu-ratio
-    :num (org-balance-compute-actual-prop (org-balance-prop-ratio-num prop-ratio) tstart tend
-					  (org-balance-valu-unit (org-balance-goal-numer-min parsed-goal)))
-    :denom (org-balance-compute-actual-prop (org-balance-prop-ratio-denom prop-ratio) tstart tend
-					    (org-balance-valu-unit (org-balance-goal-denom parsed-goal))))
-   (make-org-balance-valu-ratio
-    :num (org-balance-goal-numer-min parsed-goal)
-    :denom (org-balance-goal-denom parsed-goal))))
+(defun org-balance-compute-actual-prop-ratio (prop-ratio intervals parsed-goal)
+  (org-balance-with org-balance-goal (aref parsed-goal 0) (numer-min denom)
+    (let ((target-ratio (make-org-balance-valu-ratio :num numer-min :denom denom)))
+      (org-balance-map-vectors
+       (lambda (a-num a-denom)
+	 (org-balance-convert-valu-ratio (make-org-balance-valu-ratio :num a-num :denom a-denom) target-ratio))
+       (org-balance-compute-actual-prop (org-balance-prop-ratio-num prop-ratio) intervals
+					(org-balance-valu-unit numer-min))
+       (org-balance-compute-actual-prop (org-balance-prop-ratio-denom prop-ratio) intervals
+					(org-balance-valu-unit denom))))))
 
-(defun org-balance-compute-delta (parsed-goal prop-ratio actual)
-  (let* ((polarity (or (org-balance-goal-polarity parsed-goal)
-		       (cdr (assoc-string (org-balance-prop-prop
-					   (org-balance-prop-ratio-num  prop-ratio))
-					  org-balance-default-polarity))))
-	 (margin (or (org-balance-goal-margin parsed-goal)
-		     org-balance-default-margin-percent))
-	 (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
-	 (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
-	 (range-min (- goal-min
-		       (if (numberp margin)
-			   (* (/ (float margin) 100.0) goal-min)
-			 (org-balance-valu-val margin))))
-	 
-	 (range-max (+ goal-max
-		       (if (numberp margin)
-			   (* (/ (float margin) 100.0) goal-max)
-			 (org-balance-valu-val margin))))
-	 
-	 (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
-	 (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
-			  ((< range-max actual-num)
-			   (if (eq polarity 'atleast)
-			       (- actual-num goal-max)
-			     (- goal-max actual-num)))
-			  ((< actual-num range-min)
-			   (if (eq polarity 'atmost)
-			       (- goal-min actual-num)
-			     (- actual-num goal-min)))))
-	 (delta-percent
-	  (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min)))))
-    (cons delta-val delta-percent)))
+(defun org-balance-compute-delta (parsed-goals prop-ratio actuals)
+  (org-balance-gen-vector i (length parsed-goals)
+    (let ((parsed-goal (aref parsed-goals i))
+	  (actual (aref actuals i)))
+      (let* ((polarity (or (org-balance-goal-polarity parsed-goal)
+			   (cdr (assoc-string (org-balance-prop-prop
+					       (org-balance-prop-ratio-num  prop-ratio))
+					      org-balance-default-polarity))))
+	     (margin (or (org-balance-goal-margin parsed-goal)
+			 org-balance-default-margin-percent))
+	     (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
+	     (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
+	     (range-min (- goal-min
+			   (if (numberp margin)
+			       (* (/ (float margin) 100.0) goal-min)
+			     (org-balance-valu-val margin))))
+	     
+	     (range-max (+ goal-max
+			   (if (numberp margin)
+			       (* (/ (float margin) 100.0) goal-max)
+			     (org-balance-valu-val margin))))
+	     
+	     (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
+	     (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
+			      ((< range-max actual-num)
+			       (if (eq polarity 'atleast)
+				   (- actual-num goal-max)
+				 (- goal-max actual-num)))
+			      ((< actual-num range-min)
+			       (if (eq polarity 'atmost)
+				   (- goal-min actual-num)
+				 (- actual-num goal-min)))))
+	     (delta-percent
+	      (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min)))))
+	(cons delta-val delta-percent)))))
 
-(defun* org-balance-compute-goal-deltas2 (&key goals tstart tend)
+(defun* org-balance-compute-goal-deltas2 (&key goals intervals)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
-resource GOAL toward that goal in the period between TSTART and TEND.  Call the callback with the value.
+resource GOAL toward that goal in the period in each interval in INTERVALS.  Call the callback with the value.
 "
-  (unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
-  (unless tend (setq tend (org-float-time (org-current-time))))
-  (rxx-dbg tstart tend (current-time))
-
-  (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0)
-	(days-in-interval (org-balance-make-valu (/ (float (- tend tstart)) 60.0 60.0 24.0) 'days)))
+  (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0))
     (save-excursion
       (goto-char (point-min))
       (save-restriction
@@ -1075,9 +1062,11 @@ resource GOAL toward that goal in the period between TSTART and TEND.  Call the 
 				(org-narrow-to-subtree)
 				(goto-char (point-min))
 				(setq delta-val-and-percent
-				      (org-balance-compute-delta
-				       parsed-goal prop-ratio
-				       (org-balance-compute-actual-prop-ratio prop-ratio tstart tend parsed-goal))))))
+				      (aref
+				       (org-balance-compute-delta
+					parsed-goal prop-ratio
+					(org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
+				       0)))))
 			  (let ((delta-val (car delta-val-and-percent))
 				(delta-percent (cdr delta-val-and-percent)))
 			    (cond ((< delta-val 0) (incf num-under))
@@ -1290,6 +1279,14 @@ a newly created valu representing the sum of VALU1 and VALU2."
 a newly created valu representing the difference of VALU1 and VALU2."
   (org-balance-add-valu valu1 (org-balance-scale-valu -1 valu2)))
 
+(defun org-balance-add-valu-vec (valu-vec-1 valu-vec-2)
+  "Add two vectors of valus"
+  (org-balance-map-vectors 'org-balance-add-valu valu-vec-1 valu-vec-2))
+
+(defun org-balance-scale-valu-vec (factor valu-vec)
+  "Scale all valus in VALU-VEC by FACTOR"
+  (message "scaling by %s: %s" factor valu-vec)
+  (org-balance-map-vectors (apply-partially 'org-balance-scale-valu factor) valu-vec))
 
 (put 'org-balance-parse-error 'error-conditions '(error org-balance-errors org-balance-parse-error))
 (put 'org-balance-parse-error 'error-message "org-balance: Could not parse")
@@ -1422,14 +1419,14 @@ changing only the numerator."
   text)
 
 (defun org-balance-scale-goal (factor goal)
+  (message "goal is %s" goal)
   (let ((result (copy-org-balance-goal goal)))
     (setf (org-balance-goal-numer-min result)
 	  (org-balance-scale-valu factor (org-balance-goal-numer-min result)))
     (setf (org-balance-goal-numer-max result)
 	  (org-balance-scale-valu factor (org-balance-goal-numer-max result)))
     (setf (org-balance-goal-text result) (format "%.2f * (%s)" factor (org-balance-goal-text goal)))
-    result
-  ))
+    result))
 
 (defrxx polarity
   (or (named-grp atmost (or "at most" "<=" "<"))
@@ -1469,7 +1466,7 @@ changing only the numerator."
 
 (defrxx goal-or-link
   (& blanks? (| goal goal-link) blanks?)
-  (or goal
+  (if goal (make-vector (org-balance-intervals-n intervals) goal)
       (save-excursion
 	(save-window-excursion
 	  (let ((org-link-search-must-match-exact-headline t))
@@ -1480,9 +1477,9 @@ changing only the numerator."
 	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	      (error "No goal found at link taget"))
 	    (message "we are at %s" (point))
-	    (org-balance-scale-goal (org-balance-goal-link-factor goal-link)
-				    (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
-						   (org-balance-start-of-tags))))))) 
+	    (org-balance-map-vectors (apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
+				     (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
+						    (org-balance-start-of-tags))))))) 
 
 (defrxx goal-spec (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link) blanks? tags?) (cons prop-ratio goal-or-link))
 
@@ -1580,7 +1577,9 @@ changing only the numerator."
 		  (goto-char (point-min))
 		  (org-balance-remove-props)
 		  (let ((goal-update-time (fourth regtest)))
-		    (org-balance-compute-goal-deltas2 :tstart (second regtest) :tend (third regtest)))
+		    (org-balance-compute-goal-deltas2
+		     :intervals (make-org-balance-intervals :from (second regtest) :n 1 :width
+							    (- (third regtest) (second regtest)) :shift 0)))
 		  (save-buffer)
 		  (if (zerop (call-process "diff" (not 'infile) (not 'destination) (not 'display)
 					   "-b" test-file ref-file))
