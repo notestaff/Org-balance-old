@@ -490,22 +490,15 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
     (incf rxx-num-grps (regexp-opt-depth regexp))
     (rx-group-if regexp rx-parent)))
 
-(defmacro rxx-replace-posix (s)
-  "Replace posix classes in regular expression.  Taken from `org-re' in `org-macs.el'."
-  (if (featurep 'xemacs)
-      (let ((ss s))
-	(save-match-data
-	  (while (string-match "\\[:alnum:\\]" ss)
-	    (setq ss (replace-match "a-zA-Z0-9" t t ss)))
-	  (while (string-match "\\[:word:\\]" ss)
-	    (setq ss (replace-match "a-zA-Z0-9" t t ss)))
-	  (while (string-match "\\[:alpha:\\]" ss)
-	    (setq ss (replace-match "a-zA-Z" t t ss)))
-	  (while (string-match "\\[:punct:\\]" ss)
-	    (setq ss (replace-match "\001-@[-`{-~" t t ss)))
-	  ss))
-    s))
-
+(defun rxx-replace-posix (s)
+  "Replace posix classes in regular expression, for xemacs compatibility.  Adapted from `org-re'."
+  (when (featurep 'xemacs)
+    (save-match-data
+      (dolist (repl '((alnum "a-zA-Z0-9") (word "a-zA-Z0-9") (alpha "a-zA-Z") (digit "0-9")
+		      (blank " \t") (ascii "\000-\127") (space "\s-") (punct "\001-@[-`{-~")))
+	(while (string-match (concat "\\[:" (symbol-name (first repl)) ":\\]") s)
+	  (setq s (replace-match "a-zA-Z0-9" 'fixedcase 'literal s))))))
+  s)
 
 (defmacro rxx-dbg (&rest exprs)
   "Print the values of exprs, so you can write e.g. (dbg a b) to print 'a=1 b=2'.
@@ -624,7 +617,7 @@ For detailed description, see `rxx'.
 
 (put 'sep-by lisp-indent-function 1)
 
-(defconst rxx-never-match (rx (not (any ascii nonascii))))
+(defconst rxx-never-match (if (featurep 'xemacs) "[^\000-\127]" (rx (not (any ascii nonascii)))))
 
 (defun rxx-process-recurse (form)
   "Process recurse"
