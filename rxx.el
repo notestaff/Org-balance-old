@@ -58,6 +58,10 @@
 (require 'rx)
 (eval-when-compile (require 'cl))
 
+(defmacro rxx-with-no-warnings (&rest forms)
+  "Like progn, but with no warnings"
+  (cons (if (featurep 'xemacs) 'progn 'with-no-warnings) forms))
+
 (defmacro rxx-flet (bindings &rest body)
   "Temporarily replace functions, making previous definitions available.  Also, lets you use a function symbol
 for the replacement function definition."
@@ -268,9 +272,14 @@ Adapted from `regexp-opt-depth'."
 		  (rxx-subregexp-context-p regexp (match-beginning 0)))
 	(setq regexp (replace-match "" 'fixedcase 'literal regexp 1))))
     ;; remove unnumbered, non-shy groups
+    (if (featurep 'xemacs)
+	(while (and (string-match "\\\\(\\([^?]\\)" regexp)
+		    (rxx-subregexp-context-p regexp (match-beginning 0))
+		    )
+	  (setq regexp (replace-match "\\(?:\\1" 'fixedcase (not 'literal) regexp)))
     (while (and (string-match "\\\\(\\(\\)[^?]" regexp)
 		(rxx-subregexp-context-p regexp (match-beginning 0)))
-      (setq regexp (replace-match "?:" 'fixedcase 'literal regexp 1)))
+      (setq regexp (replace-match "?:" 'fixedcase 'literal regexp 1))))
     regexp))
       
 
@@ -548,7 +557,7 @@ Returns the value of the last expression."
 						exprs
 						""))
 		    expr-vals)))
-     (car-safe (with-no-warnings (last expr-vals)))))
+     (car-safe (rxx-with-no-warnings (last expr-vals)))))
 
 ;(defmacro rxx-dbg (&rest exprs) (last exprs))
 
@@ -584,6 +593,10 @@ Returns the value of the last expression."
 
 (defadvice rx-regexp (after rxx-regexp first (form) activate compile)
   (when (boundp 'rxx-num-grps) (incf rxx-num-grps (regexp-opt-depth (second form)))))
+
+(defun rxx-check-regexp-valid (regexp)
+  "Throw an error unless REGEXP is a valid regexp"
+  (string-match regexp ""))
 
 (defun rxx-to-string (form &optional parser descr)
   "Construct a regexp from its readable representation as a lisp FORM, using the syntax of `rx-to-string' with some
@@ -624,8 +637,10 @@ For detailed description, see `rxx'.
 		     :env rxx-env :descr descr :regexp regexp
 		     )))
      (put-rxx-info regexp rxx-info)
+     (setq regexp (rxx-replace-posix regexp))
+     (rxx-check-regexp-valid regexp)
      (assert (= rxx-num-grps (regexp-opt-depth regexp)))
-     (rxx-replace-posix regexp))))
+     regexp)))
 
 (defun rxx-process-sep-by (form)
   "Process the sep-by form, which looks like (sep-by separator ....)"
