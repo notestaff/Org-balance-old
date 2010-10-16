@@ -525,7 +525,7 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
   (rx-check form)
   (let ((regexp (eval (second form))))
     (incf rxx-num-grps (regexp-opt-depth regexp))
-    (rx-group-if regexp rx-parent)))
+    (concat "\\(?:" (rx-group-if regexp rx-parent) "\\)")))
 
 (defun rxx-replace-posix (s)
   "Replace posix classes in regular expression, for xemacs compatibility.  Adapted from `org-re'."
