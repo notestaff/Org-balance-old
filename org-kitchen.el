@@ -2749,3 +2749,9 @@ org-balance-prop-name-regexp
 (rxx-make-shy2 (rxx-make-shy2 "\\(\\(?2:\\(?3:hi\\)\\)\\)"))
 
 (rx (not (any "?")))
+
+(rxx-named-grp-num 'n (rxx (named-grp n digits) n))
+
+
+(rxx-parse (rxx (named-grp n digits) (string-to-number n)) "333")
+(rxx-make-shy "\\(?:[[:digit:]]\\)+")

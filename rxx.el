@@ -121,10 +121,10 @@ several lisp symbols, without having to find and rebind all the symbols."
 
 (defun rxx-parent-env (rxx-env) (cdr (first rxx-env)))
 
-(defun rxx-uniquify (list)
+(defun rxx-uniquify (lst)
   "Remove duplicate elements from LIST.  Taken from `org-uniquify'."
   (let (res)
-    (mapc (lambda (x) (add-to-list 'res x 'append)) list)
+    (mapc (lambda (x) (add-to-list 'res x 'append 'eq)) lst)
     res))
 
 (defun rxx-env-lookup (grp-name rxx-env)
@@ -181,7 +181,7 @@ environment RXX-ENV.  If already bound, add to the binding."
 to routines such as `replace-match', `match-substitute-replacement' or `replace-regexp-in-string'.
 The annotated regexp must either be passed in as AREGEXP or scoped in as RXX-AREGEXP. "
   (declare (special rxx-aregexp))
-  (rxx-info-num
+  (mapcar 'rxx-info-num
    (rxx-env-lookup
     grp-name
     (rxx-info-env
@@ -227,11 +227,11 @@ Adapted from `regexp-opt-depth'."
       ;; under emacs, you also need to replace numbered groups.
     (unless (featurep 'xemacs)
       ;; remove explicitly numbered groups
-      (while (and (string-match (rx (seq "\\(?" (group (1+ digit)) ":")) regexp)
+      (while (and (string-match "\\\\(\\?\\([0-9]+\\):" regexp)
 		  (rxx-subregexp-context-p regexp (match-beginning 0)))
 	(setq regexp (replace-match "" 'fixedcase 'literal regexp 1))))
     ;; remove unnumbered, non-shy groups
-    (while (and (string-match (rx (seq "\\(" (group "") (not (any "?")))) regexp)
+    (while (and (string-match "\\\\(\\(\\)[^?]" regexp)
 		(rxx-subregexp-context-p regexp (match-beginning 0)))
       (setq regexp (replace-match "?:" 'fixedcase 'literal regexp 1)))
     regexp))
@@ -258,7 +258,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
   ; if the form is a symbol, and not one of the reserved ones in rx,
   ; evaluate it as a variable.
   ;
-  (declare (special rxx-next-grp-num rxx-num-grps rxx-env))
+  (declare (special rxx-num-grps rxx-env))
   (rx-check form)
   (or
    (and (boundp 'rxx-replace-named-grps)
@@ -273,8 +273,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 			    old-grp-def))
 			old-grp-defs))))
     (if (and nil equiv-old-grp-defs) (rxx-info-regexp (first equiv-old-grp-defs))
-      (let* ((grp-num (incf rxx-next-grp-num))  ;; reserve a numbered group number unique within a top-level regexp
-	     (dummy (incf rxx-num-grps))
+      (let* ((grp-num (incf rxx-num-grps))
 	     (old-rxx-env rxx-env)
 	     (rxx-env (rxx-new-env old-rxx-env))  ;; within each named group, a new environment for group names
 	     (grp-def
@@ -349,7 +348,7 @@ a plain regexp, or a form to be recursively interpreted by `rxx'.  If it is an a
 	     ;; to the parsed objects matched by these nested named groups using `rxx-match-val', which will look up
 	     ;; the mapping of nested group names to group numbers in the rxx-env environment created above for this
 	     ;; named group.
-	     (regexp-here (format "\\(?%d:%s\\)" grp-num
+	     (regexp-here (format "\\(%s\\)" 
 				  (if (and (boundp 'rxx-disable-grps) (member grp-name rxx-disable-grps))
 				      (progn
 					(message "DISABLING %s" grp-name)
@@ -483,10 +482,6 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
   (declare (special grp-num))
   (rxx-match-aux (lambda () (match-end grp-num))))
 
-(defconst rxx-first-grp-num 1
-  "When generating group numbers for explicitly numbered groups corresponding to named groups in a regexp, start
-with this number.") 
-
 (defun rxx-process-eval-regexp (form &optional rx-parent)
   "Parse and produce code from FORM, which is `(eval-regexp FORM)'."
   (declare (special rxx-num-grps))
@@ -566,10 +561,8 @@ in a modular fashion using regular expressions.
 
 For detailed description, see `rxx'.
 "
-  (declare (special rxx-first-grp-num))
   (rxx-remove-unneeded-shy-grps
    (let* ((rxx-env (rxx-new-env))
-	  (rxx-next-grp-num rxx-first-grp-num)
 	  (rxx-num-grps 0)
 	  ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
 	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
@@ -824,12 +817,11 @@ So, for the construct (1+ :sep-by blanks num), the parser for `num-list' would
 return the list of parsed numbers, omitting the blanks.   See also
 `rxx-process-sep-by'.
 "
-  (declare (special rxx-env rxx-next-grp-num rxx-num-grps))
-  (if (or (not (boundp 'rxx-env)) (not (boundp 'rxx-next-grp-num))
+  (declare (special rxx-env rxx-num-grps))
+  (if (or (not (boundp 'rxx-env)) (not (boundp 'rxx-num-grps))
 	  (memq (first form) '(optional opt zero-or-one ? ??)))
       ad-do-it
-    (let* ((wrap-grp-num (when (boundp 'rxx-next-grp-num) (incf rxx-next-grp-num)))
-	   (dummy (when (boundp 'rxx-num-grps) (incf rxx-num-grps)))
+    (let* ((wrap-grp-num (when (boundp 'rxx-num-grps) (incf rxx-num-grps)))
 	   (rxx-num-grps (when (boundp 'rxx-num-grps) rxx-num-grps))
 	   (parent-rxx-env (when (boundp 'rxx-env) rxx-env))
 	   (rxx-env (rxx-new-env parent-rxx-env))
@@ -865,8 +857,8 @@ return the list of parsed numbers, omitting the blanks.   See also
 	      `(seq (regexp ,body-regexp) (regexp ,body-repeat-regexp)))
 	     ((0+ zero-or-more * *?)
 	      `(,(first form) (regexp ,body-regexp) (regexp ,body-repeat-regexp)))))))
-		  
-      (setq ad-return-value (format "\\(?%d:%s\\)" wrap-grp-num (rxx-make-shy ad-return-value)))
+
+      (setq ad-return-value (format "\\(%s\\)" (rxx-make-shy ad-return-value)))
       (progn
 	(do-rxx-env grp-name rxx-infos rxx-env
 	  (rxx-dbg grp-name rxx-infos)
