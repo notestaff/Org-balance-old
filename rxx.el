@@ -108,13 +108,21 @@ for the replacement function definition."
   ;; field: descr - a string describing what is matched by this regexp; used for creating readable error messages.
   descr)
 
+(defun put-rxx-info (regexp rxx-info)
+  "Put rxx-info on a regexp string, replacing any already there.  This creates an aregexp (annotated regexp).
+Return the annotated regexp."
+  (if (featurep 'xemacs)
+      (put regexp 'rxx rxx-info)
+    (put-text-property 0 (length regexp) 'rxx rxx-info regexp))
+  regexp)
+
 (defun get-rxx-info (aregexp)
   "Extract rxx-info from regexp string, if there, otherwise return nil."
-  (when (stringp aregexp) (get-text-property 0 'rxx aregexp)))
+  (when (stringp aregexp)
+    (if (featurep 'xemacs)
+	(get aregexp 'rxx)
+      (get-text-property 0 'rxx aregexp))))
 
-(defun put-rxx-info (regexp rxx-info)
-  "Put rxx-info on a regexp string, replacing any already there.  This creates an aregexp (annotated regexp)."
-    (put-text-property 0 (length regexp) 'rxx rxx-info regexp))
 
 (defun rxx-new-env (&optional parent-env)
   "Create a fresh environment mapping group names to rxx-infos.  There is an environment for the top-level regexp, and
