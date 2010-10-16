@@ -2,6 +2,7 @@
 
 (eval-when-compile (require 'cl))
 (require 'rxx)
+(require 'time-date)
 
 ;(eval-when-compile (defconst number-regexp (rxx (one-or-more digit) string-to-number)))
 (defrxx number-regexp (one-or-more digit) string-to-number "a number")
