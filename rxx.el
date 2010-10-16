@@ -532,7 +532,8 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
   (when (featurep 'xemacs)
     (save-match-data
       (dolist (repl '((alnum "a-zA-Z0-9") (word "a-zA-Z0-9") (alpha "a-zA-Z") (digit "0-9")
-		      (blank " \t") (ascii "\000-\127") (space "\s-") (punct "\001-@[-`{-~")))
+		      (lower "a-z") (upper "A-Z")
+		      (blank " \t") (ascii "\000-\127") (punct "\001-@[-`{-~")))
 	(while (string-match (concat "\\[:" (symbol-name (first repl)) ":\\]") s)
 	  (setq s (replace-match (second repl) 'fixedcase 'literal s))))))
   s)
@@ -601,6 +602,7 @@ For detailed description, see `rxx'.
 				     (& . seq)
 				     (blanks . "\\(?:[[:blank:]]+\\)")
 				     (digits . "\\(?:[[:digit:]]+\\)")
+				     (space . "\\s-")
 				     (sep-by . (rxx-process-sep-by 1 nil))
 				     (recurse . (rxx-process-recurse 1 nil))
 				     (named-group . named-grp) (shy-group . shy-grp)
