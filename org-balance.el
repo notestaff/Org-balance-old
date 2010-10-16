@@ -355,7 +355,6 @@ Copied from `mapcar*'.
   (let ((my-struct (make-symbol "my-struct")))
     (let (result)
       (while clauses
-	(message "clause is %s %s" (first clauses) (second clauses))
 	(push (list 'setf (list (intern (concat (symbol-name struct-type) "-"
 						(substring (symbol-name (first clauses)) 1))) my-struct)
 		    (second clauses)) result)
@@ -712,6 +711,11 @@ Originally adapted from `org-closed-in-range'.
       (let ((prop-occurrences (make-vector (org-balance-intervals-n intervals) nil))
 	    (prop-default (concat "default_" prop)))
 	(rxx-do-search-fwd org-balance-closed-regexp closed-time
+
+	  ;; first, if closed-time is completely outside our range of intervals, just skip.
+	  
+	  ;; then, if tags matcher is given, evaluate it and only count this headline if it says true.
+	  
 	  (do-org-balance-intervals-overlapping-interval intervals closed-time closed-time i tstart tend
 	    (save-excursion
 	      (save-match-data
@@ -961,13 +965,17 @@ Adapted from `org-balance-clock-sum'.
 (defrxx link "An Org link; we're only interested in links that point to a GOAL entry.
 Parsed as the buffer position of the start of the link."
   (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
-(defstruct org-balance-prop prop link)
+(defstruct org-balance-prop prop link matcher)
+
+(defrxx matcher "A tags and properties matcher"
+  (1+ nonl) org-make-tags-matcher)
+
 (defrxx prop
   "The name of a property to be summed for a subtree, optionally followed by a link to the subtree.
 The property can be an Org property name, 'clockedtime' or 'actualtime'.  Parsed as a 
 struct with fields for the property name and the link."
-  (& prop-name (opt blanks "at" blanks link))
-  (make-org-balance-prop :prop prop-name :link link))
+  (& prop-name (opt blanks "at" blanks link) (opt blanks "(" blanks? matcher blanks? ")") )
+  (make-org-balance-prop :prop prop-name :link link :matcher matcher))
 
 (defrxx ratio-word "A word separating the numerator and denominator of a fraction."
   (or "per" "every" "each" "for every" "for each" "/" "a" "in a"))
