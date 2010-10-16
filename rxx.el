@@ -121,10 +121,47 @@ several lisp symbols, without having to find and rebind all the symbols."
 
 (defun rxx-parent-env (rxx-env) (cdr (first rxx-env)))
 
-(defun rxx-uniquify (lst)
+(defun rxx-add-to-list (list-var element &optional append compare-fn)
+  "Add ELEMENT to the value of LIST-VAR if it isn't there yet.
+The test for presence of ELEMENT is done with `equal',
+or with COMPARE-FN if that's non-nil.
+If ELEMENT is added, it is added at the beginning of the list,
+unless the optional argument APPEND is non-nil, in which case
+ELEMENT is added at the end.
+
+The return value is the new value of LIST-VAR.
+
+If you want to use `add-to-list' on a variable that is not defined
+until a certain package is loaded, you should put the call to `add-to-list'
+into a hook function that will be run only after loading the package.
+`eval-after-load' provides one way to do this.  In some cases
+other hooks, such as major mode hooks, can do the job.
+
+Taken from `add-to-list'.
+"
+  (if (cond
+       ((null compare-fn)
+	(member element (symbol-value list-var)))
+       ((eq compare-fn 'eq)
+	(memq element (symbol-value list-var)))
+       ((eq compare-fn 'eql)
+	(memql element (symbol-value list-var)))
+       (t
+	(let ((lst (symbol-value list-var)))
+	  (while (and lst
+		      (not (funcall compare-fn element (car lst))))
+	    (setq lst (cdr lst)))
+          lst)))
+      (symbol-value list-var)
+    (set list-var
+	 (if append
+	     (append (symbol-value list-var) (list element))
+	   (cons element (symbol-value list-var))))))
+
+(defun rxx-uniquify (lst &optional compare-fn)
   "Remove duplicate elements from LIST.  Taken from `org-uniquify'."
   (let (res)
-    (mapc (lambda (x) (add-to-list 'res x 'append 'eq)) lst)
+    (mapc (lambda (x) (rxx-add-to-list 'res x 'append compare-fn)) lst)
     res))
 
 (defun rxx-env-lookup (grp-name rxx-env)
@@ -143,7 +180,7 @@ bound to the same name in an environment, this returns a list."
 		     (rxx-env-lookup (cdr grp-name)
 				     (rxx-info-env grp-info))
 		   (list grp-info)))
-	       grp-infos))))))
+	       grp-infos)) 'eq))))
 
 (defun rxx-env-bind (grp-name rxx-info rxx-env)
   "Bind group name GRP-NAME to group annotation RXX-INFO in the
@@ -497,7 +534,7 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
       (dolist (repl '((alnum "a-zA-Z0-9") (word "a-zA-Z0-9") (alpha "a-zA-Z") (digit "0-9")
 		      (blank " \t") (ascii "\000-\127") (space "\s-") (punct "\001-@[-`{-~")))
 	(while (string-match (concat "\\[:" (symbol-name (first repl)) ":\\]") s)
-	  (setq s (replace-match "a-zA-Z0-9" 'fixedcase 'literal s))))))
+	  (setq s (replace-match (second repl) 'fixedcase 'literal s))))))
   s)
 
 (defmacro rxx-dbg (&rest exprs)
