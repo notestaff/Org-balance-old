@@ -49,7 +49,7 @@
       
       (zero-or-more whitespace))
      (lambda (match)
-       (if number-name (cdr (assoc-string number-name rxx-number-names))
+       (if number-name (cdr (assoc (intern number-name) rxx-number-names))
 	 (string-to-number match)))
      "number")
   
@@ -89,6 +89,16 @@
 (defrxx rxx-unit-regexp
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car rxx-unit2dim-alist)))))
 
+
+;(defrxx rxx-valu-regexp
+;  ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
+;  ;; or an optional number (assumed to be 1 if not given) followed by a unit.
+;  ;; But either a number or a unit must be given.
+;  (or (seq (optional (rxx-number-regexp val))
+;	   (rxx-unit-regexp unit))
+;      (seq (rxx-number-regexp val) (optional (rxx-unit-regexp unit))))
+;  (cons (or val 1) (or unit "item"))
+;  "value with unit")
 
 (defrxx rxx-valu-regexp
   ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
@@ -171,12 +181,19 @@
 ;;;borrowed from orgmode
 (defrxxconst rxx-clock-string "CLOCK:")
 
+(defconst rxx-ts-regexp0 "\\(\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\) *\\([^]-+0-9>\r\n ]*\\)\\( \\([0-9]\\{2\\}\\):\\([0-9]\\{2\\}\\)\\)?\\)"
+  "Regular expression matching time strings for analysis.
+This one does not require the space after the date, so it can be used
+on a string that terminates immediately after the date. 
+Taken from org-ts-regexp0")
+
+
 (defun rxx-parse-time-string (s &optional nodefault)
   "Parse the standard Org-mode time string.
 This should be a lot faster than the normal `parse-time-string'.
 If time is not given, defaults to 0:00.  However, with optional NODEFAULT,
 hour and minute fields will be nil if not given."
-  (if (string-match org-ts-regexp0 s)
+  (if (string-match rxx-ts-regexp0 s)
       (list 0
 	    (if (or (match-beginning 8) (not nodefault))
 		(string-to-number (or (match-string 8 s) "0")))
@@ -187,6 +204,8 @@ hour and minute fields will be nil if not given."
 	    (string-to-number (match-string 2 s))
 	    nil nil nil)
     (error "Not a standard Org-mode time string: %s" s)))
+
+(require 'time-date)
 
 (defun rxx-float-time (&optional time)
   "Convert time value TIME to a floating point number.
@@ -212,7 +231,7 @@ TIME defaults to the current time."
 
 (defrxx rxx-clock-range-regexp2
   (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp))
-  (cons (rxx-match-val '(from time .. .. to time)) to))
+  (cons (rxx-match-val (list 'from 'time (intern "..") (intern "..") 'to 'time)) to))
 
 (assert (equal (rxx-parse rxx-clock-range-regexp2 "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '("2010-08-31 Tue 13:43" . 1283276580.0)))
 
@@ -231,9 +250,10 @@ TIME defaults to the current time."
 ;	    (named-grp to (eval-regexp (let ((rxx-replace-named-grps (list (cons (quote left-bracket) (quote (named-backref left-bracket)))))) rxx-clock-regexp)))) (cons from to)))
 ;(rxx-parse rxx-clock-range-regexp2 "")
 
+(defrxx rxx-strange-expr (seq (named-grp para (seq (named-grp cifry (1+ digit)) (named-grp bukvy (1+ alpha))))
+			  (named-backref (para cifry))) (rxx-match-val '(para cifry)))
 
-(assert (equal (rxx-parse (rxx (seq (named-grp para (seq (named-grp cifry (1+ digit)) (named-grp bukvy (1+ alpha))))
-				    (named-backref (para cifry))) (rxx-match-val '(para cifry))) "1b1") "1"))
+(assert (equal (rxx-parse rxx-strange-expr "1b1") "1"))
 
 ;(assert (equal
 ;;	 (eval-when-compile (let* ((re2 (rxx (seq "zz" (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace))) areg-list)))
@@ -289,6 +309,7 @@ TIME defaults to the current time."
 ;; 		      (s "(1/(30+(42*57)))"))
 ;; 		 (rxx-parse expr s 'part-ok))) '("(1/(30+(42*57)))" "(1/(30+(42*57)))" nil "/")))
 
+(unless (featurep 'xemacs)
 (defun rxx-ppp (x) x)
 (defun rxx-qqq (x) (declare (special rxx-ppp-orig)) (* (funcall rxx-ppp-orig x) x))
 
@@ -308,20 +329,19 @@ TIME defaults to the current time."
 		  (seq "(" (recurse (rxx-expr in-paren)) ")")
 		  (rxx-num-regexp plain-num)) (or (and op (funcall op left right)) in-paren plain-num))
 
-
 (defrxxrecurse 3 rxx-expr3 (rxx-expr e) e)
 
-(assert (equal (rxx-parse rxx-expr3 "(+ 1 (* 2 3))") 7))
-
-(when t
-  (assert (equal
-	   (rxx-parse (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) "1. .2    \t3.4 ")
-	   '(1 0.2 3.4))))
-
-(let ((rxx-prefix "rxx-test"))
-  (defrxx num digits string-to-number)
-  (assert
-   (equal (rxx-parse (rxx (sep-by blanks? "(" (sep-by (seq "," blanks?) (1+ num)) ")") num-list) "( 1, 2,3 )" )
-	  '(1 2 3))))
+  (assert (equal (rxx-parse rxx-expr3 "(+ 1 (* 2 3))") 7))
+  
+  (when t
+    (assert (equal
+	     (rxx-parse (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) "1. .2    \t3.4 ")
+	     '(1 0.2 3.4))))
+  
+  (let ((rxx-prefix "rxx-test"))
+    (defrxx num digits string-to-number)
+    (assert
+     (equal (rxx-parse (rxx (sep-by blanks? "(" (sep-by (seq "," blanks?) (1+ num)) ")") num-list) "( 1, 2,3 )" )
+	    '(1 2 3)))))
 
 (message "All rxx tests seem to have passed")

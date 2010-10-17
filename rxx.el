@@ -111,17 +111,17 @@ for the replacement function definition."
 (defun put-rxx-info (regexp rxx-info)
   "Put rxx-info on a regexp string, replacing any already there.  This creates an aregexp (annotated regexp).
 Return the annotated regexp."
-  (if (featurep 'xemacs)
-      (put regexp 'rxx rxx-info)
-    (put-text-property 0 (length regexp) 'rxx rxx-info regexp))
+  (put-text-property 0 (length regexp) 'rxx rxx-info regexp)
+  (when (featurep 'xemacs)
+      (put regexp 'rxx rxx-info))
   regexp)
 
 (defun get-rxx-info (aregexp)
   "Extract rxx-info from regexp string, if there, otherwise return nil."
   (when (stringp aregexp)
-    (if (featurep 'xemacs)
-	(get aregexp 'rxx)
-      (get-text-property 0 'rxx aregexp))))
+    (or (get-text-property 0 'rxx aregexp)
+	(and (featurep 'xemacs)
+	     (get aregexp 'rxx)))))
 
 
 (defun rxx-new-env (&optional parent-env)
@@ -727,7 +727,9 @@ It does not need to pass the regexp to these functions.
 DESCR, if given, is used in error messages by `rxx-parse'.
 "
 
-  (rxx-to-string form parser descr))
+  (let ((r (rxx-to-string form parser descr)))
+    r
+  ))
 
 
 (defmacro rxxlet* (bindings &rest forms)
@@ -979,8 +981,10 @@ in larger regexps."
   `(defrxxconst rxx-prefix (when (quote ,prefix) (symbol-name (quote ,prefix)))))
 
 (defmacro defrxxconst (symbol initvalue &optional docstring)
-  `(eval-and-compile
-     (defconst ,symbol ,initvalue ,docstring)))
+  (if (featurep 'xemacs)
+      `(defconst ,symbol ,initvalue ,docstring)
+    `(eval-and-compile
+       (defconst ,symbol ,initvalue ,docstring))))
 
 (defmacro defrxxcustom (symbol initvalue docstring &rest args)
   `(eval-and-compile
@@ -1001,12 +1005,17 @@ in larger regexps."
      (t (setq form (nth 0 args)
 	      parser (nth 1 args)
 	      descr (nth 2 args))))
-    `(defrxxconst ,(rxx-symbol var) (rxx ,form ,parser ,descr) ,descr)))
+    (if (featurep 'xemacs)
+	`(defconst ,(rxx-symbol var) (rxx-to-string (quote ,form) (quote ,parser) ,descr) ,descr)
+    `(defrxxconst ,(rxx-symbol var) (rxx ,form ,parser ,descr) ,descr))))
 
 (defmacro defrxxrecurse (depth var regexp &optional parser descr)
+  (if (featurep 'xemacs)
+    `(defconst ,(rxx-symbol var) (let ((rxx-recurs-depth ,depth)) (rxx-to-string (quote ,regexp)
+										 (quote ,parser) ,descr))
+       ,descr)
   `(defrxxconst ,var ,(let ((rxx-recurs-depth depth))
-			(rxx-to-string regexp parser descr)) ,descr))
-
+			(rxx-to-string regexp parser descr)) ,descr)))
 
 (defmacro defrxxstruct (var regexp &optional parser descr)
   `(progn
