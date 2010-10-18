@@ -26,7 +26,28 @@
 ;;
 ;;; Commentary:
 ;;
-;; Extension to the rx macro for writing readable regexps; adds parsing of named subexpressions.
+;; Tools for building complex regular expressions from simpler building
+;; blocks.  Implemented as an extension of the `rx' macro that translates
+;; regular expressions represented in sexp form to the string representation
+;; passed to `string-match'.   Tools in the `rxx' module lets you define
+;; a regexp in sexp form, associate with it a parser that constructs a
+;; programmatic object from a match to the regexp, and use it as a building
+;; block in larger regexps.
+;;
+;; See the docstring of `rxx' for detailed documentation.
+;;
+
+;;
+;; Implementation notes:
+;;
+;; This module defines advice for a number of functions in `rx.el'.
+;; This advice only changes the behavior of these functions when
+;; called through `rxx-to-string'; if not, these pieces of advice
+;; do nothing.   So no behavior is changed for code that just uses
+;; the original `rx' macro, even when `rxx' module is loaded.
+;; 
+
+;; Extension to the `rx' macro for writing readable regexps; adds parsing of named subexpressions.
 ;; In effect lets you define and parse grammars.
 
 ;; explain the issue with modularity and group numbers in subexprs.
@@ -57,6 +78,26 @@
 
 (require 'rx)
 (eval-when-compile (require 'cl))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Section: general utils
+;;
+;; General-purpose utility routines used in the rxx module.
+;; Also, for portability, reimplementation of some routines from the
+;; cl (Common Lisp) module, and some routines available in GNU Emacs but not
+;; in XEmacs.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun rxx-remove-if (predicate seq)
+  "Return a new sequence containing elements of SEQ that do not satisfy
+PREDICATE."
+  (let (result)
+    (dolist (e seq)
+      (unless (funcall predicate e)
+	(push e result)))
+    (nreverse result)))
 
 (defmacro rxx-with-no-warnings (&rest forms)
   "Like progn, but with no warnings"
@@ -91,22 +132,40 @@ for the replacement function definition."
 ;; struct: rxx-info - information about a regexp or one named group within it.  when the former, it is attached to a regexp
 ;;    as a text property by `put-rxx-info'; the resulting annotated regexp is referred to as an aregexp in this module.
 (defstruct rxx-info
-  ;; field: form - the lisp form passed to `rx-to-string' to generate this regexp
-  form
-  ;; field: regexp - the regexp string returned by `rx-to-string'
-  regexp
-  ;; field: parser - function that takes a string matching this regexp, and constructs a parsed object from it.
-  ;;   in the simplest case it is the identity function that just returns the matched string itself.
-  ;;   the function can call `rxx-match-val' and `rxx-match-string' to get the parsed object or the string matched by
-  ;;   a named group of this regexp.
-  parser
-  ;; field: env - environment for resolving the names of named groups of this regexp.  maps name to rxx-info for the group.
-  env
-  ;; field: num - if this rxx-info is for the top-level regexp, nil; else, the number of the explicitly numbered group
-  ;; to which this named group was mapped.
-  num
-  ;; field: descr - a string describing what is matched by this regexp; used for creating readable error messages.
-  descr)
+  "Information about a regexp.  Describes both a general template
+for creating instances of this regexp, and a particular
+instantiation of that template.  When `rxx-to-string' analyzes an
+sexp defining a regexp, it creates one `rxx-info' for the overall
+regexp and one for each named subgroup within the regexp.
+
+The `rxx-info' for the overall regexp is attached to the regexp
+string as a text property, creating an _annotated_ regexp, or
+aregexp for short.  This extended information enables us to parse
+matches of this regexp into programmatic objects, and to use this
+regexp as a building block in larger regexps.
+
+Fields:
+
+   Fields describing the reusable regexp template:
+
+     FORM - the sexp defining this regexp, in the syntax accepted by `rxx-to-string'.
+     PARSER - form or function that parses matches of this regexp into programmatic objects.   It can refer to parsed
+        values of named direct subgroups simply by subgroup name (they're dynamically scoped in whenever the parser
+        is invoked).  If a function, it takes one argument: the string representing the full match to this regexp
+        (as returned by (match-string 0)).
+     DESCR - a human-readable description of the entity matched by this regexp.   Used in error messages.
+
+   Fields describing the particular instantiation of the template:
+
+     REGEXP - the regexp string returned by `rx-to-string'.   This is a standard regexp as passed to `string-match' etc.
+        Note though, that this is only one concrete instantiation of FORM.  Saving FORM with the regexp lets us
+        instantiate new instances of the regexp, with new mappings of symbolic group names to numbered group numbers.
+     ENV - environment for resolving references to named subgroups of this regexp.  Maps subgroup name to
+       `rxx-info' for the subgroup.
+     NUM - the numbered group corresponding to to matches of this regexp (as would be passed to `match-string').
+   
+"
+  form regexp parser env num descr)
 
 (defun put-rxx-info (regexp rxx-info)
   "Put rxx-info on a regexp string, replacing any already there.  This creates an aregexp (annotated regexp).
@@ -122,7 +181,6 @@ Return the annotated regexp."
     (or (get-text-property 0 'rxx aregexp)
 	(and (featurep 'xemacs)
 	     (get aregexp 'rxx)))))
-
 
 (defun rxx-new-env (&optional parent-env)
   "Create a fresh environment mapping group names to rxx-infos.  There is an environment for the top-level regexp, and
@@ -786,10 +844,11 @@ the parsed result in case of match, or nil in case of mismatch."
 
 
 (defun* rxx-search-bwd (aregexp &optional bound noerror (partial-match-ok t))
-  "Match the current buffer against the given extended regexp, and return
+  "Match the current buffer against the given aregexp, and return
 the parsed result in case of match, or nil in case of mismatch."
   ;; add options to:
   ;;   - work with re-search-forward and re-search-bwd.
+  ;;   - and with posix searches
   ;;
       (let* ((old-point (point))
 	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp)))
@@ -949,15 +1008,23 @@ return the list of parsed numbers, omitting the blanks.   See also
 			  parent-rxx-env)))))))
 
 (defadvice rx-or (around rxx-or first (form) activate compile)
+  "For bounded recursion, remove any OR clauses consisting of
+`recurs' forms for which recursion has bottomed out. (See
+`rxx-parse-recurs' and `defrxxrecurse')."
   (unless (or (not (boundp 'rxx-env))
 	      (and (boundp 'rxx-recurs-depth) (> rxx-recurs-depth 0))
 	      (<= (length form) 2))
-    (setq form (remove-if (lambda (elem) (or (eq (car-safe elem) 'recurse)
-					     (and (eq (car-safe elem) 'named-grp)
-						  (eq (car-safe (car-safe (cdr-safe (cdr-safe elem)))) 'recurse)))) form)))
+    (setq form (rxx-remove-if
+		(lambda (elem)
+		  (or (eq (car-safe elem) 'recurse)
+		      (and (eq (car-safe elem) 'named-grp)
+			   (eq (car-safe (car-safe
+					  (cdr-safe
+					   (cdr-safe elem)))) 'recurse))))
+			  form)))
   ad-do-it
-  (when (boundp 'rxx-env) (not (rx-atomic-p ad-return-value))
-	(setq ad-return-value (rx-group-if ad-return-value '*))))
+  (when (boundp 'rxx-env)
+    (setq ad-return-value (rx-group-if ad-return-value '*))))
 
 (defun rxx-remove-unneeded-shy-grps (re)
   "Remove shy groups that do nothing"
