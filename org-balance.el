@@ -64,12 +64,14 @@
 ;; Section: external dependencies
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(require 'time-date)
 (require 'org)
 (require 'org-clock)
 (require 'org-agenda)
 (require 'org-compat)
 (require 'org-macs)
 (require 'org-archive)
+(require 'elu)
 (require 'rxx)
 (eval-when-compile (require 'cl))
 
@@ -243,141 +245,6 @@ from the `before-change-functions' in the current buffer."
 ;; General-purpose utility routines used in org-balance module
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun org-balance-groupby (z key-func)
-  "Group items in a list by their key, using the specified key extractor.
-Return an a-list mapping keys to items with that key.  "
-  (setq z (copy-sequence z))
-  (setq z (sort z (lambda (x y) (< (funcall key-func x) (funcall key-func y)))))
-  (let (result)
-    (dolist (x z)
-      (let* ((k (funcall key-func x)))
-	(when (or (null result) (not (equal k (car (first result)))))
-	  (push (cons k nil) result))
-	(push x (cdr (first result)))))
-    (reverse result)))
-
-(defmacro org-balance-with (struct-type struct fields  &rest body)
-  "Locally bind fields FIELDS of structure STRUCT of type STRUCT-TYPE (defined by `defstruct') for easy access.
-FIELDS is a list of fields; each field is bound to a local variable of the same name, then BODY forms are executed."
-  (declare (indent 3))
-  (let ((my-struct (make-symbol "my-struct")))
-    (append (list 'let* (cons (list my-struct struct)
-			      (mapcar (lambda (field)
-					(list field
-					      (list (intern (concat (symbol-name struct-type)
-								    "-" (symbol-name field))) my-struct))) fields)))
-	    body)))
-
-
-(defmacro org-balance-with-new-symbols (symbols &rest forms)
-  "Bind each symbol in SYMBOLS to a newly created uninterned symbol, and execute FORMS.  Useful for defining temp vars
-used in macros."
-  (declare (indent 1))
-  (append (list 'let (mapcar (lambda (symbol)
-			      (list symbol `(make-symbol ,(symbol-name symbol))))
-			    symbols))
-	  forms))
-
-(defmacro org-balance-make-vector (length init)
-  "Make a vector, evaluating the INIT expression for each element rather than just once."
-  (org-balance-with-new-symbols (i v)
-    `(let ((,v (make-vector ,length nil)))
-       (dotimes (,i ,length ,v) (aset ,v ,i ,init)))))
-
-(defmacro org-balance-gen-vector (i n &rest forms)
-  "Construct a vector of size N from the expression for its I'th element."
-  (declare (indent 2))
-  (org-balance-with-new-symbols (save-n result)
-    `(let* ((,save-n ,n)
-	    (,result (make-vector ,save-n nil)))
-       (dotimes (,i ,save-n ,result)
-	 (aset ,result ,i (progn ,@forms))))))
-
-
-(defun org-balance-mapcar-many (cl-func cl-seqs)
-  "Copy  of `cl-mapcar-many', used by `org-balance-mapcar'."
-  (if (cdr (cdr cl-seqs))
-      (let* ((cl-res nil)
-	     (cl-n (apply 'min (mapcar 'length cl-seqs)))
-	     (cl-i 0)
-	     (cl-args (copy-sequence cl-seqs))
-	     cl-p1 cl-p2)
-	(setq cl-seqs (copy-sequence cl-seqs))
-	(while (< cl-i cl-n)
-	  (setq cl-p1 cl-seqs cl-p2 cl-args)
-	  (while cl-p1
-	    (setcar cl-p2
-		    (if (consp (car cl-p1))
-			(prog1 (car (car cl-p1))
-			  (setcar cl-p1 (cdr (car cl-p1))))
-		      (aref (car cl-p1) cl-i)))
-	    (setq cl-p1 (cdr cl-p1) cl-p2 (cdr cl-p2)))
-	  (push (apply cl-func cl-args) cl-res)
-	  (setq cl-i (1+ cl-i)))
-	(nreverse cl-res))
-    (let ((cl-res nil)
-	  (cl-x (car cl-seqs))
-	  (cl-y (nth 1 cl-seqs)))
-      (let ((cl-n (min (length cl-x) (length cl-y)))
-	    (cl-i -1))
-	(while (< (setq cl-i (1+ cl-i)) cl-n)
-	  (push (funcall cl-func
-			    (if (consp cl-x) (pop cl-x) (aref cl-x cl-i))
-			    (if (consp cl-y) (pop cl-y) (aref cl-y cl-i)))
-		   cl-res)))
-      (nreverse cl-res))))
-
-(defun org-balance-mapcar* (cl-func cl-x &rest cl-rest)
-  "Apply FUNCTION to each element of SEQ, and make a list of the results.
-If there are several SEQs, FUNCTION is called with that many arguments,
-and mapping stops as soon as the shortest list runs out.  With just one
-SEQ, this is like `mapcar'.  With several, it is like the Common Lisp
-`mapcar' function extended to arbitrary sequence types.
-\n(fn FUNCTION SEQ...)
-
-Copied from `mapcar*'.
-"
-  (if cl-rest
-      (if (or (cdr cl-rest) (nlistp cl-x) (nlistp (car cl-rest)))
-	  (org-balance-mapcar-many cl-func (cons cl-x cl-rest))
-	(let ((cl-res nil) (cl-y (car cl-rest)))
-	  (while (and cl-x cl-y)
-	    (push (funcall cl-func (pop cl-x) (pop cl-y)) cl-res))
-	  (nreverse cl-res)))
-    (mapcar cl-func cl-x)))
-
-(defun org-balance-map-vectors (function &rest vecs)
-  "Map a function over one or more vectors, and return the result as a vector."
-  (apply 'vector (apply 'org-balance-mapcar* (cons function vecs))))
-
-(defmacro org-balance-set-fields (struct-type struct &rest clauses)
-  "Set multiple fields of a structure"
-  (let ((my-struct (make-symbol "my-struct")))
-    (let (result)
-      (while clauses
-	(push (list 'setf (list (intern (concat (symbol-name struct-type) "-"
-						(substring (symbol-name (first clauses)) 1))) my-struct)
-		    (second clauses)) result)
-	(setq clauses (cddr clauses)))
-      (append (list 'let (list (list my-struct struct)))
-	      (nreverse result) (list my-struct)))))
-
-(defmacro org-balance-modified-struct (struct-type struct &rest clauses)
-  "Return a copy of the given structure STRUCT of type STRUCT-TYPE, with specified fields given new values and the
-remaining fields taking values from STRUCT.   CLAUSES has the form :field1 val1 :field2 val2 ..."
-  (declare (indent 2))
-  `(org-balance-with ,struct-type ,struct
-		     ,(delq nil
-			    (mapcar
-			     (lambda (clause)
-			       (when (keywordp clause) (intern (substring (symbol-name clause) 1)))) clauses))
-     (org-balance-set-fields ,struct-type (,(intern (concat "copy-" (symbol-name struct-type))) ,struct) ,@clauses)))
-
-
-(defun org-balance-not-blank (s)
-  "Return nil if S is nil or a blank string, else return S."
-  (when (and s (save-match-data (string-match (rx (not blank)) s)))
-    s))
 
 (defun org-balance-get-property (prop &optional default-val)
   "Get the value of a property, represented either as text property or org property,
@@ -421,20 +288,6 @@ is not set (and is removed if it was set before and CLEAR-WHEN_DEFAULT is non-ni
     (if (stringp prop)
 	(org-delete-property-globally prop)
       (remove-list-of-text-properties (point-min) (point-max) (list prop))))
-
-(defun org-balance-trim-whitespace (s)
-  "Trim trailing and leading whitespace from string"
-  (save-match-data
-    (replace-regexp-in-string
-     (rx (or (seq string-start (zero-or-more whitespace))
-	     (seq (zero-or-more whitespace) string-end)))
-     "" (if (symbolp s) (symbol-name s) s))))
-
-(defun org-balance-full-match (re s)
-  "Do a string match, but fail unless the regexp matches the full string"
-  (and (string-match re s)
-       (= (match-beginning 0) 0)
-       (= (match-end 0) (length s))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -758,7 +611,7 @@ Originally adapted from `org-closed-in-range'.
 (defun org-balance-sum-org-property (prop intervals unit prop-default-val)
   "For each interval in INTERVALS, compute the sum of values of Org property PROP from items closed in that interval.
 The sum will be represented in unit UNIT.  The sum is computed within the current restriction, if any."
-  (org-balance-map-vectors
+  (elu-map-vectors
    (lambda (vals)
      (org-balance-do-sum (org-balance-make-valu 0 unit)
 			 (mapcar 'cdr vals)))
@@ -783,8 +636,8 @@ The sum will be represented in unit UNIT.  The sum is computed within the curren
     create-org-balance-archive-loc
     (loc
      &aux
-     (file (org-balance-not-blank (org-extract-archive-file loc)))
-     (heading (org-balance-not-blank (org-extract-archive-heading loc))))))
+     (file (elu-not-blank (org-extract-archive-file loc)))
+     (heading (elu-not-blank (org-extract-archive-heading loc))))))
   "A destination for archived trees: an org file, and a heading within that file."
   file heading)
 
@@ -1020,7 +873,7 @@ struct with fields for the property name and the link."
 (defun org-balance-compute-actual-prop-ratio (prop-ratio intervals parsed-goal)
   (org-balance-with org-balance-goal (aref parsed-goal 0) (numer-min denom)
     (let ((target-ratio (make-org-balance-valu-ratio :num numer-min :denom denom)))
-      (org-balance-map-vectors
+      (elu-map-vectors
        (lambda (a-num a-denom)
 	 (org-balance-convert-valu-ratio (make-org-balance-valu-ratio :num a-num :denom a-denom) target-ratio))
        (org-balance-compute-actual-prop (org-balance-prop-ratio-num prop-ratio) intervals
@@ -1029,7 +882,7 @@ struct with fields for the property name and the link."
 					(org-balance-valu-unit denom))))))
 
 (defun org-balance-compute-delta (parsed-goals prop-ratio actuals)
-  (org-balance-gen-vector i (length parsed-goals)
+  (elu-gen-vector i (length parsed-goals)
     (let ((parsed-goal (aref parsed-goals i))
 	  (actual (aref actuals i)))
       (let* ((polarity (or (org-balance-goal-polarity parsed-goal)
@@ -1264,7 +1117,7 @@ units are measured; for example, for time we use minutes."
 
 (defun org-balance-scale-valu (factor valu)
   "Return the value scaled by the factor"
-  (org-balance-modified-struct org-balance-valu valu
+  (elu-modified-struct org-balance-valu valu
     :val (* factor val)))
 
 (defun org-balance-make-valu (val unit)
@@ -1304,12 +1157,12 @@ a newly created valu representing the difference of VALU1 and VALU2."
 
 (defun org-balance-add-valu-vec (valu-vec-1 valu-vec-2)
   "Add two vectors of valus"
-  (org-balance-map-vectors 'org-balance-add-valu valu-vec-1 valu-vec-2))
+  (elu-map-vectors 'org-balance-add-valu valu-vec-1 valu-vec-2))
 
 (defun org-balance-scale-valu-vec (factor valu-vec)
   "Scale all valus in VALU-VEC by FACTOR"
   (message "scaling by %s: %s" factor valu-vec)
-  (org-balance-map-vectors (apply-partially 'org-balance-scale-valu factor) valu-vec))
+  (elu-map-vectors (apply-partially 'org-balance-scale-valu factor) valu-vec))
 
 (put 'org-balance-parse-error 'error-conditions '(error org-balance-errors org-balance-parse-error))
 (put 'org-balance-parse-error 'error-message "org-balance: Could not parse")
@@ -1347,7 +1200,7 @@ are not allowed.
 "
   (if (numberp s) s
     (save-match-data
-      (org-balance-full-match org-balance-number-regexp s))))
+      (elu-full-match org-balance-number-regexp s))))
 
 (defun org-balance-string-to-number (s)
   "Convert a string to a number, recognizing some number names for readability.  If s is already a number, just return it.
@@ -1488,7 +1341,7 @@ changing only the numerator."
   (make-org-balance-goal-link :factor factor :actual actual :link link))
 
 (defrxx goal-or-link
-  (& blanks? (| goal goal-link) blanks?)
+  (& blanks? (| goal-link goal) blanks?)
   (if goal (make-vector (org-balance-intervals-n intervals) goal)
       (save-excursion
 	(save-window-excursion
@@ -1500,9 +1353,9 @@ changing only the numerator."
 	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	      (error "No goal found at link taget"))
 	    (message "we are at %s" (point))
-	    (org-balance-map-vectors (apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
-				     (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
-						    (org-balance-start-of-tags))))))) 
+	    (elu-map-vectors (apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
+			     (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
+					    (org-balance-start-of-tags))))))) 
 
 (defrxx goal-spec (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link) blanks? tags?) (cons prop-ratio goal-or-link))
 
@@ -1564,7 +1417,6 @@ changing only the numerator."
 				      [cl-struct-org-balance-valu 2 weeks] atleast 11
 				      "every" "at least once every two weeks +- 11%"])))
 
-
 (defun org-balance-test-parsing ()
   (interactive)
   (let ((num-ok 0))
@@ -1619,6 +1471,14 @@ changing only the numerator."
 	      (message "%s tests ok, %s tests failed" num-ok num-failed))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+  (defrxx org-balance-goal-or-link2-regexp
+    (& blanks? (| (named-grp ichego goal) goal-link ) blanks?) 
+    (lambda (whole-match) 
+      (message "whole-match: %s goal: %s link: %s" whole-match ichego goal-link) 
+      (progn 
+	(list ichego goal-link))))
 
 
 (rxx-set-prefix nil)
