@@ -2756,4 +2756,110 @@ org-balance-prop-name-regexp
 (rxx-parse (rxx (named-grp n digits) (string-to-number n)) "333")
 (rxx-make-shy "\\(?:[[:digit:]]\\)+")
 
+(rxx-make-shy "\\(?:\\(?:\\(hi\\)\\)\\)") 
+(rxx (not space))
 
+(create-org-balance-archive-loc "%s_archive::work archive") 
+
+(message "%s" (let ((s "done: .3 of [[privet]]")) 
+		(string-match org-balance-goal-or-link-regexp s) 
+		;(mapcar (lambda (n) (match-string n s)) (number-sequence 0 67))
+		(match-string 42 s)
+		)
+		      )
+
+
+(rxx-named-grp-num 'goal-link org-balance-goal-or-link-regexp)
+
+(regexp-opt-depth org-balance-goal-or-link-regexp) 
+
+
+
+
+(let ((intervals (make-org-balance-intervals :from 1284760020.0 :n 1 :width (- 1285607849.393998 1283015820.0) :shift 0))) 
+  (rxx-parse org-balance-goal-or-link-regexp ".3 of [[votvam]]")) 
+
+
+(message "%s"
+	 (let ((s ".3 of [[there]]")) 
+	   (string-match org-balance-goal-or-link2-regexp s) 
+	   (mapcar (lambda (n) (match-string n s)) (number-sequence 0 67))) )
+
+(with-temp-buffer
+  (insert-file-contents-literally "bigregexp.txt" 'visit (not 'beg) (not 'end) 'replace)
+  (let ((re (buffer-substring (point-min) (point-max)))
+	(s ".3 of [[there]]"))
+    (string-match re s)
+    (message "%s" (mapcar (lambda (n) (match-string n s)) (number-sequence 0 40)))))
+
+(defadvice rx-or (around rxx-or first (form) activate compile)
+  "For bounded recursion, remove any OR clauses consisting of
+`recurs' forms for which recursion has bottomed out. (See
+`rxx-parse-recurs' and `defrxxrecurse').
+
+Also, an empty (or) form is allowed and translates to `rxx-never-match'.
+"
+  (if (not (in-rxx)) ad-do-it
+
+    ;; We have to completely reimplement rx-or here without calling
+    ;; ad-do-it, because as we descent into each child of the `or',
+    ;; we need to keep track of the current branch number.
+
+    ;; we should keep the regex-opt optimization, while still
+    ;; allowing to disable individual branches (or maybe not).
+    ;; can also optimize if only some branches are strings.
+    ;; (though, then the user could do a nested or).
+
+    ;; at the end, before returning, need to increment
+    ;; the "current OR branch number".
+
+    (let ((rxx-or-branch (append rxx-or-branch (list rxx-or-num)))
+	  (child-branch-num 0))
+      (dolist (child (cdr form))
+	(let ((rxx-or-child (append rxx-or-child (list child-branch-num))))
+	  ;; check if we want to include or skip this branch.
+	  ;; for now, include it, so just call rx-form.
+	  ;; if skip, start a new env and let grp count to a symbol or nil
+	  ;; so that any groups created there will get that as their grp-num.
+	  ;; then, rxx-match-val will just return nil rather than trying to call
+	  ;; match-string and then the parser.
+	  
+	(incf child-branch-num)  
+	)
+
+    (unless (or (not (boundp 'rxx-env))
+	      (and (boundp 'rxx-recurs-depth) (> rxx-recurs-depth 0))
+	      (<= (length form) 2))
+    (setq form (elutil-remove-if
+		(lambda (elem)
+		  (or (eq (car-safe elem) 'recurse)
+		      (and (eq (car-safe elem) 'named-grp)
+			   (eq (car-safe (car-safe
+					  (cdr-safe
+					   (cdr-safe elem)))) 'recurse))))
+			  form)))
+  ad-do-it
+  (when (boundp 'rxx-env)
+    (setq ad-return-value (rx-group-if ad-return-value '*))))
+
+
+(defun rxx-make-shy-old (re)
+  (rx-group-if
+   (save-match-data
+     (replace-regexp-in-string
+      (rx (seq "\\(" (group "") (not (any "?"))))
+      "?:" (save-match-data
+	     (replace-regexp-in-string
+	      (rx (seq "\\(?" (group (one-or-more digit) ) ":"))
+	      "" re 'fixedcase 'literal 1))
+      'fixedcase 'literal 1))
+   '*))
+
+(let ((buffer (url-retrieve-synchronously
+	              "http://tromey.com/elpa/package-install.el")))
+  (save-excursion
+    (set-buffer buffer)
+    (goto-char (point-min))
+    (re-search-forward "^$" nil 'move)
+    (eval-region (point) (point-max))
+    (kill-buffer (current-buffer))))
