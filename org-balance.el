@@ -75,7 +75,7 @@
 (require 'rxx)
 (eval-when-compile (require 'cl))
 
-(rxx-set-prefix org-balance)
+(rxx-start-module org-balance)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Section: External variables referenced by org-balance module
@@ -657,7 +657,7 @@ Parsed as the structure `org-balance-archive-loc'."
 	(let ((archive-locs (list (create-org-balance-archive-loc (org-get-local-archive-location)))))
 	  (org-narrow-to-subtree)
 	  (rxx-do-search-fwd org-balance-archive-loc-regexp loc
-	    (add-to-list 'archive-locs loc))
+	    (elu-add-to-list 'archive-locs loc))
 	  archive-locs)))))
 
 
@@ -1481,7 +1481,7 @@ changing only the numerator."
 	(list ichego goal-link))))
 
 
-(rxx-set-prefix nil)
+(rxx-end-module org-balance)
 
 (provide 'org-balance)
 

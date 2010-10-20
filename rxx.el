@@ -416,12 +416,18 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defmacro rxx-set-prefix (prefix)
+(defmacro rxx-start-module (prefix)
   "Specify a prefix to be automatically prepended to aregexps defined by `defrxx'.  Typically this would be the
 name of the module in which the aregexps are being defined.   So, if you do (rxx-set-prefix my-module) then
 (defrxx val ...) defines aregexp named my-module-val-regexp; it can be referred to as simply `val' when used
 in larger regexps."
   `(defrxxconst rxx-prefix (when (quote ,prefix) (symbol-name (quote ,prefix)))))
+
+(defmacro rxx-end-module (prefix)
+  "End the specified module"
+  `(progn
+     (assert (equal (symbol-name (quote ,prefix)) rxx-prefix))
+     (rxx-start-module nil)))
 
 (defun rxx-symbol (symbol &optional no-regexp)
   "If rxx prefix is defined (see `rxx-set-prefix'), and SYMBOL does not
@@ -432,6 +438,8 @@ If NO-REGEXP is non-nil, do not append the -regexp part and just prepend the pre
 	   (not (elu-ends-with (symbol-name symbol) "-re")))
       (intern (concat rxx-prefix "-" (symbol-name symbol) (if no-regexp "" "-regexp")))
     symbol))
+
+(defvar rxx-modules nil)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
