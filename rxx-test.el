@@ -313,13 +313,13 @@ TIME defaults to the current time."
 (defun rxx-ppp (x) x)
 (defun rxx-qqq (x) (declare (special rxx-ppp-orig)) (* (funcall rxx-ppp-orig x) x))
 
-(assert (equal (rxx-flet ( (rxx-ppp (x) (+ x x)) )
+(assert (equal (elu-flet ( (rxx-ppp (x) (+ x x)) )
 		 (declare (special rxx-ppp-orig))
 		 (funcall rxx-ppp-orig 4)
 		 (rxx-ppp 4)
 		 ) 8))
 
-(assert (equal (rxx-flet ((rxx-ppp rxx-qqq))
+(assert (equal (elu-flet ((rxx-ppp rxx-qqq))
 		 (rxx-ppp 33)) 1089))
 
 (defrxx rxx-num-regexp (1+ digit) string-to-number)
