@@ -1,8 +1,8 @@
-;;; rxx.el --- Tools for building complex regexps from simpler ones
+;;; rxx.el --- Easily build simple parsers using regexps
 ;; Copyright (C) 2010 Free Software Foundation, Inc.
 ;;
 ;; Author: Ilya Shlyakhter <ilya_shl at alum dot mit dot edu>
-;; Keywords: outlines, hypermedia, calendar, wp
+;; Keywords: regexp, parser, DSL
 ;; Homepage: http://ilya.cc/rxx
 ;; Version: 0.9
 ;;
@@ -91,9 +91,15 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Section: rxx-info
+;;
+;; Extra information we store with each constructed regexp.  This information
+;; lets us reuse the regexp as a building block of larger regexps.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; struct: rxx-info - information about a regexp or one named group within it.  when the former, it is attached to a regexp
-;;    as a text property by `put-rxx-info'; the resulting annotated regexp is referred to as an aregexp in this module.
 (defstruct rxx-info
   "Information about a regexp.  Describes both a general template
 for creating instances of this regexp, and a particular
@@ -145,6 +151,14 @@ Return the annotated regexp."
 	(and (featurep 'xemacs)
 	     (get aregexp 'rxx)))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Section: Environments
+;;
+;; Map from named group name to information about that named group.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defun rxx-new-env (&optional parent-env)
   "Create a fresh environment mapping group names to rxx-infos.  There is an environment for the top-level regexp, and
 also a separate one within each named group (for nested named groups).  We represent the environment as an alist.
@@ -152,52 +166,9 @@ The alist always has at least one cell; this lets us add entries to an environme
 several lisp symbols, without having to find and rebind all the symbols."
   (list (cons nil parent-env)))
 
-(defun rxx-parent-env (rxx-env) (cdr (first rxx-env)))
-
-(defun in-rxx ()
-  "Test if we're in rxx, i.e. if we got here through a call
-to `rxx-to-string'.  Used by pieces of advice to avoid changing
-any behavior unless called through this module."
-  (declare (special rxx-env))
-  (boundp 'rxx-env))
-
-
-(defun rxx-add-to-list (list-var element &optional append compare-fn)
-  "Add ELEMENT to the value of LIST-VAR if it isn't there yet.
-The test for presence of ELEMENT is done with `equal',
-or with COMPARE-FN if that's non-nil.
-If ELEMENT is added, it is added at the beginning of the list,
-unless the optional argument APPEND is non-nil, in which case
-ELEMENT is added at the end.
-
-The return value is the new value of LIST-VAR.
-
-If you want to use `add-to-list' on a variable that is not defined
-until a certain package is loaded, you should put the call to `add-to-list'
-into a hook function that will be run only after loading the package.
-`eval-after-load' provides one way to do this.  In some cases
-other hooks, such as major mode hooks, can do the job.
-
-Taken from `add-to-list'.
-"
-  (if (cond
-       ((null compare-fn)
-	(member element (symbol-value list-var)))
-       ((eq compare-fn 'eq)
-	(memq element (symbol-value list-var)))
-       ((eq compare-fn 'eql)
-	(memql element (symbol-value list-var)))
-       (t
-	(let ((lst (symbol-value list-var)))
-	  (while (and lst
-		      (not (funcall compare-fn element (car lst))))
-	    (setq lst (cdr lst)))
-          lst)))
-      (symbol-value list-var)
-    (set list-var
-	 (if append
-	     (append (symbol-value list-var) (list element))
-	   (cons element (symbol-value list-var))))))
+(defun rxx-parent-env (rxx-env)
+  "Return the parent environment of this environment."
+  (cdr (first rxx-env)))
 
 (defun rxx-env-lookup (grp-name rxx-env)
   "Lookup the rxx-info for the named group GRP-NAME in the environment RXX-ENV, or return nil if not found.  GRP-NAME is
@@ -633,6 +604,19 @@ For detailed description, see `rxx'.
      (rxx-check-regexp-valid regexp)
      (assert (= rxx-num-grps (regexp-opt-depth regexp)))
      regexp)))
+
+(defun in-rxx ()
+  "Test if we're in rxx, i.e. if we got here through a call
+to `rxx-to-string'.  Used by pieces of advice to avoid changing
+any behavior unless called through this module.
+
+The use of this function means we specifically do NOT want
+to declare `rxx-env' as a global variable using `defvar';
+we only want it to be defined when we're being called via
+`rxx-to-string'.
+"
+  (declare (special rxx-env))
+  (boundp 'rxx-env))
 
 (defun rxx-process-sep-by (form)
   "Process the sep-by form, which looks like (sep-by separator ....)"
