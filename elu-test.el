@@ -37,9 +37,9 @@
 (ert-deftest elu-test-suite ()
   "Test various utilities in the elu module"
   (let ((s (make-elu-test :a 1 :b 2)))
-    (should (equal (elu-modified-struct elu-test s :c 3)
+    (should (equal (elu-modified-struct 'elu-test s :c 3)
 		   (make-elu-test :a 1 :b 2 :c 3)))
-    (should (equal (elu-with elu-test s (a b) (+ a b)) 3)))
+    (should (equal (elu-with 'elu-test s (a b) (+ a b)) 3)))
 
   (should (equal (elu-remove-if 'evenp '(1 2 3 4 5 6)) '(1 3 5)))
 

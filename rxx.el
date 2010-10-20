@@ -430,7 +430,7 @@ in larger regexps."
 without prefix."
   (elu-with-new-symbols symbol
   `(eval-and-compile
-     (dolist (,symbol ,symbols)
+     (dolist (,symbol (quote ,symbols))
        (push (cons ,symbol (symbol-name (quote ,module))) rxx-imports)))))
 
 (defmacro rxx-end-module (prefix)
@@ -445,8 +445,8 @@ without prefix."
   "If rxx prefix is defined (see `rxx-set-prefix'), and SYMBOL does not
 end with -regexp or -re, return the full name of the symbol (prefix-SYMBOL-regexp).
 If NO-REGEXP is non-nil, do not append the -regexp part and just prepend the prefix."
-  (let ((prefix (or (elu-safe-val rxx-prefix)
-		    (elu-assoc-val symbol rxx-imports 'nil-ok))))
+  (let ((prefix (or (elu-assoc-val symbol rxx-imports 'nil-ok)
+		    (elu-safe-val rxx-prefix))))
     (if (and prefix
 	     (not (elu-ends-with (symbol-name symbol) "-regexp"))
 	     (not (elu-ends-with (symbol-name symbol) "-re")))
@@ -688,7 +688,7 @@ Used for bottoming out bounded recursion (see `rxx-process-recurse').")
   (unless (or (not (boundp 'rxx-env))
 	      (and (boundp 'rxx-recurs-depth) (> rxx-recurs-depth 0))
 	      (<= (length form) 2))
-    (setq form (rxx-remove-if
+    (setq form (elu-remove-if
 		(lambda (elem)
 		  (or (eq (car-safe elem) 'recurse)
 		      (and (eq (car-safe elem) 'named-grp)

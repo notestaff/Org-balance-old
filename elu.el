@@ -70,7 +70,7 @@ Similar to WITH construct in Pascal."
     (append (list 'let* (cons (list my-struct struct)
 			      (mapcar (lambda (field)
 					(list field
-					      (list (intern (concat (symbol-name struct-type)
+					      (list (intern (concat (symbol-name (eval struct-type))
 								    "-" (symbol-name field))) my-struct))) fields)))
 	    body)))
 
@@ -171,7 +171,7 @@ a `let' form, except that the list of symbols can be computed at run-time."
   "Return a new list containing elements of list LST minus any duplicates.
 Adapted from `org-uniquify'."
   (let (res)
-    (mapc (lambda (x) (rxx-add-to-list 'res x 'append compare-fn)) lst)
+    (mapc (lambda (x) (elu-add-to-list 'res x 'append compare-fn)) lst)
     res))
 
 (defmacro elu-dbg (&rest exprs)
@@ -345,7 +345,7 @@ Copied from `mapcar*'.
   (let ((my-struct (make-symbol "my-struct")))
     (let (result)
       (while clauses
-	(push (list 'setf (list (intern (concat (symbol-name struct-type) "-"
+	(push (list 'setf (list (intern (concat (symbol-name (eval struct-type)) "-"
 						(substring (symbol-name (first clauses)) 1))) my-struct)
 		    (second clauses)) result)
 	(setq clauses (cddr clauses)))
@@ -361,7 +361,7 @@ remaining fields taking values from STRUCT.   CLAUSES has the form :field1 val1 
 			    (mapcar
 			     (lambda (clause)
 			       (when (keywordp clause) (intern (substring (symbol-name clause) 1)))) clauses))
-     (elu-set-fields ,struct-type (,(intern (concat "copy-" (symbol-name struct-type))) ,struct) ,@clauses)))
+     (elu-set-fields ,struct-type (,(intern (concat "copy-" (symbol-name (eval struct-type)))) ,struct) ,@clauses)))
 
 
 (defun elu-not-blank (s)

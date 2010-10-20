@@ -70,6 +70,8 @@
 	     org-archive rxx org-valu)
 
 (rxx-start-module org-balance)
+(rxx-import org-valu number-name number number-range unit valu valu-range
+	    valu-ratio)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Section: External variables referenced by org-balance module
@@ -101,7 +103,7 @@ before today."
   :type 'string)   ;; todo: add a validation function to make sure this can be parsed as a duration.
 
 
-(defcustom org-balance-default-polarity (quote (("clockedtime" . atleast) ("done" . atleast) ("spend" . atmost)))
+(defcustom org-balance-default-polarity (quote ((clockedtime . atleast) (done . atleast) (spend . atmost)))
   "Default polarity to use for specific properties"
   :group 'org-balance
   :type '(alist :key-type string :value-type (radio (const :tag "at least" atleast)
@@ -294,7 +296,7 @@ Fields:
 
 (defun org-balance-intervals-start (intervals i)
   "Return start of I'th interval in interval set INTERVALS"
-  (org-balance-with org-balance-intervals intervals (from shift n)
+  (elu-with 'org-balance-intervals intervals (from shift n)
     (assert (and (integerp i) (<= 0 i) (< i n)))
     (+ from (* i shift))))
 
@@ -319,9 +321,9 @@ Fields:
   "Iterate over intervals in INTERVALS which intersect the interval [pmin,pmax).   Assign interval
 number to I, interval start to TSTART and interval end to TEND for each interval, then execute FORMS"
   (declare (indent 6))
-  (org-balance-with-new-symbols
+  (elu-with-new-symbols
    (first-interval-idx last-interval-start last-interval-end last-interval-idx from n shift width dummy)
-    `(org-balance-with org-balance-intervals intervals (,from ,n ,shift ,width)
+    `(elu-with 'org-balance-intervals intervals (,from ,n ,shift ,width)
        (when (and (> (org-balance-intervals-n intervals) 0)
 		  (org-balance-intervals-intersect-p ,pmin ,pmax ,from (org-balance-intervals-end ,intervals (1- ,n))))
 	 (let* ((,first-interval-idx (if (and ,shift (> ,shift 0)) (floor (/ (- ,pmin ,from) ,shift)) 0))
@@ -522,7 +524,7 @@ Parsed as a cons of the start and end times."
 	  (org-balance-clock-sum-add-interval intervals total-seconds (car clock-interval) (cdr clock-interval)))))
     (let ((result (make-vector (length total-seconds) nil)))
       (dotimes (i (length total-seconds) result)
-	(aset result i (org-balance-make-valu (aref total-seconds i) 'seconds))))))
+	(aset result i (new-org-valu (aref total-seconds i) 'seconds))))))
 
 (defrxx closed
   "An Org-mode line indicating when an entry was closed.
@@ -562,20 +564,20 @@ Originally adapted from `org-closed-in-range'.
 			  "1"))
 		     (prop-valu-here
 		      (condition-case err
-			  (org-balance-parse-valu prop-here)
+			  (parse-org-valu prop-here)
 			(error
 			 (message
 			  "Warning: at line %d of file %s, could not add %s to list for goal %s; list-so-far is %s"
 			  (line-number-at-pos (point)) (buffer-file-name (current-buffer)) prop-here prop prop-occurrences)
 			 (incf org-balance-num-warnings)
 			 nil))))
-		  (when (and prop-valu-here (not (zerop (org-balance-valu-val prop-valu-here))))
+		  (when (and prop-valu-here (not (zerop (org-valu-val prop-valu-here))))
 		    (push (cons pos-here prop-valu-here) (aref prop-occurrences i))))))))
 	prop-occurrences))))
 
 
 ;; (defun org-balance-sum-org-property2 (prop tstart tend unit prop-default-val)
-;;   (org-balance-reduce (org-balance-make-valu 0 unit)
+;;   (org-balance-reduce (new-org-valu 0 unit)
 ;; 		      (mapcar 'cdr (org-balance-gather-org-property
 ;; 				    prop tstart tend unit prop-default-val))))
 
@@ -585,8 +587,8 @@ Originally adapted from `org-closed-in-range'.
 The sum will be represented in unit UNIT.  The sum is computed within the current restriction, if any."
   (elu-map-vectors
    (lambda (vals)
-     (org-balance-do-sum (org-balance-make-valu 0 unit)
-			 (mapcar 'cdr vals)))
+     (org-valu-do-sum (new-org-valu 0 unit)
+		      (mapcar 'cdr vals)))
    (org-balance-gather-org-property
     prop intervals prop-default-val)))
 
@@ -598,7 +600,7 @@ The sum will be represented in unit UNIT.  The sum is computed within the curren
 		(org-balance-clock-sum intervals))
 	       ((string= prop "actualtime")
 		(make-vector (org-balance-intervals-n intervals)
-			     (org-balance-make-valu (org-balance-intervals-width intervals) 'seconds)))
+			     (new-org-valu (org-balance-intervals-width intervals) 'seconds)))
 	       (t (org-balance-sum-org-property prop intervals unit prop-default-val)))))
     result))
 
@@ -671,7 +673,7 @@ Parsed as the structure `org-balance-archive-loc'."
 			(save-match-data
 			  (org-back-to-heading 'invisible-ok)
 			  (setq prop-sum
-				(org-balance-add-valu-vec
+				(add-org-valu-vec
 				 prop-sum
 				 (org-balance-sum-property prop intervals unit
 							   prop-default-val))))))))))))))
@@ -843,39 +845,40 @@ struct with fields for the property name and the link."
 	(org-balance-sum-property-with-archives (org-balance-prop-prop prop) intervals unit)))))
 
 (defun org-balance-compute-actual-prop-ratio (prop-ratio intervals parsed-goal)
-  (org-balance-with org-balance-goal (aref parsed-goal 0) (numer-min denom)
-    (let ((target-ratio (make-org-balance-valu-ratio :num numer-min :denom denom)))
+  (elu-with 'org-balance-goal (aref parsed-goal 0) (numer-min denom)
+    (message "numer-min is %s denom is %s" numer-min denom)
+    (let ((target-ratio (make-org-valu-ratio :num numer-min :denom denom)))
       (elu-map-vectors
        (lambda (a-num a-denom)
-	 (org-balance-convert-valu-ratio (make-org-balance-valu-ratio :num a-num :denom a-denom) target-ratio))
+	 (convert-org-valu-ratio (make-org-valu-ratio :num a-num :denom a-denom) target-ratio))
        (org-balance-compute-actual-prop (org-balance-prop-ratio-num prop-ratio) intervals
-					(org-balance-valu-unit numer-min))
+					(org-valu-unit numer-min))
        (org-balance-compute-actual-prop (org-balance-prop-ratio-denom prop-ratio) intervals
-					(org-balance-valu-unit denom))))))
+					(org-valu-unit denom))))))
 
 (defun org-balance-compute-delta (parsed-goals prop-ratio actuals)
   (elu-gen-vector i (length parsed-goals)
     (let ((parsed-goal (aref parsed-goals i))
 	  (actual (aref actuals i)))
       (let* ((polarity (or (org-balance-goal-polarity parsed-goal)
-			   (cdr (assoc-string (org-balance-prop-prop
-					       (org-balance-prop-ratio-num  prop-ratio))
-					      org-balance-default-polarity))))
+			   (cdr (assoc (intern (org-balance-prop-prop
+						(org-balance-prop-ratio-num  prop-ratio)))
+				       org-balance-default-polarity))))
 	     (margin (or (org-balance-goal-margin parsed-goal)
 			 org-balance-default-margin-percent))
-	     (goal-min (org-balance-valu-val (org-balance-goal-numer-min parsed-goal)))
-	     (goal-max (org-balance-valu-val (org-balance-goal-numer-max parsed-goal)))
+	     (goal-min (org-valu-val (org-balance-goal-numer-min parsed-goal)))
+	     (goal-max (org-valu-val (org-balance-goal-numer-max parsed-goal)))
 	     (range-min (- goal-min
 			   (if (numberp margin)
 			       (* (/ (float margin) 100.0) goal-min)
-			     (org-balance-valu-val margin))))
+			     (org-valu-val margin))))
 	     
 	     (range-max (+ goal-max
 			   (if (numberp margin)
 			       (* (/ (float margin) 100.0) goal-max)
-			     (org-balance-valu-val margin))))
+			     (org-valu-val margin))))
 	     
-	     (actual-num (org-balance-valu-val (org-balance-valu-ratio-num actual)))
+	     (actual-num (org-valu-val (org-valu-ratio-num actual)))
 	     (delta-val (cond ((and (<= range-min actual-num) (<= actual-num range-max)) 0)
 			      ((< range-max actual-num)
 			       (if (eq polarity 'atleast)
@@ -1015,9 +1018,9 @@ When called repeatedly, scroll the window that is displaying the buffer."
   (message "goal is %s" goal)
   (let ((result (copy-org-balance-goal goal)))
     (setf (org-balance-goal-numer-min result)
-	  (org-balance-scale-valu factor (org-balance-goal-numer-min result)))
+	  (scale-org-valu factor (org-balance-goal-numer-min result)))
     (setf (org-balance-goal-numer-max result)
-	  (org-balance-scale-valu factor (org-balance-goal-numer-max result)))
+	  (scale-org-valu factor (org-balance-goal-numer-max result)))
     (setf (org-balance-goal-text result) (format "%.2f * (%s)" factor (org-balance-goal-text goal)))
     result))
 
@@ -1108,42 +1111,51 @@ When called repeatedly, scroll the window that is displaying the buffer."
     (number ".012340" 0.01234)
     (number "1e-5" 1e-5)
     (number "1.35e5" 1.35e5)
-    (valu "$10.37" [cl-struct-org-balance-valu 10.37 $])
-    (valu "33" [cl-struct-org-balance-valu 33 item])
-    (valu "33 items" [cl-struct-org-balance-valu 33 items])
-    (valu "item" [cl-struct-org-balance-valu 1 item])
-    (valu "0" [cl-struct-org-balance-valu 0 item])
-    (valu "week" [cl-struct-org-balance-valu 1 week])
-    (valu-range "2-3 weeks" ([cl-struct-org-balance-valu 2 weeks] . [cl-struct-org-balance-valu 3 weeks]))
-    (valu-range "2-3" ([cl-struct-org-balance-valu 2 item] . [cl-struct-org-balance-valu 3 item]))
-;    (rxx-parse org-balance-valu-range-regexp "2-3")
+;    (valu "$10.37" [cl-struct-org-valu 10.37 $])
+    (valu "33" [cl-struct-org-valu 33 item])
+    (valu "33 items" [cl-struct-org-valu 33 items])
+    (valu "item" [cl-struct-org-valu 1 item])
+    (valu "0" [cl-struct-org-valu 0 item])
+    (valu "week" [cl-struct-org-valu 1 week])
+    (valu-range "2-3 weeks" ([cl-struct-org-valu 2 weeks] . [cl-struct-org-valu 3 weeks]))
+    (valu-range "2-3" ([cl-struct-org-valu 2 item] . [cl-struct-org-valu 3 item]))
+;    (rxx-parse org-valu-range-regexp "2-3")
 ;    (rxx-parse org-balance-goal-regexp "at least once every two weeks +- 11%")
     (goal "once a month"
-	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item]
-				      [cl-struct-org-balance-valu 1 month] nil nil "a" "once a month"])
+	  [cl-struct-org-balance-goal [cl-struct-org-valu 1 item] [cl-struct-org-valu 1 item]
+				      [cl-struct-org-valu 1 month] nil nil "a" "once a month"])
     (goal "at least 2-3 times a week"
-	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 2 times]
-				      [cl-struct-org-balance-valu 3 times]
-				      [cl-struct-org-balance-valu 1 week] atleast nil "a" "at least 2-3 times a week"])
+	  [cl-struct-org-balance-goal [cl-struct-org-valu 2 times]
+				      [cl-struct-org-valu 3 times]
+				      [cl-struct-org-valu 1 week] atleast nil "a" "at least 2-3 times a week"])
     (goal "at most 1200 dollars per year +- 100 dollars"
-	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1200 dollars] [cl-struct-org-balance-valu 1200 dollars]
-				      [cl-struct-org-balance-valu 1 year] atmost [cl-struct-org-balance-valu 100 dollars]
+	  [cl-struct-org-balance-goal [cl-struct-org-valu 1200 dollars] [cl-struct-org-valu 1200 dollars]
+				      [cl-struct-org-valu 1 year] atmost [cl-struct-org-valu 100 dollars]
 				      "per" "at most 1200 dollars per year +- 100 dollars"])
     (goal "at least once every two weeks +- 11%"
-	  [cl-struct-org-balance-goal [cl-struct-org-balance-valu 1 item] [cl-struct-org-balance-valu 1 item]
-				      [cl-struct-org-balance-valu 2 weeks] atleast 11
+	  [cl-struct-org-balance-goal [cl-struct-org-valu 1 item] [cl-struct-org-valu 1 item]
+				      [cl-struct-org-valu 2 weeks] atleast 11
 				      "every" "at least once every two weeks +- 11%"])))
 
 (defun org-balance-test-parsing ()
   (interactive)
   (let ((num-ok 0))
     (dolist (parse-test org-balance-parse-test-defs)
-      (let ((parse-result (rxx-parse
-			   (symbol-value
-			    (intern (concat "org-balance-" (symbol-name (first parse-test)) "-regexp")))
-			   (second parse-test))))
+      (message "parse-test is %s" parse-test)
+      (let* (rxx-prefix
+	     rxx-imports
+	     (dummy (rxx-start-module org-balance))
+	     (dummy (rxx-import org-valu number-name number number-range unit valu valu-range
+				valu-ratio))
+	     (dummy (message "prefix is %s import is %s" rxx-prefix rxx-imports))
+	     (the-symbol 
+			     (rxx-symbol (first parse-test)))
+	     (dummy (message "the-symbol is %s" the-symbol))
+	     (parse-result (rxx-parse
+			    (symbol-value the-symbol)
+			    (second parse-test))))
 	(unless (equal parse-result
-		     (third parse-test))
+		       (third parse-test))
 	  (message "failed test: %s %s" parse-test parse-result)
 	  (assert nil)))
       (incf num-ok))

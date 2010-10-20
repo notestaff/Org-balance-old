@@ -2863,3 +2863,6 @@ Also, an empty (or) form is allowed and translates to `rxx-never-match'.
     (re-search-forward "^$" nil 'move)
     (eval-region (point) (point-max))
     (kill-buffer (current-buffer))))
+(pp (macroexpand-all '  (elu-with org-balance-intervals intervals (from shift n)
+			  (assert (and (integerp i) (<= 0 i) (< i n)))
+			  (+ from (* i shift)))))
