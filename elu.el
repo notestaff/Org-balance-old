@@ -51,6 +51,15 @@ PREDICATE."
 Used for iterating over arguments that can be a list or a singleton value."
   (if (listp x) x (list x)))
 
+(defmacro elu-with-new-symbols (symbols &rest forms)
+  "Bind each symbol in SYMBOLS to a newly created uninterned symbol, and execute FORMS.  Useful for defining temp vars
+used in macros."
+  (declare (indent 1))
+  (append (list 'let (mapcar (lambda (symbol)
+			      (list symbol `(make-symbol ,(symbol-name symbol))))
+			    (elu-make-seq symbols)))
+	  forms))
+
 (defmacro elu-with (struct-type struct fields  &rest body)
   "Locally bind fields FIELDS of structure STRUCT of type STRUCT-TYPE (defined by `defstruct') for easy read-only access.
 FIELDS is a list of fields; each field is bound to a local variable of the same name, then BODY forms are executed.
@@ -66,7 +75,7 @@ then you could write
 
 Similar to WITH construct in Pascal."
   (declare (indent 3))
-  (let ((my-struct (make-symbol "my-struct")))
+  (elu-with-new-symbols my-struct
     (append (list 'let* (cons (list my-struct struct)
 			      (mapcar (lambda (field)
 					(list field
@@ -74,14 +83,6 @@ Similar to WITH construct in Pascal."
 								    "-" (symbol-name field))) my-struct))) fields)))
 	    body)))
 
-(defmacro elu-with-new-symbols (symbols &rest forms)
-  "Bind each symbol in SYMBOLS to a newly created uninterned symbol, and execute FORMS.  Useful for defining temp vars
-used in macros."
-  (declare (indent 1))
-  (append (list 'let (mapcar (lambda (symbol)
-			      (list symbol `(make-symbol ,(symbol-name symbol))))
-			    (elu-make-seq symbols)))
-	  forms))
 
 (defmacro* elu-do-seq ((var i seq &optional result) &rest body)
   "Iterate over a sequence as in `dolist', but giving access to the index of each item.
