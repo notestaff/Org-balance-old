@@ -359,6 +359,44 @@ remaining fields taking values from STRUCT.   CLAUSES has the form :field1 val1 
     s))
 
 
+(defun elu-add-to-list (list-var element &optional append compare-fn)
+  "Add ELEMENT to the value of LIST-VAR if it isn't there yet.
+The test for presence of ELEMENT is done with `equal',
+or with COMPARE-FN if that's non-nil.
+If ELEMENT is added, it is added at the beginning of the list,
+unless the optional argument APPEND is non-nil, in which case
+ELEMENT is added at the end.
+
+The return value is the new value of LIST-VAR.
+
+If you want to use `add-to-list' on a variable that is not defined
+until a certain package is loaded, you should put the call to `add-to-list'
+into a hook function that will be run only after loading the package.
+`eval-after-load' provides one way to do this.  In some cases
+other hooks, such as major mode hooks, can do the job.
+
+Taken from `add-to-list'.  Reimplemented here because XEmacs' version
+does not have the COMPARE-FN parameter.
+"
+  (if (cond
+       ((null compare-fn)
+	(member element (symbol-value list-var)))
+       ((eq compare-fn 'eq)
+	(memq element (symbol-value list-var)))
+       ((eq compare-fn 'eql)
+	(memql element (symbol-value list-var)))
+       (t
+	(let ((lst (symbol-value list-var)))
+	  (while (and lst
+		      (not (funcall compare-fn element (car lst))))
+	    (setq lst (cdr lst)))
+          lst)))
+      (symbol-value list-var)
+    (set list-var
+	 (if append
+	     (append (symbol-value list-var) (list element))
+	   (cons element (symbol-value list-var))))))
+
 (provide 'elu)
 
 ;;; elu.el ends here
