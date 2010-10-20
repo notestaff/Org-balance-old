@@ -80,7 +80,7 @@ used in macros."
   (declare (indent 1))
   (append (list 'let (mapcar (lambda (symbol)
 			      (list symbol `(make-symbol ,(symbol-name symbol))))
-			    symbols))
+			    (elu-make-seq symbols)))
 	  forms))
 
 (defmacro* elu-do-seq ((var i seq &optional result) &rest body)
