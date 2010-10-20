@@ -199,7 +199,8 @@ Returns the value of the last expression."
 (defun elu-assoc-val (key alist &optional error-message)
   "Looks up KEY in association list ALIST.  Unlike `assoc', returns the associated value rather than the associated pair.
 Also, converts key to a symbol if it is a string.
-If ERROR-MESSAGE is given, and the key is not in the list, throws an error with this message.
+If ERROR-MESSAGE is given, and the key is not in the list, throws an error with this message unless
+ERROR-MESSAGE is the symbol `nil-ok', in which case just return nil.
 "
   (let ((assoc-result (assoc (if (stringp key) (intern key) key) alist)))
     (if assoc-result (cdr assoc-result)
