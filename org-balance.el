@@ -64,16 +64,10 @@
 ;; Section: external dependencies
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(require 'time-date)
-(require 'org)
-(require 'org-clock)
-(require 'org-agenda)
-(require 'org-compat)
-(require 'org-macs)
-(require 'org-archive)
-(require 'elu)
-(require 'rxx)
 (eval-when-compile (require 'cl))
+(require 'elu)
+(elu-require time-date org org-clock org-agenda org-compat org-macs
+	     org-archive rxx)
 
 (rxx-start-module org-balance)
 
@@ -1081,23 +1075,13 @@ When called repeatedly, scroll the window that is displaying the buffer."
 (put 'org-balance-error 'error-conditions '(error org-balance-errors org-balance-error))
 (put 'org-balance-error 'error-message "org-balance error")
 
-(defun org-balance-assoc-val (key alist &optional error-message)
-  "Looks up KEY in association list ALIST.  Unlike `assoc', returns the associated value rather than the associated pair.
-Also, converts key to a symbol if it is a string.
-If ERROR-MESSAGE is given, and the key is not in the list, throws an error with this message.
-"
-  (let ((assoc-result (assoc (if (stringp key) (intern key) key) alist)))
-    (if assoc-result (cdr assoc-result)
-      (if (eq error-message 'nil-ok) nil
-	(signal 'org-balance-error
-		(list (if error-message error-message (format "key %s not in alist %s" key alist))))))))
 
 (defun org-balance-is-unit (unit)
-  (org-balance-assoc-val unit org-balance-unit2dim-alist 'nil-ok))
+  (elu-assoc-val unit org-balance-unit2dim-alist 'nil-ok))
 
 (defun org-balance-unit2dim (unit)
   "Given a unit, return the dimension that its measures"
-  (org-balance-assoc-val unit org-balance-unit2dim-alist))
+  (elu-assoc-val unit org-balance-unit2dim-alist))
 
 ;; var: org-balance-unit2base-alist - assoc list mapping each unit to how many base units are in it
 (defconst org-balance-unit2base-alist (apply 'append (mapcar 'cdr org-balance-units-with-plurals)))
@@ -1105,7 +1089,7 @@ If ERROR-MESSAGE is given, and the key is not in the list, throws an error with 
 (defun org-balance-unit2base (unit)
   "Return the number of base units in the given unit.  For each dimension we have a base unit in terms of which all other
 units are measured; for example, for time we use minutes."
-  (org-balance-assoc-val unit org-balance-unit2base-alist))
+  (elu-assoc-val unit org-balance-unit2base-alist))
 
 ;; Struct: org-balance-valu - a value together with a given unit of measurement, e.g., 5 hours. 
 (defstruct (org-balance-valu

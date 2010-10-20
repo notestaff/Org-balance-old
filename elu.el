@@ -189,13 +189,23 @@ Returns the value of the last expression."
 ;(defmacro elu-dbg (&rest exprs) (last exprs))
 
 (defmacro elu-safe-val (x)
-  "If X is bound then return the value of X, else return
-the symbol `unbound'." 
-  `(if (boundp (quote ,x)) ,x 'unbound))
+  "If X is bound then return the value of X, else return nil."
+  `(when (boundp (quote ,x)) ,x))
 
 (defun elu-ends-with (s end)
   "Test if S ends with END"
   (and (>= (length s) (length end)) (string= (substring s (- (length s) (length end))) end)))
+
+(defun elu-assoc-val (key alist &optional error-message)
+  "Looks up KEY in association list ALIST.  Unlike `assoc', returns the associated value rather than the associated pair.
+Also, converts key to a symbol if it is a string.
+If ERROR-MESSAGE is given, and the key is not in the list, throws an error with this message.
+"
+  (let ((assoc-result (assoc (if (stringp key) (intern key) key) alist)))
+    (if assoc-result (cdr assoc-result)
+      (if (eq error-message 'nil-ok) nil
+	(error
+	 (list (if error-message error-message (format "Key %s not in alist %s" key alist))))))))
 
 ;;;;;;;;;;;;;;;;;;;;
 
@@ -405,6 +415,12 @@ passed as LST.  See also `push'."
   `(progn
      (setq ,lst (append ,lst (list ,elt)))
      ,elt))
+
+(defmacro elu-require (&rest modules)
+  "Shorthand for requiring many modules in one command"
+  (cons 'progn
+	(mapcar (lambda (module) `(require (quote ,module)))
+		modules)))
 
 (provide 'elu)
 
