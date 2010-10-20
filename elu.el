@@ -397,6 +397,15 @@ does not have the COMPARE-FN parameter.
 	     (append (symbol-value list-var) (list element))
 	   (cons element (symbol-value list-var))))))
 
+(defmacro elu-push-end (elt lst)
+  "Push value ELT onto end of list LST, and return the ELT.
+Notice that this returns the new element, not the new list.
+Notice also that this is a macro that modifies the actual variable
+passed as LST.  See also `push'."
+  `(progn
+     (setq ,lst (append ,lst (list ,elt)))
+     ,elt))
+
 (provide 'elu)
 
 ;;; elu.el ends here
