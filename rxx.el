@@ -423,23 +423,35 @@ name of the module in which the aregexps are being defined.   So, if you do (rxx
 in larger regexps."
   `(defrxxconst rxx-prefix (when (quote ,prefix) (symbol-name (quote ,prefix)))))
 
+(defvar rxx-imports nil "Map from imported symbol to its module")
+
+(defmacro rxx-import (module &rest symbols)
+  "Import aregexp symbols SYMBOLS from module MODULE so they can be used
+without prefix."
+  (elu-with-new-symbols symbol
+  `(eval-and-compile
+     (dolist (,symbol ,symbols)
+       (push (cons ,symbol (symbol-name (quote ,module))) rxx-imports)))))
+
 (defmacro rxx-end-module (prefix)
   "End the specified module"
-  `(progn
-     (assert (equal (symbol-name (quote ,prefix)) rxx-prefix))
-     (rxx-start-module nil)))
+  `(eval-and-compile
+     (progn
+       (assert (equal (symbol-name (quote ,prefix)) rxx-prefix))
+       (rxx-start-module nil)
+       (setq rxx-imports nil))))
 
 (defun rxx-symbol (symbol &optional no-regexp)
   "If rxx prefix is defined (see `rxx-set-prefix'), and SYMBOL does not
 end with -regexp or -re, return the full name of the symbol (prefix-SYMBOL-regexp).
 If NO-REGEXP is non-nil, do not append the -regexp part and just prepend the prefix."
-  (if (and (boundp 'rxx-prefix) rxx-prefix
-	   (not (elu-ends-with (symbol-name symbol) "-regexp"))
-	   (not (elu-ends-with (symbol-name symbol) "-re")))
-      (intern (concat rxx-prefix "-" (symbol-name symbol) (if no-regexp "" "-regexp")))
-    symbol))
-
-(defvar rxx-modules nil)
+  (let ((prefix (or (elu-safe-val rxx-prefix)
+		    (elu-assoc-val symbol rxx-imports 'nil-ok))))
+    (if (and prefix
+	     (not (elu-ends-with (symbol-name symbol) "-regexp"))
+	     (not (elu-ends-with (symbol-name symbol) "-re")))
+	(intern (concat prefix "-" (symbol-name symbol) (if no-regexp "" "-regexp")))
+    symbol)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
