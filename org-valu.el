@@ -35,6 +35,12 @@
 
 (rxx-start-module org-valu)
 
+(defgroup org-valu nil
+  "Options for the org-valu package"
+  :tag "Org Balance"
+  :group 'org
+  :link '(url-link "http://sourceforge.net/projects/org-balance/"))
+
 (defrxxcustom org-valu-units
   (quote ((time (second . 0.0166666666667) (minute . 1) (min . 1) (hour . 60) (hr . 60) (day . 1440) (week . 10080)
 		(workweek . 7200) (month . 43200) (year . 525600))
@@ -251,15 +257,14 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   "A unit name.   See customization variable "
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-valu-unit2dim-alist)))))
 
-(defrxx valu
+(defrxx valu "Value with unit"
   ;; Either a number optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
   (or (sep-by blanks? (named-grp unit "$") number)
       (sep-by blanks number? unit)
       (sep-by blanks number unit?))
-  (new-org-valu (or number 1) (or unit "item"))
-  "value with unit")
+  (new-org-valu (or number 1) (or unit "item")))
 
 (defun parse-org-valu (valu-str)
   "Given a string representing a value with units, parse it into an org-valu structure."
@@ -268,6 +273,7 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
    (rxx-parse org-valu-valu-regexp valu-str)))
 
 (defrxx valu-range
+  "Value range"
   ;; Either a number range optionally followed by a unit (unit assumed to be "item" if not given),
   ;; or an optional number (assumed to be 1 if not given) followed by a unit.
   ;; But either a number or a unit must be given.
@@ -276,15 +282,11 @@ such as $5 into the canonical form `5 dollars'.  Each hook must take a string as
   (let ((number-range (or number-range (cons 1 1)))
 	(unit (or unit "item")))
     (cons (new-org-valu (car number-range) unit)
-	  (new-org-valu (cdr number-range) unit)))
-  "value range")
+	  (new-org-valu (cdr number-range) unit))))
 
-(defun parse-org-valu-range (valu-str)
-  "Given a string representing a value range with units, parse it into an org-valu structure."
-  (rxx-parse org-valu-valu-range-regexp valu-str))
-
-;; Struct: org-valu-ratio - a ratio of two valu's.
-(defstruct org-valu-ratio num denom
+(defstruct org-valu-ratio
+  "A ratio of two valus"
+  num denom
   ;; ratio- - the word from org-valu-ratio-words to use when printing the ratio.
   ratio-word)
 
