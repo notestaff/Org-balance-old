@@ -493,117 +493,41 @@ GRP-DEF can be an annotated regexp, a plain regexp, or a form to
 be recursively interpreted by `rxx'.  If it is an annotated
 regexp, you can call `rxx-match-val' after doing a match to get
 the parsed object matched by this named group."
-
-  ;
-  ; if the form is a symbol, and not one of the reserved ones in rx,
-  ; evaluate it as a variable.
-  ;
   (declare (special rxx-num-grps rxx-env))
   (rx-check form)
   (or
    (and (boundp 'rxx-replace-named-grps)
 	   (cdr-safe (assoc (second form) rxx-replace-named-grps)))
-  (let* ((grp-name (second form))
-	 (grp-def-raw (third form))
-	 (old-grp-defs (rxx-env-lookup grp-name rxx-env))
-	 (equiv-old-grp-defs
-	  (delq nil
-		(mapcar (lambda (old-grp-def)
-			  (when (or (null grp-def-raw)  (equal (rxx-info-form old-grp-def) grp-def-raw))
-			    old-grp-def))
-			old-grp-defs))))
-    (if (and nil equiv-old-grp-defs) (rxx-info-regexp (first equiv-old-grp-defs))
-      (let* ((grp-num (incf rxx-num-grps))
-	     (old-rxx-env rxx-env)
-	     (rxx-env (rxx-new-env old-rxx-env))  ;; within each named group, a new environment for group names
-	     (grp-def
-	      (or (and (symbolp grp-def-raw)
-		       (boundp (rxx-symbol grp-def-raw))
-		       (get-rxx-info (symbol-value (rxx-symbol grp-def-raw))))
-		  (and (eq (car-safe grp-def-raw) 'regexp)
-		       (get-rxx-info (second grp-def-raw)))
-
-		  ;;
-		  ;; change handlers for eval-regexp and regexp
-		  ;; to call regexp-opt-depth and increment
-		  ;; our "next grp number" as needed?
-		  ;;
-		  ;; (though, what if it's )
-		  ;;
-
-		  ;;
-		  ;; change form processing code to pass along
-		  ;; any rxx-infos found on inner code.
-		  ;; 
-		  ;; 
-		  ;;
-
-		  ;;
-		  ;; if underlying form has a parser -- i.e. is
-		  ;; a namegrp or a regexp
-		  ;;
-		  
-		  (and (eq (car-safe grp-def-raw) 'eval-regexp)
-		       (get-rxx-info (eval (second grp-def-raw))))
-
-		  ;; first recursively analyze the repeated form(s)
-		  ;; 
-		  
-		  (and nil (eq (car-safe grp-def-raw) 'zero-or-more)
-		       (make-rxx-info
-			:env (rxx-new-env) :form grp-def-raw
-			:parser
-			`(lambda (match)
-			   ;; so, you need to
-			  (let (found result
-				(num-repeats 0)
-				(one-copy
-				 (format "\\(%s\\)"(rxx-make-shy (rxx ,(second grp-def-raw)))))
-				(re ""))
-			    (save-match-data
-			      (while (not found)
-				(if (and (string-match re match)
-					 (= (match-beginning 0) 0)
-					 (= (match-end 0) (length match)))
-				    (progn
-				      (setq found t)
-				      (dotimes (i num-repeats)
-					(let ((ms (match-string (1+ i) match)))   ;; pass the string if search was on string
-					  (setq result (append result (list ms)))
-					)
-				      ))
-				  (setq re (concat re one-copy))
-				  (incf num-repeats)
-				  )
-			    ))
-			    result
-			    ))))
-		  (make-rxx-info :parser 'identity :env (rxx-new-env)
-				 :form (or grp-def-raw (error "Missing named group definition: %s" form)))))
-	     ;; generate the string representation of the regexp inside this named group.   note that any named
-	     ;; groups _inside_ this regexp will result in recursive calls from `rxx-to-string' back to
-	     ;; `rxx-process-named-grp', which will generate new unique numbered group numbers for these nested named
-	     ;; groups, and will record the group-name-to-group-number mapping in the rxx-env environment attached
-	     ;; to this named group.   Any parser function attached to this named group will be able to refer
-	     ;; to the parsed objects matched by these nested named groups using `rxx-match-val', which will look up
-	     ;; the mapping of nested group names to group numbers in the rxx-env environment created above for this
-	     ;; named group.
-	     (regexp-here (format "\\(%s\\)"
-				  (if (and (boundp 'rxx-disable-grps) (member grp-name rxx-disable-grps))
-				      (progn
-					(message "DISABLING %s" grp-name)
-					(rx-to-string (rxx-info-form grp-def))
-					".*")
-				    ;; here remove -any- shy groups around the whole thing.
-				    (rxx-remove-outer-shy-grps (rx-to-string (rxx-info-form grp-def) 'no-group))))))
-	(rxx-env-bind grp-name (make-rxx-info
-				:num grp-num
-				:parser (rxx-info-parser grp-def)
-				:env rxx-env
-				:regexp regexp-here
-				:form (rxx-info-form grp-def)) old-rxx-env)
-	regexp-here)))))
-
+   (let* ((grp-name (second form))
+	  (grp-def-raw (third form))
+	  (grp-num (incf rxx-num-grps))
+	  (old-rxx-env rxx-env)
+	  (rxx-env (rxx-new-env old-rxx-env))  ;; within each named group, a new environment for group names
+	  (grp-def
+	   (or (and (symbolp grp-def-raw)
+		    (boundp (rxx-symbol grp-def-raw))
+		    (get-rxx-info (symbol-value (rxx-symbol grp-def-raw))))
+	       (and (eq (car-safe grp-def-raw) 'regexp)
+		    (get-rxx-info (second grp-def-raw)))
+	       (and (eq (car-safe grp-def-raw) 'eval-regexp)
+		    (get-rxx-info (eval (second grp-def-raw))))
+	       (make-rxx-info :parser 'identity :env (rxx-new-env)
+			      :form (or grp-def-raw (error "Missing named group definition: %s" form)))))
+	  (regexp-here (format "\\(%s\\)"
+			       (if (and (boundp 'rxx-disable-grps) (member grp-name rxx-disable-grps))
+				   (progn
+				     (message "DISABLING %s" grp-name)
+				     (rx-to-string (rxx-info-form grp-def))
+				     ".*")
+				 ;; here remove -any- shy groups around the whole thing.
+				 (rxx-remove-outer-shy-grps (rx-to-string (rxx-info-form grp-def) 'no-group))))))
+     (rxx-env-bind grp-name (make-rxx-info
+			     :num grp-num
+			     :parser (rxx-info-parser grp-def)
+			     :env rxx-env
+			     :regexp regexp-here
+			     :form (rxx-info-form grp-def)) old-rxx-env)
+     regexp-here)))
 
 (defun rxx-process-named-backref (form)
   "Process the (named-backref GRP-NAME) form, when called from `rx-to-string'."
