@@ -63,6 +63,73 @@ macros. "
 
 ;; also make a version of elu-once, but one that works well with elisp. 
 
+(defun elu-every (cl-pred cl-seq &rest cl-rest)
+  "Return true if PREDICATE is true of every element of SEQ or SEQs.
+\n(fn PREDICATE SEQ...).
+Taken from `every'."
+  (if (or cl-rest (nlistp cl-seq))
+      (catch 'cl-every
+	(apply 'map nil
+	       (function (lambda (&rest cl-x)
+			   (or (apply cl-pred cl-x) (throw 'cl-every nil))))
+	       cl-seq cl-rest) t)
+    (while (and cl-seq (funcall cl-pred (car cl-seq)))
+      (setq cl-seq (cdr cl-seq)))
+    (null cl-seq)))
+
+(defvar *elu-gensym-counter* 0
+  "Number suffix to append to variable names generated
+by `elu-gensym'.")
+
+;;;###autoload
+(defun elu-gensym (&optional prefix)
+  "Generate a new uninterned symbol.
+The name is made by appending a number to PREFIX, default \"G\".
+Taken from `gensym'."
+  (let ((pfix (if (stringp prefix) prefix "G"))
+	(num (if (integerp prefix) prefix
+	       (prog1 *elu-gensym-counter*
+		 (setq *elu-gensym-counter* (1+ *elu-gensym-counter*))))))
+    (make-symbol (format "%s%d" pfix num))))
+
+(defmacro elu-with-gensyms (symbols &rest body)
+  "Execute BODY in a context where the variables in SYMBOLS are bound to
+fresh gensyms.  Adapted from URL http://www.emacswiki.org/emacs/macro-utils.el ."
+  (assert (elu-every 'symbolp symbols))
+  `(let ,(mapcar
+	  (lambda (symbol)
+	    (list symbol `(elu-gensym (symbol-name (quote ,symbol)))))
+	  symbols)
+    ,@body))
+
+(defmacro elu-once-only (symbols &rest body)
+  "Execute BODY in a context where the values bound to the variables in
+SYMBOLS are bound to fresh gensyms, and the variables in SYMBOLS are bound
+to the corresponding gensym.
+Adapted from URL http://www.emacswiki.org/emacs/macro-utils.el ."
+  (setq symbols (elu-make-seq symbols))
+  (assert (elu-every #'symbolp symbols))
+  (let ((gensyms (mapcar (lambda (x) (elu-gensym x)) symbols)))
+    `(elu-with-gensyms ,gensyms
+       (list 'let (elu-mapcar* #'list (list ,@gensyms) (list ,@symbols))
+        ,(elu-list* 'let (elu-mapcar* #'list symbols gensyms)
+           body)))))
+
+(defun elu-list* (arg &rest rest)   ; See compiler macro in cl-macs.el
+  "Return a new list with specified ARGs as elements, consed to last ARG.
+Thus, `(list* A B C D)' is equivalent to `(nconc (list A B C) D)', or to
+`(cons A (cons B (cons C D)))'.
+\n(fn ARG...)
+Taken from `list*'."
+  (cond ((not rest) arg)
+	((not (cdr rest)) (cons arg (car rest)))
+	(t (let* ((n (length rest))
+		  (copy (copy-sequence rest))
+		  (last (nthcdr (- n 2) copy)))
+	     (setcdr last (car (cdr last)))
+	     (cons arg copy)))))
+
+
 (defmacro elu-with (struct-type struct fields  &rest body)
   "Locally bind fields FIELDS of structure STRUCT of type STRUCT-TYPE (defined by `defstruct') for easy access.
 FIELDS is a list of fields; each field is aliased to a local variable of the same name, then BODY forms are executed.
@@ -78,14 +145,13 @@ then you could write
 
 Similar to WITH construct in Pascal."
   (declare (indent 3))
-  (elu-with-new-symbols my-struct
-    `(let ((,my-struct ,struct))
-       (symbol-macrolet
+  (elu-once-only struct
+    `(symbol-macrolet
 	   ,(mapcar (lambda (field)
 		      (list field
 			    (list (intern (concat (symbol-name (eval struct-type))
-						  "-" (symbol-name field))) my-struct))) fields)
-	 ,@body))))
+						  "-" (symbol-name field))) struct))) fields)
+	 ,@body)))
 
 
 (defmacro* elu-do-seq ((var i seq &optional result) &rest body)
@@ -143,6 +209,7 @@ for the replacement function definition."
 (defvar elu-progv-save)
 ;;;###autoload
 (defun elu-progv-before (syms values)
+  "Taken from `progv-before'."
   (while syms
     (push (if (boundp (car syms))
 		 (cons (car syms) (symbol-value (car syms)))
@@ -152,6 +219,7 @@ for the replacement function definition."
       (makunbound (pop syms)))))
 
 (defun elu-progv-after ()
+  "Taken from `progv-after'."
   (while elu-progv-save
     (if (consp (car elu-progv-save))
 	(set (car (car elu-progv-save)) (cdr (car elu-progv-save)))
@@ -164,7 +232,8 @@ The forms SYMBOLS and VALUES are evaluated, and must evaluate to lists.
 Each symbol in the first list is bound to the corresponding value in the
 second list (or made unbound if VALUES is shorter than SYMBOLS); then the
 BODY forms are executed and their result is returned.  This is much like
-a `let' form, except that the list of symbols can be computed at run-time."
+a `let' form, except that the list of symbols can be computed at run-time.
+Taken from `progv'."
   (declare (indent 2))
   (list 'let '((elu-progv-save nil))
 	(list 'unwind-protect
@@ -217,7 +286,8 @@ ERROR-MESSAGE is the symbol `nil-ok', in which case just return nil.
 
 (defun elu-groupby (z key-func)
   "Group items in a list by their key, using the specified key extractor.
-Return an a-list mapping keys to items with that key.  "
+Return an a-list mapping keys to items with that key. 
+Adapted from Python's itertools.groupby(). "
   (setq z (copy-sequence z))
   (setq z (sort z (lambda (x y) (< (funcall key-func x) (funcall key-func y)))))
   (let (result)
@@ -286,8 +356,6 @@ compatibility.
                 n (1+ n)
                 next (+ from (* n inc)))))
       (nreverse seq))))
-
-
 
 (defun elu-mapcar-many (cl-func cl-seqs)
   "Copy  of `cl-mapcar-many', used by `elu-mapcar'."
