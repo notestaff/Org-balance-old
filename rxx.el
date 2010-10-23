@@ -1061,14 +1061,18 @@ the parsed result in case of match, or nil in case of mismatch."
 
 
 (defun* rxx-parse-fwd (aregexps &optional bound partial-match-ok)
-  (let (ok-results error-results (aregexps (elu-make-seq aregexps)))
+  (let (ok-results nil-results error-results (aregexps (elu-make-seq aregexps)))
     (dolist (aregexp aregexps)
       (condition-case err
-	  (push (rxx-parse-fwd-one aregexp bound partial-match-ok) ok-results)
+	  (let ((result (rxx-parse-fwd-one aregexp bound partial-match-ok)))
+	    (if result
+		(push result ok-results)
+	      (push result nil-results)))
 	(error (push err error-results))))
     (if ok-results (first ok-results)
-      (let ((err (first error-results)))
-	(signal (car err) (cdr err))))))
+      (if nil-results nil
+	(let ((err (first error-results)))
+	  (signal (car err) (cdr err)))))))
 
 (defun rxx-parse-bwd (aregexp &optional bound partial-match-ok)
   "Match the current buffer against the given extended regexp, and return
