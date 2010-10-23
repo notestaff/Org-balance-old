@@ -351,4 +351,6 @@ TIME defaults to the current time."
   (assert (= from 1))
   (assert (= to 2)))
 
+;(rxx (or (& rxx-number-regexp rxx-unit-regexp?) (& rxx-number-regexp? rxx-unit-regexp)))
+
 (message "All rxx tests seem to have passed")

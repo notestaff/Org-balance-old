@@ -2866,3 +2866,38 @@ Also, an empty (or) form is allowed and translates to `rxx-never-match'.
 (pp (macroexpand-all '  (elu-with org-balance-intervals intervals (from shift n)
 			  (assert (and (integerp i) (<= 0 i) (< i n)))
 			  (+ from (* i shift)))))
+
+
+(pp (macroexpand-all '(elu-with 'elu-test s (a b) (+ a b))))
+
+(pp (macroexpand-all '(elu-once-only (a b) 'body)))
+
+(defmacro me-try (expr)
+  (elu-once-only (expr)
+		 `(* ,expr ,expr)))
+(pp (macroexpand-all '(me-try (+ 1 2))))
+
+
+
+(defmacro elu-with-gensyms (symbols &rest body)
+  "Execute BODY in a context where the variables in SYMBOLS are bound to
+fresh gensyms."
+  ;;(assert (every #'symbolp symbols))
+  `(let ,(elu-mapcar* 'list symbols '(lambda (symbol) (make-symbol (symbol-name symbol))))
+     ,@body))
+
+(defmacro elu-once-only (symbols &rest body)
+  "Execute BODY in a context where the values bound to the variables in
+SYMBOLS are bound to fresh gensyms, and the variables in SYMBOLS are bound
+to the corresponding gensym."
+  ;;(assert (every #'symbolp symbols))
+  (let ((gensyms (mapcar '(lambda (x) (make-symbol (concat "new-" (symbol-name x)))) symbols)))
+    `(elu-with-gensyms ,gensyms
+       (list 'let (elu-mapcar* #'list (list ,@gensyms) (list ,@symbols))
+        ,(elu-list* 'let (elu-mapcar* #'list symbols gensyms)
+           body)))))
+
+
+
+
+
