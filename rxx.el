@@ -1054,11 +1054,21 @@ the parsed result in case of match, or nil in case of mismatch."
   `(let (,var) (while (setq ,var (rxx-search-fwd ,(rxx-symbol aregexp) (not 'boundary) 'no-error))
 		 ,@forms)))
 
-(defun rxx-parse-fwd (aregexp &optional bound partial-match-ok)
+(defun rxx-parse-fwd-one (aregexp &optional bound partial-match-ok)
   (save-match-data
     (save-excursion
       (rxx-search-fwd aregexp bound (not 'noerror) partial-match-ok))))
 
+
+(defun* rxx-parse-fwd (aregexps &optional bound partial-match-ok)
+  (let (ok-results error-results (aregexps (elu-make-seq aregexps)))
+    (dolist (aregexp aregexps)
+      (condition-case err
+	  (push (rxx-parse-fwd-one aregexp bound partial-match-ok) ok-results)
+	(error (push err error-results))))
+    (if ok-results (first ok-results)
+      (let ((err (first error-results)))
+	(signal (car err) (cdr err))))))
 
 (defun rxx-parse-bwd (aregexp &optional bound partial-match-ok)
   "Match the current buffer against the given extended regexp, and return
