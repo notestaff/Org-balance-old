@@ -1074,7 +1074,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
 	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	      (error "No goal found at link taget"))
 	    (message "we are at %s" (point))
-	    (elu-map-vectors (apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
+	    (elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
 			     (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
 					    (org-balance-start-of-tags))))))) 
 
@@ -1091,7 +1091,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
 	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	      (error "No goal found at link taget"))
 	    (message "we are at %s" (point))
-	    (elu-map-vectors (apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
+	    (elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
 			     (rxx-parse-fwd (list org-balance-goal-prefix-with-spec2-regexp
 						  org-balance-goal-prefix-with-spec3-regexp)
 					    (org-balance-start-of-tags)))))))
