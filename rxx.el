@@ -132,7 +132,7 @@ compatibility.  Adapted from `org-re'."
 		      (lower "a-z") (upper "A-Z")
 		      (blank " \t") (ascii "\000-\127") (punct "\001-@[-`{-~")))
 	(while (string-match (concat "\\[:" (symbol-name (first repl)) ":\\]") re)
-	  (setq re (replace-match (second repl) 'fixedcase 'literal s))))))
+	  (setq re (replace-match (second repl) 'fixedcase 'literal re))))))
   (rxx-check-regexp-valid re))
 
 (defun rxx-remove-unneeded-shy-grps (re)
