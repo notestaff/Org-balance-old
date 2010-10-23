@@ -420,17 +420,26 @@ may be scoped in via RXX-OBJECT.  The annotated regexp must either be passed in 
   (declare (special rxx-object rxx-aregexp match-here))
   (rxx-match-aux (lambda () match-here)))
 
+(defun rxx-get-marker (pos)
+  "If searching within a string copied from the buffer,
+convert position within the string to buffer marker position"
+  (when (boundp 'rxx-marker)
+    (let ((m (copy-marker rxx-marker)))
+      (setq pos (set-marker m (+ (marker-position m) pos) (marker-buffer m)))))
+  pos)
+
 (defun rxx-match-beginning (grp-name &optional object aregexp)
   "Return the beginning position of the substring matched by named group GRP-NAME.  The annotated regexp must either be
 passed in via AREGEXP or scoped in via RXX-AREGEXP."
   (declare (special grp-num))
-  (rxx-match-aux (lambda () (match-beginning grp-num))))
+  (rxx-match-aux
+   (lambda () (rxx-get-marker (match-beginning grp-num)))))
 
 (defun rxx-match-end (grp-name &optional object aregexp)
   "Return the end position of the substring matched by named group GRP-NAME.  The annotated regexp must either be
 passed in via AREGEXP or scoped in via RXX-AREGEXP."
   (declare (special grp-num))
-  (rxx-match-aux (lambda () (match-end grp-num))))
+  (rxx-match-aux (lambda () (rxx-get-marker (match-end grp-num)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1060,7 +1069,7 @@ the parsed result in case of match, or nil in case of mismatch."
       (rxx-search-fwd aregexp bound (not 'noerror) partial-match-ok))))
 
 
-(defun* rxx-parse-fwd (aregexps &optional bound partial-match-ok)
+(defun* rxx-parse-fwd-old (aregexps &optional bound partial-match-ok)
   (let (ok-results nil-results error-results (aregexps (elu-make-seq aregexps)))
     (dolist (aregexp aregexps)
       (condition-case err
@@ -1073,6 +1082,26 @@ the parsed result in case of match, or nil in case of mismatch."
       (if nil-results nil
 	(let ((err (first error-results)))
 	  (signal (car err) (cdr err)))))))
+
+
+
+(defun* rxx-parse-fwd (aregexps &optional bound partial-match-ok)
+  (let (ok-results nil-results error-results (aregexps (elu-make-seq aregexps)))
+    (dolist (aregexp aregexps)
+      (condition-case err
+	  (let* ((rxx-marker (point-marker))
+		 (result (rxx-parse aregexp (buffer-substring-no-properties (point) (or bound (point-max)))
+				   partial-match-ok (not 'error-ok))))
+	    (if result
+		(push result ok-results)
+	      (push result nil-results)))
+	(error (push err error-results))))
+    (if ok-results (first ok-results)
+      (if nil-results nil
+	(let ((err (first error-results)))
+	  (signal (car err) (cdr err)))))))
+
+
 
 (defun rxx-parse-bwd (aregexp &optional bound partial-match-ok)
   "Match the current buffer against the given extended regexp, and return
