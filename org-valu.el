@@ -204,7 +204,7 @@ a newly created valu representing the difference of VALU1 and VALU2."
   "The string name of a number, for the few numbers often written as words.
 Parsed as the numeric value of the number."
   (eval-regexp (regexp-opt (mapcar 'symbol-name (mapcar 'car org-valu-number-names))))
-  (lambda (match) (cdr-safe (assoc-string match org-valu-number-names))))
+  (lambda (match) (cdr-safe (assoc (intern match) org-valu-number-names))))
 
 (defrxx number
   "A general number -- floating-point or integer.
