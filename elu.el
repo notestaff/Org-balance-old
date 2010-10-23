@@ -203,7 +203,16 @@ Copied from `mapcar*'.
 inside the code."
   (cons (if (featurep 'xemacs) 'progn 'with-no-warnings) forms))
 
+(defun elu-decompose-region (start end)
+  "Decompose text in the current region.
 
+When called from a program, expects two arguments,
+positions (integers or markers) specifying the region."
+  (interactive "r")
+  (let ((modified-p (buffer-modified-p))
+	(inhibit-read-only t))
+    (remove-text-properties start end '(composition nil))
+    (restore-buffer-modified-p modified-p)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
