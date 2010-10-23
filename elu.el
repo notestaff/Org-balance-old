@@ -501,7 +501,7 @@ does not have the COMPARE-FN parameter.
 	(member element (symbol-value list-var)))
        ((eq compare-fn 'eq)
 	(memq element (symbol-value list-var)))
-       ((eq compare-fn 'eql)
+       ((and (eq compare-fn 'eql) (fboundp 'memql))
 	(memql element (symbol-value list-var)))
        (t
 	(let ((lst (symbol-value list-var)))
