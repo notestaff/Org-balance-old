@@ -907,7 +907,8 @@ resource GOAL toward that goal in the period in each interval in INTERVALS.  Cal
 	      (save-restriction
 		(save-excursion
 		  (condition-case err
-		      (let* ((goal-spec (rxx-parse-fwd org-balance-goal-spec-regexp (org-balance-start-of-tags)))
+		      (let* ((goal-spec (rxx-parse-fwd (list org-balance-goal-spec2-regexp
+							     org-balance-goal-spec3-regexp) (org-balance-start-of-tags)))
 			     (prop-ratio (car goal-spec))
 			     (parsed-goal (cdr goal-spec)))
 			
@@ -1077,9 +1078,36 @@ When called repeatedly, scroll the window that is displaying the buffer."
 			     (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
 					    (org-balance-start-of-tags))))))) 
 
+(defrxx goal-or-link2
+  (& blanks? goal-link blanks?)
+  (progn
+      (save-excursion
+	(save-window-excursion
+	  (let ((org-link-search-must-match-exact-headline t))
+	    (goto-char (org-balance-goal-link-link goal-link))
+	    (org-open-at-point 'in-emacs))
+	  ;; move to where the parsed-goal is.
+	  ;; on the other hand, for "actual", here need to call to get the ratio.
+	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
+	      (error "No goal found at link taget"))
+	    (message "we are at %s" (point))
+	    (elu-map-vectors (apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
+			     (rxx-parse-fwd (list org-balance-goal-prefix-with-spec2-regexp
+						  org-balance-goal-prefix-with-spec3-regexp)
+					    (org-balance-start-of-tags)))))))
+
+(defrxx goal-or-link3
+  (& blanks? goal blanks?)
+  (make-vector (org-balance-intervals-n intervals) goal))
+
 (defrxx goal-spec (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link) blanks? tags?) (cons prop-ratio goal-or-link))
 
+(defrxx goal-spec2 (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link2) blanks? tags?) (cons prop-ratio goal-or-link2))
+(defrxx goal-spec3 (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link3) blanks? tags?) (cons prop-ratio goal-or-link3))
+
 (defrxx goal-prefix-with-spec (& blanks? goal-spec) (cdr goal-spec))
+(defrxx goal-prefix-with-spec2 (& blanks? goal-spec2) (cdr goal-spec2))
+(defrxx goal-prefix-with-spec3 (& blanks? goal-spec3) (cdr goal-spec3))
 
 (defun org-balance-remove-props ()
   (interactive)
@@ -1200,14 +1228,6 @@ When called repeatedly, scroll the window that is displaying the buffer."
 	      (message "%s tests ok, %s tests failed" num-ok num-failed))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-  (defrxx org-balance-goal-or-link2-regexp
-    (& blanks? (| (named-grp ichego goal) goal-link ) blanks?) 
-    (lambda (whole-match) 
-      (message "whole-match: %s goal: %s link: %s" whole-match ichego goal-link) 
-      (progn 
-	(list ichego goal-link))))
 
 
 (rxx-end-module org-balance)
