@@ -1139,7 +1139,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
     (number ".012340" 0.01234)
     (number "1e-5" 1e-5)
     (number "1.35e5" 1.35e5)
-;    (valu "$10.37" [cl-struct-org-valu 10.37 $])
+    (valu "$10.37" [cl-struct-org-valu 10.37 $])
     (valu "33" [cl-struct-org-valu 33 item])
     (valu "33 items" [cl-struct-org-valu 33 items])
     (valu "item" [cl-struct-org-valu 1 item])
