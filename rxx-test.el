@@ -344,12 +344,13 @@ TIME defaults to the current time."
      (equal (rxx-parse (rxx (sep-by blanks? "(" (sep-by (seq "," blanks?) (1+ num)) ")") num-list) "( 1, 2,3 )" )
 	    '(1 2 3)))))
 
-(defrxx an-rxx-num (1+ digit) string-to-number)
-(defrxx an-rxx-range (: (an-rxx-num from) "-" (an-rxx-num to)) struct)
-
-(elu-with 'an-rxx-range (rxx-parse an-rxx-range "1-2") (from to)
-  (assert (= from 1))
-  (assert (= to 2)))
+(unless (featurep 'xemacs)
+  (defrxx an-rxx-num (1+ digit) string-to-number)
+  (defrxx an-rxx-range (: (an-rxx-num from) "-" (an-rxx-num to)) struct)
+  
+  (elu-with 'an-rxx-range (rxx-parse an-rxx-range "1-2") (from to)
+    (assert (= from 1))
+    (assert (= to 2))))
 
 ;(rxx (or (& rxx-number-regexp rxx-unit-regexp?) (& rxx-number-regexp? rxx-unit-regexp)))
 
