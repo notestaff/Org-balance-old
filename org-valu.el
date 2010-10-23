@@ -190,7 +190,7 @@ a newly created valu representing the difference of VALU1 and VALU2."
 (defun scale-org-valu-vec (factor valu-vec)
   "Scale all valus in VALU-VEC by FACTOR"
   (message "scaling by %s: %s" factor valu-vec)
-  (elu-map-vectors (apply-partially 'scale-org-valu factor) valu-vec))
+  (elu-map-vectors (elu-apply-partially 'scale-org-valu factor) valu-vec))
 
 (put 'org-valu-parse-error 'error-conditions '(error org-valu-errors org-valu-parse-error))
 (put 'org-valu-parse-error 'error-message "org-valu: Could not parse")
