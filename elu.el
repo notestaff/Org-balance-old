@@ -207,12 +207,25 @@ inside the code."
   "Decompose text in the current region.
 
 When called from a program, expects two arguments,
-positions (integers or markers) specifying the region."
+positions (integers or markers) specifying the region.
+
+Taken from `decompose-region'."
   (interactive "r")
   (let ((modified-p (buffer-modified-p))
 	(inhibit-read-only t))
     (remove-text-properties start end '(composition nil))
     (restore-buffer-modified-p modified-p)))
+
+(defun elu-apply-partially (fun &rest args)
+  "Return a function that is a partial application of FUN to ARGS.
+ARGS is a list of the first N arguments to pass to FUN.
+The result is a new function which does the same as FUN, except that
+the first N arguments are fixed at the values with which this function
+was called.
+
+Taken from `apply-partially'."
+  (lexical-let ((fun fun) (args1 args))
+    (lambda (&rest args2) (apply fun (append args1 args2)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
