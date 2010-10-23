@@ -1207,6 +1207,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
 		  (find-file test-file)
 		  (widen)
 		  (goto-char (point-min))
+		  (org-mode)
 		  (org-balance-remove-props)
 		  (let ((goal-update-time (fourth regtest)))
 		    (org-balance-compute-goal-deltas2
@@ -1214,7 +1215,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
 							    (- (third regtest) (second regtest)) :shift 0)))
 		  (save-buffer)
 		  (if (zerop (call-process "diff" (not 'infile) (not 'destination) (not 'display)
-					   "-b" test-file ref-file))
+					   "-bBE" test-file ref-file))
 		      (progn
 			(incf num-ok)
 			(kill-buffer (current-buffer)))
