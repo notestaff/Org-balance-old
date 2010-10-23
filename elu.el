@@ -362,11 +362,14 @@ Used for iterating over arguments that can be a list or a singleton value."
   (if (listp x) x (list x)))
 
 (defmacro* elu-do-seq ((var i seq &optional result) &rest body)
-  "Iterate over a sequence as in `dolist', but giving access to the index of each item.
-The variable passed as I will get assigned the index of the current item on each iteration.
-Also, SEQ will be passed through `elu-make-seq'."
+  "For each element of SEQ, assign it to VAR and its index in SEQ to I and execute
+BODY; at the end, return RESULT.  Same as `dolist', but gives access to the index
+of each item, like the `enumerate' function in Python.
+Also, SEQ will be passed through `elu-make-seq', so if SEQ is a singleton we will
+iterate over just that item."
+  (declare (indent 3))
   `(let ((,i 0))
-     (dolist (,var (elu-make-seq ,seq))
+     (dolist (,var (elu-make-seq ,seq) ,result)
        (list ,@body (incf ,i)))))
 
 (defun elu-uniquify (lst &optional compare-fn)
