@@ -1217,7 +1217,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
 					   "-b" test-file ref-file))
 		      (progn
 			(incf num-ok)
-			(kill-buffer))
+			(kill-buffer (current-buffer)))
 		    (incf num-failed)
 		    (message "Failed test on %s" test-file)
 		    (show-all)
