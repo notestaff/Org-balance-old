@@ -227,6 +227,22 @@ Taken from `apply-partially'."
   (lexical-let ((fun fun) (args1 args))
     (lambda (&rest args2) (apply fun (append args1 args2)))))
 
+(defun elu-remove-list-of-text-properties (start end list-of-properties &optional object)
+  "Remove some properties from text from START to END.
+The third argument LIST-OF-PROPERTIES is a list of property names to remove.
+If the optional fourth argument OBJECT is a buffer (or nil, which means
+the current buffer), START and END are buffer positions (integers or
+markers).  If OBJECT is a string, START and END are 0-based indices into it.
+Return t if any property was actually removed, nil otherwise."
+  (if (featurep 'xemacs)
+      (remove-text-properties start end
+			      (apply 'append
+				     (mapcar
+				      (lambda (prop) (list prop nil))
+				      list-of-properties))
+			      object)
+    (remove-list-of-text-properties start end list-of-properties object)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; Section: Debugging helpers

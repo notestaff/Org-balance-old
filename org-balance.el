@@ -261,7 +261,7 @@ is not set (and is removed if it was set before and CLEAR-WHEN_DEFAULT is non-ni
 	    (org-entry-put nil prop (format "%s" val))))	
       (progn
 	(when (or (not is-default) clear-when-default)
-	  (remove-list-of-text-properties (point-at-bol) (point-at-eol) (list prop)))
+	  (elu-remove-list-of-text-properties (point-at-bol) (point-at-eol) (list prop)))
 	(unless is-default
 	  (put-text-property (point-at-bol) (point-at-eol) prop val))))))
 
