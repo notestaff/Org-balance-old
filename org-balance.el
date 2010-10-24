@@ -892,79 +892,6 @@ struct with fields for the property name and the link."
 	      (* 100 (/ delta-val (if (< range-max actual-num) goal-max goal-min)))))
 	(cons delta-val delta-percent)))))
 
-(defun* org-balance-compute-goal-deltas2 (&key goals intervals)
-  "For each goal, determine the difference between the actual and desired average daily expenditure of
-resource GOAL toward that goal in the period in each interval in INTERVALS.  Call the callback with the value.
-"
-  (declare (special goal-update-time))
-  (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0))
-    (save-excursion
-      (goto-char (point-min))
-      (save-restriction
-	(save-match-data
-	    ;; FIXOPT if goals specified, make regexp for them
-	  (rxx-do-search-fwd org-balance-goal-prefix-regexp nil
-	    (save-match-data
-	      (save-restriction
-		(save-excursion
-		  (condition-case err
-		      (let* ((goal-spec (rxx-parse-fwd (list org-balance-goal-spec2-regexp
-							     org-balance-goal-spec3-regexp) (org-balance-start-of-tags)))
-			     (prop-ratio (car goal-spec))
-			     (parsed-goal (cdr goal-spec)))
-			
-			(save-match-data (org-toggle-tag "goal_error" 'off))
-			;;
-			;; Compute the actual usage under this subtree, and convert to the same
-			;; units as the goal, so we can compare them.
-			;;
-			(let (delta-val-and-percent)
-			  (save-match-data
-			    (save-excursion
-			      (save-restriction
-				(outline-up-heading 1 'invisible-ok)
-				(when (string= (upcase (org-get-heading)) "GOALS")
-				  (outline-up-heading 1 'invisible-ok))
-				(org-narrow-to-subtree)
-				(goto-char (point-min))
-				(setq delta-val-and-percent
-				      (aref
-				       (org-balance-compute-delta
-					parsed-goal prop-ratio
-					(org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
-				       0)))))
-			  (let ((delta-val (car delta-val-and-percent))
-				(delta-percent (cdr delta-val-and-percent)))
-			    (cond ((< delta-val 0) (incf num-under))
-				  ((> delta-val 0) (incf num-over))
-				  ((= delta-val 0) (incf num-met)))
-			    (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
-			    (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
-			    ;; FIXME: include in goal_updated the period for which it was updated.
-			    (org-entry-put (point) "goal_updated"
-					   (format-time-string
-					    (org-time-stamp-format 'long 'inactive)
-					    (if (boundp 'goal-update-time) goal-update-time (current-time)))))))
-		    (error
-		     (unless (string= (upcase (org-get-heading)) "GOALS")
-		       (incf num-errors)
-		       (message "At %s: Error processing %s : %s " (point) (buffer-substring (point) (point-at-eol))
-				err)
-		       (save-match-data
-			 (org-toggle-tag "goal_error" 'on)
-			 (org-entry-delete nil "goal_delta_val")
-			 (org-entry-delete nil "goal_delta_percent")
-			 (org-entry-put (point) "goal_updated"
-					(format-time-string
-					 (org-time-stamp-format 'long 'inactive)
-					 (if (boundp 'goal-update-time) goal-update-time (current-time))))))
-		     nil)))))))))
-    (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
-
-(defun org-balance-do () (interactive)
-  (message "--------------------------------")
-  (org-balance-compute-goal-deltas2))
-
 
 (defun org-balance-save-amt-neglected (agenda-line)
   "Given an agenda line, save the 'neglect amount' value of the corresponding org entry
@@ -1119,6 +1046,78 @@ When called repeatedly, scroll the window that is displaying the buffer."
 	(org-delete-property-globally prop))
       (org-map-entries '(org-toggle-tag "goal_error" 'off) "+goal_error/!GOAL" 'file))))
 
+(defun* org-balance-compute-goal-deltas2 (&key goals intervals)
+  "For each goal, determine the difference between the actual and desired average daily expenditure of
+resource GOAL toward that goal in the period in each interval in INTERVALS.  Call the callback with the value.
+"
+  (declare (special goal-update-time))
+  (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0))
+    (save-excursion
+      (goto-char (point-min))
+      (save-restriction
+	(save-match-data
+	    ;; FIXOPT if goals specified, make regexp for them
+	  (rxx-do-search-fwd org-balance-goal-prefix-regexp nil
+	    (save-match-data
+	      (save-restriction
+		(save-excursion
+		  (condition-case err
+		      (let* ((goal-spec (rxx-parse-fwd (list org-balance-goal-spec2-regexp
+							     org-balance-goal-spec3-regexp) (org-balance-start-of-tags)))
+			     (prop-ratio (car goal-spec))
+			     (parsed-goal (cdr goal-spec)))
+			
+			(save-match-data (org-toggle-tag "goal_error" 'off))
+			;;
+			;; Compute the actual usage under this subtree, and convert to the same
+			;; units as the goal, so we can compare them.
+			;;
+			(let (delta-val-and-percent)
+			  (save-match-data
+			    (save-excursion
+			      (save-restriction
+				(outline-up-heading 1 'invisible-ok)
+				(when (string= (upcase (org-get-heading)) "GOALS")
+				  (outline-up-heading 1 'invisible-ok))
+				(org-narrow-to-subtree)
+				(goto-char (point-min))
+				(setq delta-val-and-percent
+				      (aref
+				       (org-balance-compute-delta
+					parsed-goal prop-ratio
+					(org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
+				       0)))))
+			  (let ((delta-val (car delta-val-and-percent))
+				(delta-percent (cdr delta-val-and-percent)))
+			    (cond ((< delta-val 0) (incf num-under))
+				  ((> delta-val 0) (incf num-over))
+				  ((= delta-val 0) (incf num-met)))
+			    (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
+			    (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
+			    ;; FIXME: include in goal_updated the period for which it was updated.
+			    (org-entry-put (point) "goal_updated"
+					   (format-time-string
+					    (org-time-stamp-format 'long 'inactive)
+					    (if (boundp 'goal-update-time) goal-update-time (current-time)))))))
+		    (error
+		     (unless (string= (upcase (org-get-heading)) "GOALS")
+		       (incf num-errors)
+		       (message "At %s: Error processing %s : %s " (point) (buffer-substring (point) (point-at-eol))
+				err)
+		       (save-match-data
+			 (org-toggle-tag "goal_error" 'on)
+			 (org-entry-delete nil "goal_delta_val")
+			 (org-entry-delete nil "goal_delta_percent")
+			 (org-entry-put (point) "goal_updated"
+					(format-time-string
+					 (org-time-stamp-format 'long 'inactive)
+					 (if (boundp 'goal-update-time) goal-update-time (current-time))))))
+		     nil)))))))))
+    (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
+
+(defun org-balance-do () (interactive)
+  (message "--------------------------------")
+  (org-balance-compute-goal-deltas2))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1131,9 +1130,9 @@ When called repeatedly, scroll the window that is displaying the buffer."
   '((inactive-timestamp "[2010-09-28 Tue 16:11]" 1285704660.0)
     (clock "		 CLOCK: [2010-09-07 Tue 21:07]--[2010-09-08 Wed 00:07] =>  3:00" (1283908020.0 . 1283918820.0))
     (closed "			 	CLOSED: [2009-08-27 Thu 11:58]" 1251388680.0)
-    (archive-loc "	 :ARCHIVE:  %s_archive::work archive"
-		 [cl-struct-org-balance-archive-loc "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-balance.el_archive"
-						    "work archive"])
+;    (archive-loc "	 :ARCHIVE:  %s_archive::work archive"
+;		 [cl-struct-org-balance-archive-loc "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-balance.el_archive"
+;						    "work archive"])
     (number "three" 3)
     (number "3." 3)
     (number "3.3737" 3.3737)
