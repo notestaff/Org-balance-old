@@ -471,8 +471,8 @@ without module name prefix."
 
 (defmacro rxx-end-module (prefix)
   "End the specified module."
-  `(eval-and-compile
-     (progn
+  (list (if (featurep 'xemacs) 'progn 'eval-and-compile)
+     `(progn
        (assert (equal (symbol-name (quote ,prefix)) rxx-prefix))
        (rxx-start-module nil)
        (setq rxx-imports nil))))
@@ -891,7 +891,7 @@ See docstring of macro `rxx' for the meaning of these three arguments.
 	      descr (nth 2 args))))
     
     (if (featurep 'xemacs)
-	`(defconst ,(rxx-symbol var) (rxx-to-string (quote ,form) (quote ,parser) ,(or descr "")) ,descr)
+	`(defconst ,(rxx-symbol var) (rxx-to-string (quote ,form) (quote ,parser) descr) ,(or descr ""))
       (let* ((aregexp (rxx-to-string form parser descr))
 	     struct-def)
 	(when (eq parser 'struct)
@@ -1002,7 +1002,7 @@ the parsed result in case of match, or nil in case of mismatch."
 	;; so, possibly, match each string.  (or only when rxx-longest-match is true?)
 	
       (if (not (string-match aregexp s))
-	  (unless error-ok (error "%s" error-msg))
+	  (unless error-ok (error "%s: No match" error-msg))
 	(let (no-parse)
 	  (unless partial-match-ok
 	    (unless (= (match-beginning 0) 0)
@@ -1091,8 +1091,9 @@ the parsed result in case of match, or nil in case of mismatch."
     (dolist (aregexp aregexps)
       (condition-case err
 	  (let* ((rxx-marker (point-marker))
-		 (result (rxx-parse aregexp (buffer-substring-no-properties (point) (or bound (point-max)))
-				   partial-match-ok (not 'error-ok))))
+		 (the-str (buffer-substring-no-properties (point) (or bound (point-max))))
+		 (result (rxx-parse aregexp the-str
+				    partial-match-ok (not 'error-ok))))
 	    (if result
 		(push result ok-results)
 	      (push result nil-results)))
