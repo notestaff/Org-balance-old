@@ -452,9 +452,10 @@ passed in via AREGEXP or scoped in via RXX-AREGEXP."
 (defmacro rxx-start-module (prefix)
   "Specify a prefix to be automatically prepended to aregexps defined by `defrxx'.  Typically this would be the
 name of the module in which the aregexps are being defined.   So, if you do (rxx-set-prefix my-module) then
-(defrxx val ...) defines aregexp named my-module-val-regexp; it can be referred to as simply `val' when used
+\(defrxx val ...) defines aregexp named my-module-val-regexp; it can be referred to as simply `val' when used
 in larger regexps."
-  `(defrxxconst rxx-prefix (when (quote ,prefix) (symbol-name (quote ,prefix)))))
+  `(defrxxconst rxx-prefix (when (quote ,prefix) (symbol-name (quote ,prefix)))
+     "Module name to prefix aregexp names with."))
 
 (defvar rxx-imports nil
   "Symbols imported from other modules using `rxx-import'.
@@ -890,7 +891,7 @@ See docstring of macro `rxx' for the meaning of these three arguments.
 	      descr (nth 2 args))))
     
     (if (featurep 'xemacs)
-	`(defconst ,(rxx-symbol var) (rxx-to-string (quote ,form) (quote ,parser) ,descr) ,descr)
+	`(defconst ,(rxx-symbol var) (rxx-to-string (quote ,form) (quote ,parser) ,(or descr "")) ,descr)
       (let* ((aregexp (rxx-to-string form parser descr))
 	     struct-def)
 	(when (eq parser 'struct)
@@ -915,7 +916,7 @@ to the specified DEPTH.   See description of the `recuse' form in
   (if (featurep 'xemacs)
     `(defconst ,(rxx-symbol var) (let ((rxx-recurs-depth ,depth)) (rxx-to-string (quote ,regexp)
 										 (quote ,parser) ,descr))
-       ,descr)
+       ,(or descr ""))
   `(defrxxconst ,var ,(let ((rxx-recurs-depth depth))
 			(rxx-to-string regexp parser descr)) ,descr)))
 
