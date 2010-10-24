@@ -896,6 +896,7 @@ struct with fields for the property name and the link."
   "For each goal, determine the difference between the actual and desired average daily expenditure of
 resource GOAL toward that goal in the period in each interval in INTERVALS.  Call the callback with the value.
 "
+  (declare (special goal-update-time))
   (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0))
     (save-excursion
       (goto-char (point-min))
@@ -1191,6 +1192,7 @@ When called repeatedly, scroll the window that is displaying the buffer."
 
 (defun org-balance-regtests ()
   (interactive)
+  (message "====================== org-balance regtests ===========================")
   (org-balance-test-parsing)
   (save-excursion
     (save-window-excursion
