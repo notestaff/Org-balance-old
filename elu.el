@@ -38,6 +38,21 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+;; Section: Functions defined here so they can be used in other definitions
+;;
+;; Logically, they belong in other sections of the code.
+;; They will be left in those sections in commented form.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(eval-and-compile
+  (defun elu-make-seq (x)
+    "Return X if X is a list, otherwise return (list X).
+Used for iterating over arguments that can be a list or a singleton value."
+    (if (listp x) x (list x))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 ;; Section: Common Lisp functions
 ;;
 ;; Functions taken or adapted from the `cl' package.  Putting them into
@@ -55,48 +70,50 @@ PREDICATE."
 	(push e result)))
     (nreverse result)))
 
-(defun elu-every (cl-pred cl-seq &rest cl-rest)
-  "Return true if PREDICATE is true of every element of SEQ or SEQs.
+(eval-and-compile
+  (defun elu-every (cl-pred cl-seq &rest cl-rest)
+    "Return true if PREDICATE is true of every element of SEQ or SEQs.
 \n(fn PREDICATE SEQ...).
 Taken from `every'."
-  (if (or cl-rest (nlistp cl-seq))
-      (catch 'cl-every
-	(apply 'map nil
-	       (function (lambda (&rest cl-x)
-			   (or (apply cl-pred cl-x) (throw 'cl-every nil))))
-	       cl-seq cl-rest) t)
-    (while (and cl-seq (funcall cl-pred (car cl-seq)))
-      (setq cl-seq (cdr cl-seq)))
-    (null cl-seq)))
+    (if (or cl-rest (nlistp cl-seq))
+	(catch 'cl-every
+	  (apply 'map nil
+		 (function (lambda (&rest cl-x)
+			     (or (apply cl-pred cl-x) (throw 'cl-every nil))))
+		 cl-seq cl-rest) t)
+      (while (and cl-seq (funcall cl-pred (car cl-seq)))
+	(setq cl-seq (cdr cl-seq)))
+      (null cl-seq)))
 
-(defvar *elu-gensym-counter* 0
-  "Number suffix to append to variable names generated
+  (defvar *elu-gensym-counter* 0
+    "Number suffix to append to variable names generated
 by `elu-gensym'.")
-
+  
 ;;;###autoload
-(defun elu-gensym (&optional prefix)
-  "Generate a new uninterned symbol.
+  (defun elu-gensym (&optional prefix)
+    "Generate a new uninterned symbol.
 The name is made by appending a number to PREFIX, default \"G\".
 Taken from `gensym'."
-  (let ((pfix (if (stringp prefix) prefix "G"))
-	(num (if (integerp prefix) prefix
-	       (prog1 *elu-gensym-counter*
-		 (setq *elu-gensym-counter* (1+ *elu-gensym-counter*))))))
-    (make-symbol (format "%s%d" pfix num))))
+    (let ((pfix (if (stringp prefix) prefix "G"))
+	  (num (if (integerp prefix) prefix
+		 (prog1 *elu-gensym-counter*
+		   (setq *elu-gensym-counter* (1+ *elu-gensym-counter*))))))
+      (make-symbol (format "%s%d" pfix num)))))
 
-(defun elu-list* (arg &rest rest)   ; See compiler macro in cl-macs.el
-  "Return a new list with specified ARGs as elements, consed to last ARG.
+(eval-and-compile
+  (defun elu-list* (arg &rest rest)   ; See compiler macro in cl-macs.el
+    "Return a new list with specified ARGs as elements, consed to last ARG.
 Thus, `(list* A B C D)' is equivalent to `(nconc (list A B C) D)', or to
 `(cons A (cons B (cons C D)))'.
 \n(fn ARG...)
 Taken from `list*'."
-  (cond ((not rest) arg)
-	((not (cdr rest)) (cons arg (car rest)))
-	(t (let* ((n (length rest))
-		  (copy (copy-sequence rest))
-		  (last (nthcdr (- n 2) copy)))
-	     (setcdr last (car (cdr last)))
-	     (cons arg copy)))))
+    (cond ((not rest) arg)
+	  ((not (cdr rest)) (cons arg (car rest)))
+	  (t (let* ((n (length rest))
+		    (copy (copy-sequence rest))
+		    (last (nthcdr (- n 2) copy)))
+	       (setcdr last (car (cdr last)))
+	       (cons arg copy))))))
 
 ;;; Support for `progv': copied from `cl' package to avoid runtime dependence on it.
 (defvar elu-progv-save)
@@ -134,6 +151,7 @@ Taken from `progv'."
 	      (list* 'progn (list 'elu-progv-before symbols values) body)
 	      '(elu-progv-after))))
 
+(eval-and-compile
 (defun elu-mapcar-many (cl-func cl-seqs)
   "Copy  of `cl-mapcar-many', used by `elu-mapcar*'.
 
@@ -186,7 +204,7 @@ Copied from `mapcar*'.
 	  (while (and cl-x cl-y)
 	    (push (funcall cl-func (pop cl-x) (pop cl-y)) cl-res))
 	  (nreverse cl-res)))
-    (mapcar cl-func cl-x)))
+    (mapcar cl-func cl-x))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -209,12 +227,12 @@ inside the code."
 When called from a program, expects two arguments,
 positions (integers or markers) specifying the region.
 
-Taken from `decompose-region'."
+Adapted from `decompose-region'."
   (interactive "r")
   (let ((modified-p (buffer-modified-p))
 	(inhibit-read-only t))
     (remove-text-properties start end '(composition nil))
-    (restore-buffer-modified-p modified-p)))
+    (set-buffer-modified-p modified-p)))
 
 (defun elu-apply-partially (fun &rest args)
   "Return a function that is a partial application of FUN to ARGS.
@@ -366,9 +384,7 @@ remaining fields taking values from STRUCT.   CLAUSES has the form :field1 val1 
 (defun elu-trim-whitespace (s)
   "Trim trailing and leading whitespace from string"
   (save-match-data
-    (replace-regexp-in-string
-     (rx (or (seq string-start (zero-or-more whitespace))
-	     (seq (zero-or-more whitespace) string-end)))
+    (replace-regexp-in-string "\\(\\`\\s-*\\\\)|\\(*\\'\\)"
      "" (if (symbolp s) (symbol-name s) s))))
 
 (defun elu-not-blank (s)
@@ -394,10 +410,11 @@ remaining fields taking values from STRUCT.   CLAUSES has the form :field1 val1 
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun elu-make-seq (x)
-  "Return X if X is a list, otherwise return (list X).
-Used for iterating over arguments that can be a list or a singleton value."
-  (if (listp x) x (list x)))
+; (eval-and-compile
+;   (defun elu-make-seq (x)
+;     "Return X if X is a list, otherwise return (list X).
+; Used for iterating over arguments that can be a list or a singleton value."
+;     (if (listp x) x (list x))))
 
 (defmacro* elu-do-seq ((var i seq &optional result) &rest body)
   "For each element of SEQ, assign it to VAR and its index in SEQ to I and execute
