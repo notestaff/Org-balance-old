@@ -935,9 +935,9 @@ at compile-time, works exactly like a `defconst': defines
 SYMBOL as a constant value INITVALUE, and documents the created
 global variable with the optional DOCSTRING."
   (if (featurep 'xemacs)
-      `(defconst ,symbol ,initvalue ,docstring)
+      `(defconst ,symbol ,initvalue ,(or docstring ""))
     `(eval-and-compile
-       (defconst ,symbol ,initvalue ,docstring))))
+       (defconst ,symbol ,initvalue ,(or docstring "")))))
 
 (defmacro defrxxcustom (symbol initvalue docstring &rest args)
   "Defines a customization visible at compile-time, so that it
