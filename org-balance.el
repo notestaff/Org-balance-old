@@ -269,7 +269,7 @@ is not set (and is removed if it was set before and CLEAR-WHEN_DEFAULT is non-ni
   "Delete either text or org property globally from all entries."
     (if (stringp prop)
 	(org-delete-property-globally prop)
-      (remove-list-of-text-properties (point-min) (point-max) (list prop))))
+      (elu-remove-list-of-text-properties (point-min) (point-max) (list prop))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
