@@ -7,7 +7,7 @@
 
 (defun run-tests ()
   (message "org-version=%s" org-version)
-  (dolist (f '(elu rxx org-valu org-balance))
+  (dolist (f '(elu rxx rxx-test org-valu org-balance))
     (message "compiling %s" f)
     (byte-compile-file (concat (symbol-name f) ".el") 'load))
   (org-balance-regtests))
