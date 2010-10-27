@@ -333,12 +333,12 @@ TIME defaults to the current time."
 
   (assert (equal (rxx-parse rxx-expr3 "(+ 1 (* 2 3))") 7))
 
-(unless (featurep 'xemacs)
-  (when t
-    (assert (equal
-	     (rxx-parse (rxx (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list) "1. .2    \t3.4 ")
-	     '(1 0.2 3.4)))))
-  
+(defrxx rxx-list-regexp (zero-or-more (seq (named-grp areg rxx-number-regexp) whitespace)) areg-list)
+
+(assert (equal
+	 (rxx-parse rxx-list-regexp  "1. .2    \t3.4 ")
+	 '(1 0.2 3.4)))
+ 
 (let ((rxx-prefix "rxx-test"))
   (defrxx num digits string-to-number)
   (assert
