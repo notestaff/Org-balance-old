@@ -1,0 +1,2 @@
+rm -f *.elc
+emacs -batch -l all-tests.el -f run-tests
