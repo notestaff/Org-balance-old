@@ -192,8 +192,7 @@ kill any backrefs!  Adapted from `regexp-opt-depth'."
     ;; remove unnumbered, non-shy groups.
     (if (featurep 'xemacs)
 	(while (and (string-match "\\\\(\\([^?]\\)" regexp)
-		    (rxx-subregexp-context-p regexp (match-beginning 0))
-		    )
+		    (rxx-subregexp-context-p regexp (match-beginning 0)))
 	  (setq regexp (replace-match "\\(?:\\1" 'fixedcase (not 'literal) regexp)))
     (while (and (string-match "\\\\(\\(\\)[^?]" regexp)
 		(rxx-subregexp-context-p regexp (match-beginning 0)))
@@ -244,15 +243,6 @@ Fields:
 
 (defstruct rxx regexp info)
 
-(defun put-rxx-info (regexp rxx-info)
-  "Put rxx-info on a regexp string, replacing any already there.
-This creates an aregexp (annotated regexp).
-Return the annotated regexp."
-  (put-text-property 0 (length regexp) 'rxx rxx-info regexp)
-  (when (featurep 'xemacs)
-      (put regexp 'rxx rxx-info))
-  (make-rxx :regexp regexp :info rxx-info))
-
 (defun get-rxx-info (aregexp)
   "Extract rxx-info from regexp string AREGEXP,
 if there, otherwise return nil."
@@ -281,7 +271,7 @@ We represent the environment as an alist.  The alist always has
 at least one cell; this lets us add entries to an environment
 that is bound (pointed to) by several lisp symbols, without
 having to find and rebind all the symbols."
-  (list (cons nil parent-env)))
+  (list (cons nil nil)))
 
 (defun rxx-parent-env (rxx-env)
   "Return the parent environment of the environment RXX-ENV."
@@ -914,35 +904,29 @@ See docstring of macro `rxx' for the meaning of these three arguments.
 	      parser (nth 1 args)
 	      descr (nth 2 args))))
     
-    (if (featurep 'xemacs)
-	`(defconst ,(rxx-symbol var) (rxx-to-string (quote ,form) (quote ,parser) ,descr) ,(or descr ""))
-      (let* ((aregexp (rxx-to-string form parser descr))
-	     struct-def)
-	(when (eq parser 'struct)
-	  (let* ((rxx-info (get-rxx-info aregexp))
-		 (struct-name (symbol-name (rxx-symbol var 'no-regexp)))
-		 (grps (rxx-env-groups (rxx-info-env rxx-info))))
-	    (setf (rxx-info-parser rxx-info)
-		  (cons (intern (concat "make-" struct-name))
-			(apply 'append (mapcar (lambda (field) (list (intern (concat ":" (symbol-name field)))
-								     field))
-					       grps))))
-	    (setq struct-def
-		  `(defstruct ,(intern struct-name) ,(or descr "Parsed regexp")
-		      ,@grps))))
-	(list 'progn struct-def
-	      `(defrxxconst ,(rxx-symbol var) ,aregexp ,descr))))))
+    (let* ((aregexp (rxx-to-string form parser descr))
+	   struct-def)
+      (when (eq parser 'struct)
+	(let* ((rxx-info (get-rxx-info aregexp))
+	       (struct-name (symbol-name (rxx-symbol var 'no-regexp)))
+	       (grps (rxx-env-groups (rxx-info-env rxx-info))))
+	  (setf (rxx-info-parser rxx-info)
+		(cons (intern (concat "make-" struct-name))
+		      (apply 'append (mapcar (lambda (field) (list (intern (concat ":" (symbol-name field)))
+								   field))
+					     grps))))
+	  (setq struct-def
+		`(defstruct ,(intern struct-name) ,(or descr "Parsed regexp")
+		   ,@grps))))
+      (list 'progn struct-def
+	    `(defrxxconst ,(rxx-symbol var) ,aregexp ,descr)))))
 
 (defmacro defrxxrecurse (depth var regexp &optional parser descr)
   "Same as `defrxx', but instantiates any recursive invocations 
 to the specified DEPTH.   See description of the `recuse' form in
 `rxx'."
-  (if (featurep 'xemacs)
-    `(defconst ,(rxx-symbol var) (let ((rxx-recurs-depth ,depth)) (rxx-to-string (quote ,regexp)
-										 (quote ,parser) ,descr))
-       ,(or descr ""))
   `(defrxxconst ,var ,(let ((rxx-recurs-depth depth))
-			(rxx-to-string regexp parser descr)) ,descr)))
+			(rxx-to-string regexp parser descr)) ,descr))
 
 
 (defmacro rxxlet* (bindings &rest forms)
@@ -959,10 +943,8 @@ compile-time as well.  Other than making the value visible
 at compile-time, works exactly like a `defconst': defines
 SYMBOL as a constant value INITVALUE, and documents the created
 global variable with the optional DOCSTRING."
-  (if (featurep 'xemacs)
-      `(defconst ,symbol ,initvalue ,(or docstring ""))
-    `(eval-and-compile
-       (defconst ,symbol ,initvalue ,(or docstring "")))))
+  `(eval-and-compile
+     (defconst ,symbol ,initvalue ,(or docstring ""))))
 
 (defmacro defrxxcustom (symbol initvalue docstring &rest args)
   "Defines a customization visible at compile-time, so that it
