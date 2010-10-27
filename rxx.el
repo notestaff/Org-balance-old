@@ -909,7 +909,7 @@ See docstring of macro `rxx' for the meaning of these three arguments.
 	      descr (nth 2 args))))
     
     (if (featurep 'xemacs)
-	`(defconst ,(rxx-symbol var) (rxx-to-string (quote ,form) (quote ,parser) descr) ,(or descr ""))
+	`(defconst ,(rxx-symbol var) (rxx-to-string (quote ,form) (quote ,parser) ,descr) ,(or descr ""))
       (let* ((aregexp (rxx-to-string form parser descr))
 	     struct-def)
 	(when (eq parser 'struct)
