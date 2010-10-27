@@ -241,6 +241,9 @@ Fields:
 "
   form parser descr env num)
 
+
+(defstruct rxx regexp info)
+
 (defun put-rxx-info (regexp rxx-info)
   "Put rxx-info on a regexp string, replacing any already there.
 This creates an aregexp (annotated regexp).
@@ -248,15 +251,18 @@ Return the annotated regexp."
   (put-text-property 0 (length regexp) 'rxx rxx-info regexp)
   (when (featurep 'xemacs)
       (put regexp 'rxx rxx-info))
-  regexp)
+  (make-rxx :regexp regexp :info rxx-info))
 
 (defun get-rxx-info (aregexp)
   "Extract rxx-info from regexp string AREGEXP,
 if there, otherwise return nil."
-  (when (stringp aregexp)
-    (or (get-text-property 0 'rxx aregexp)
-	(and (featurep 'xemacs)
-	     (get aregexp 'rxx)))))
+  (when (rxx-p aregexp)
+    (rxx-info aregexp)))
+
+(defun rxx-regexp-string (aregexp)
+  (if (rxx-p aregexp) (rxx-regexp aregexp) aregexp))
+
+(defun rxx-opt-depth (aregexp) (regexp-opt-depth aregexp))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -549,8 +555,8 @@ the parsed object matched by this named group."
   (declare (special rxx-num-grps))
   (rx-check form)
   (let ((regexp (eval (second form))))
-    (incf rxx-num-grps (regexp-opt-depth regexp))
-    (concat "\\(?:" (rx-group-if regexp rx-parent) "\\)")))
+    (incf rxx-num-grps (rxx-opt-depth regexp))
+    (concat "\\(?:" (rx-group-if (rxx-regexp-string regexp) rx-parent) "\\)")))
 
 
 (defadvice rx-form (around rxx-form first (form &optional rx-parent) activate compile)
@@ -790,42 +796,42 @@ in a modular fashion using regular expressions.
 
 For detailed description, see `rxx'.
 "
-  (rxx-remove-unneeded-shy-grps
-   (let* ((rxx-env (rxx-new-env))
-	  (rxx-num-grps 0)
-	  rxx-or-branch
-	  rxx-or-child
-	  (rxx-or-num 0)
-	  ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
-	  (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
-				     (eval-regexp . (rxx-process-eval-regexp 1 1))
-				     (shy-grp . seq)
-				     (& . seq)
-				     (blanks . "\\(?:[[:blank:]]+\\)")
-				     (digits . "\\(?:[[:digit:]]+\\)")
-				     (space . "\\s-")
-				     (sep-by . (rxx-process-sep-by 1 nil))
-				     (recurse . (rxx-process-recurse 1 nil))
-				     (named-group . named-grp) (shy-group . shy-grp)
-				     (named-backref . (rxx-process-named-backref 1 1)))
-				   rx-constituents))
-	  
-	  ;; also allow named-group or ngrp or other names
-	  ;; var: regexp - the string regexp for the form.
-	  (regexp
-	   ;; whenever the rx-to-string call below encounters a (named-grp ) construct
-	   ;; in the form, it calls back to rxx-process-named-grp, which will
-	   ;; add a mapping from the group's name to rxx-grp structure
-	   ;; to rxx-name2grp.
-	   (rx-to-string form 'no-group))
-	  (rxx-info (make-rxx-info
-		     :form form :parser (or parser
-					    'identity)
-		     :env rxx-env :descr descr)))
-     (put-rxx-info regexp rxx-info)
-     (setq regexp (rxx-replace-posix regexp))
-     (assert (= rxx-num-grps (regexp-opt-depth regexp)))
-     (rxx-check-regexp-valid regexp))))
+  (let* ((rxx-env (rxx-new-env))
+	 (rxx-num-grps 0)
+	 rxx-or-branch
+	 rxx-or-child
+	 (rxx-or-num 0)
+	 ;; extend the syntax understood by `rx-to-string' with named groups and backrefs
+	 (rx-constituents (append '((named-grp . (rxx-process-named-grp 1 nil))
+				    (eval-regexp . (rxx-process-eval-regexp 1 1))
+				    (shy-grp . seq)
+				    (& . seq)
+				    (blanks . "\\(?:[[:blank:]]+\\)")
+				    (digits . "\\(?:[[:digit:]]+\\)")
+				    (space . "\\s-")
+				    (sep-by . (rxx-process-sep-by 1 nil))
+				    (recurse . (rxx-process-recurse 1 nil))
+				    (named-group . named-grp) (shy-group . shy-grp)
+				    (named-backref . (rxx-process-named-backref 1 1)))
+				  rx-constituents))
+	 
+	 ;; also allow named-group or ngrp or other names
+	 ;; var: regexp - the string regexp for the form.
+	 (regexp
+	  ;; whenever the rx-to-string call below encounters a (named-grp ) construct
+	  ;; in the form, it calls back to rxx-process-named-grp, which will
+	  ;; add a mapping from the group's name to rxx-grp structure
+	  ;; to rxx-name2grp.
+	  (rxx-remove-unneeded-shy-grps
+	   (rxx-replace-posix (rx-to-string form 'no-group))))
+	 (rxx-info (make-rxx-info
+		    :form form :parser (or parser
+					   'identity)
+		    :env rxx-env :descr descr)))
+    (assert (= rxx-num-grps (regexp-opt-depth regexp)))
+    (rxx-check-regexp-valid regexp)
+    (make-rxx :regexp regexp :info rxx-info)
+    ))
 
 (defun in-rxx ()
   "Test if we're in rxx, i.e. if we got here through a call
@@ -1019,7 +1025,7 @@ the parsed result in case of match, or nil in case of mismatch."
 	;; if partial match ok, longer partial match is generally better.
 	;; so, possibly, match each string.  (or only when rxx-longest-match is true?)
 	
-      (if (not (string-match aregexp s))
+      (if (not (string-match (rxx-regexp aregexp) s))
 	  (unless error-ok (error "%s: No match" error-msg))
 	(let (no-parse)
 	  (unless partial-match-ok
@@ -1044,7 +1050,7 @@ the parsed result in case of match, or nil in case of mismatch."
 				(if (and bound (>= bound old-point) (< (- bound old-point) 100))
 				    (buffer-substring old-point bound)
 				  "buffer text") (rxx-info-form rxx-info))))
-	(if (not (re-search-forward aregexp bound 'noerror))
+	(if (not (re-search-forward (rxx-regexp aregexp) bound 'noerror))
 	    (unless noerror (error "%s" error-msg))
 	  (unless (or noerror partial-match-ok)
 	    (unless (= (match-beginning 0) old-point) (error "%s: match starts at %d" error-msg (match-beginning 0)))
@@ -1066,7 +1072,7 @@ the parsed result in case of match, or nil in case of mismatch."
 			       (if (and bound (>= bound old-point) (< (- bound old-point) 100))
 				   (buffer-substring old-point bound)
 				 "buffer text") aregexp)))
-	(if (not (re-search-backward aregexp bound 'noerror))
+	(if (not (re-search-backward (rxx-regexp aregexp) bound 'noerror))
 	    (unless noerror (error "%s" error-msg))
 	  (unless (or noerror partial-match-ok)
 	    (unless (= (match-beginning 0) old-point) (error "%s: match starts at %d" error-msg (match-beginning 0)))
@@ -1133,7 +1139,7 @@ the parsed result in case of match, or nil in case of mismatch."
     (save-excursion
       (let ((old-point (point))
 	    (rxx-info (or (get-rxx-info aregexp) (error "Need annotated regexp returned by `rxx'; got `%s'" aregexp))))
-	(if (and (re-search-backward aregexp bound 'noerror)
+	(if (and (re-search-backward (rxx-regexp aregexp) bound 'noerror)
 		 (or partial-match-ok
 		     (and (= (match-beginning 0) bound)
 			  (= (match-end 0) old-point))))

@@ -229,11 +229,11 @@ TIME defaults to the current time."
 (assert (equal (rxx-parse rxx-clock-range-regexp "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '(1283254980.0 . 1283276580.0)))
 (assert (equal (rxx-parse rxx-clock-range-regexp "CLOCK:[2010-08-31 Tue 07:43]--<2010-08-31 Tue 13:43>") '(1283254980.0 . 1283276580.0)))
 
-(defrxx rxx-clock-range-regexp2
+(defrxx rxx-clock-range2-regexp
   (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp))
   (cons (rxx-match-val (list 'from 'time (intern "..") (intern "..") 'to 'time)) to))
 
-(assert (equal (rxx-parse rxx-clock-range-regexp2 "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '("2010-08-31 Tue 13:43" . 1283276580.0)))
+(assert (equal (rxx-parse rxx-clock-range2-regexp "CLOCK:<2010-08-31 Tue 07:43>--<2010-08-31 Tue 13:43>") '("2010-08-31 Tue 13:43" . 1283276580.0)))
 
 ;(defconst rxx-clock-range-regexp3
 ;  (rxx (seq (0+ whitespace) (eval rxx-clock-string) (0+ whitespace) (named-grp from rxx-clock-regexp) (1+ "-") (named-grp to rxx-clock-regexp)
