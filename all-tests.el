@@ -9,6 +9,7 @@
   (message "org-version=%s" org-version)
   (dolist (f '(elu rxx rxx-test org-valu org-balance))
     (message "compiling %s" f)
-    (byte-compile-file (concat (symbol-name f) ".el") 'load))
+    (unless (byte-compile-file (concat (symbol-name f) ".el") 'load)
+      (error "Error compiling file %s" f)))
   (org-balance-regtests))
 
