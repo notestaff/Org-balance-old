@@ -557,6 +557,12 @@ passed as LST.  See also `push'."
      (setq ,lst (append ,lst (list ,elt)))
      ,elt))
 
+(defun elu-caaddr-safe (lst)
+  "Short for (car-safe (car-safe (cdr-safe (cdr-safe LST))))."
+  (car-safe (car-safe (cdr-safe (cdr-safe lst)))))
+  
+  
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; Section: Miscellaneous functions
