@@ -1,0 +1,176 @@
+
+Org-Balance Documentation
+
+* Introduction
+
+  org-balance is an extension of [[http://orgmode.org][Emacs Org mode]] for balancing your resources (time, money, etc) among your various
+  projects.  It will tell you when you spend too much or too little on some projects.  It is simple to use but
+  flexible.
+
+  It integrates with existing Org-mode facilities for [[http://orgmode.org/org.html#Clocking-work-time][clocking work time]], [[http://orgmode.org/org.html#Tracking-TODO-state-changes][tracking TODO state changes]], [[http://orgmode.org/org.html#Closing-items][closing items]], and
+  [[http://orgmode.org/org.html#Properties-and-Columns][assigning values to items]].  The only new thing you need to do is set, on some subtrees, /goals/ of the form "spend at
+  least 3 hours a week" or "complete at least one task per day" or "spend at most $100 per month".  Goals are set by adding
+  a special child node to a subtree, like this:
+
+#+BEGIN_HTML
+<pre>
+  * work
+    * open-source work
+      * GOAL clockedtime at least 3 hours a week
+      * Project A
+      * Project B
+        * ...
+</pre>
+#+END_HTML
+
+  You can then easily generate reports showing how well you are meeting your goals; e.g., an agenda showing your neglected
+  goals, highest-priority most-neglected goals first.
+
+  Note that "meeting a goal" here means not achieving some aim ("learn Chinese"), but consistently spending the desired amount
+  of time/money or consistently making measurable progress (completing tasks) towards that aim [fn:: Other possible terms
+  for "goals" as used here might be "spending targets", "resource allocations" or "constraints".].
+  In that sense, goals are like [[http://orgmode.org/org.html#Tracking-your-habits][Habits]].  However, goals are more
+  general: rather than being specific TODO items, goals are spending targets that you set for entire subtrees.
+  They can then be satisfied by any combination of items under a subtree, which gives you a lot of flexibility.
+  For example, you could have a goal of "spend five hours per week working on open-source projects".
+  You could have several different open-source projects under that headline, and time clocked working on any of them --
+  in any combination -- would count towards the goal.  You can then set more specific goals such as "work at least two
+  hours per week on project A".  Goals can also be specified in terms of other goals: you could say "out of the time alloted to
+  open-source, spend 40% of it on project A".
+
+  
+* Usage
+
+*** Specifying your goals
+
+	 A goal is specified as a child of a subtree root.   It specifies a goal for its parent.  In that sense, it is like a
+	 [[http://orgmode.org/org.html#Properties-and-Columns][property]] of the parent.  However, representing goals as full headlines lets you have multiple goals for a subtree
+	 (e.g. for time and for money spent), and let each goal have separate priorities and appear as separate entries
+	 in the agenda.
+
+***** Basic syntax
+	 	
+	 	The basic syntax is: =GOAL [variable] [at least|at most] valu [per] time-period.
+
+	 	Variable can be "clockedtime"; then valu specifies the amount of clocked time intersecting the given time period.
+	 	Any other variable's value is computed from the sum of entries CLOSED in that time period or for each change to
+	 	a DONE state in that period.   By default, each entry's value is 1, so the valu specifies the number of tasks
+	 	done in the period.   However, some tasks may be much more valuable than others.
+	 	So, if a task had a "done" property, that value is used instead of 1.
+	 	You can also change the default value by setting the property =default_done= and making it [[http://orgmode.org/org.html#Property-inheritance][heritable]].
+	 	Most commonly, you would set this to zero, and then give distinct values to individual tasks, where a default
+	 	value does not make sense.  For example, you could have a "spend" property for budgeting; make its default zero.
+	 	Whenever you spend an amount under a headline, make a task for it with the "spend" property set to the amount,
+	 	and close it.  This will record spending this much at this time.  The value can be in units such as dollars.
+		Or you could have unpleasantness of tasks, measured in frogs, and have a default of zero and mark some tasks as
+		unpleasant.
+
+	 	You can also include in the goal sum only tasks matching a certain condition.   E.g. tasks tagged unpleasant.
+	 	You could then also have an unpleasantness value.  E.g. in frogs (after "Eat a frog every day" book).
+
+***** More complex syntax
+
+******* Polarity
+******* Margins
+		  
+******* Goal dependencies
+
+		  - as fraction of other goal
+		  - setting the numerator and denominator from another goal
+		  - counting things from a subtree
+
+******* Balancing the children
+		  
+*** Checking your goals
+
+	 Each goal can be met, under-met or over-met.  You can use the agenda to show the list of goals in some or all of these
+	 states.
+
+	 The state is recorded as a property under the goal, then you can use normal tags/properties search, with custom
+	 sorting.
+
+	 
+	 
+  	 Or you could have a node for list of new poets and new musicians you want to try.   And a goal to take one a week.
+
+  	 Or unpleasant things.
+
+  	 In simplest usage, you can put a /goal/ on a subtree, such as:
+
+  	 goal_clockedtime: at least 3 hours per week
+
+  	 The goal is for a _rate_: how you spend a resource per time.   By expressing goals as rates you make comparisons
+  	 interchangeable.
+
+  	 You can then call org-balance commands to show goals that are not being met -- either as a sparse tree in the
+  	 current file, or as an agenda.  The agenda can be sorted, putting most-neglected goals first.
+
+  	 Note that you can put goals on broad categories of things, as well as on more concrete items.
+  	 You can also give goals relative in terms of other goals, e.g. .3 of parent goal.
+  	 You can even do .3 of actual time spent.
+
+  	 But you can also look at goals where you spend more time than needed.  This can help you find time
+  	 for goals that are shortchanged.   You can also list goals that _are_ being met, just to pat yourself on the back.
+
+  	 You can view a summary over any period, and it will be recalculated for that period.
+
+  	 Besides spent time, you can also track done things.
+
+  	 org-balance treats uniformly various resources, whether clockedtime, time passed, or resources attached to
+  	 done or closed commands.
+
+  	 this lets you do things like, show time spent per response received.   See which parts of your projects do
+  	 better for this ratio, and which do worse.  Show agenda sorted by such ratios.
+  	 (and possibly filtered by level.)
+
+
+*** points to make
+
+***** simple examples
+***** that for a given wall-time period, we have length of that period and clockedtime sum and
+		weighted sum of closed/done items in that period; and we can then check these ratios against any goals.
+  	 	
+* Installation
+
+  Download the files =org-balance.el= and =rxx.el=; put them into your =load-path=.   Put =(require 'org-balance)= in your
+  =.emacs=.
+  
+  Copy org-balance.el and rxx.el to your load-path.  Ideally, also byte-compile them (important for speed -- much of of cl macros).
+  Set or customize some vars.
+
+  Maybe, provide a makefile.
+
+  Maybe, include rxx as org-balance-utils.el .  or as org-balance-elisp-utils.el and org-balance-org-utils.el .
+  Though, rxx.el also makes sense as a standalone module.
+
+  That's it.   You can try the sample orgb-example-1.org and get some reports.
+  
+  
+* Configuring org-balance preferences
+
+  Put all these vars into the additional group, org-balance-vars?
+
+*** Possibly relevant org vars
+
+	 
+***** org-global-properties
+***** org-file-properties
+
+
+		
+***** org-todo-keywords
+		
+***** org-log-done-with-time
+***** org-log-done
+		
+***** org-clock-out-when-done
+		and other things in org-clock.el
+		
+  	 	
+  	 	
+
+  	 	
+
+  	 	
+  	 	
+  	 	
