@@ -239,7 +239,7 @@ Fields:
        `rxx-info' for the subgroup.
      NUM - the numbered group corresponding to to matches of this regexp (as would be passed to `match-string').
 "
-  form parser env num descr)
+  form parser descr env num)
 
 (defun put-rxx-info (regexp rxx-info)
   "Put rxx-info on a regexp string, replacing any already there.
