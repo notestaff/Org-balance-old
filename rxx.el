@@ -235,15 +235,11 @@ Fields:
 
    Fields describing the particular instantiation of the template:
 
-     REGEXP - the regexp string returned by `rx-to-string'.   This is a standard regexp as passed to `string-match' etc.
-        Note though, that this is only one concrete instantiation of FORM.  Saving FORM with the regexp lets us
-        instantiate new instances of the regexp, with new mappings of symbolic group names to numbered group numbers.
      ENV - environment for resolving references to named subgroups of this regexp.  Maps subgroup name to
        `rxx-info' for the subgroup.
      NUM - the numbered group corresponding to to matches of this regexp (as would be passed to `match-string').
-   
 "
-  form regexp parser env num descr)
+  form parser env num descr)
 
 (defun put-rxx-info (regexp rxx-info)
   "Put rxx-info on a regexp string, replacing any already there.
@@ -535,7 +531,6 @@ the parsed object matched by this named group."
 			     :num grp-num
 			     :parser (rxx-info-parser grp-def)
 			     :env rxx-env
-			     :regexp regexp-here
 			     :form (rxx-info-form grp-def)) old-rxx-env)
      regexp-here)))
 
@@ -641,10 +636,36 @@ Used for bottoming out bounded recursion (see `rxx-process-recurse').")
     (let ((rxx-recurs-depth (1- rxx-recurs-depth)))
       (rx-group-if (rxx-remove-unneeded-shy-grps (rx-to-string (second form) 'no-group)) '*))))
 
-(defadvice rx-or (around rxx-or first (form) activate compile)
-  "For bounded recursion, remove any OR clauses consisting of
+;; (defun rx-or (form)
+;;   "Parse and produce code from FORM, which is `(or FORM1 ...)'."
+;;   (rx-check form)
+;;   (rx-group-if
+;;    (if (memq nil (mapcar 'stringp (cdr form)))
+;;        (mapconcat (lambda (x) (rx-form x '|)) (cdr form) "\\|")
+;;      (regexp-opt (cdr form)))
+;;    (and (memq rx-parent '(: * t)) rx-parent)))
+
+(defadvice rx-or (around rxx-or first (form) )
+  "When called via `rxx-to-string', modify `rx-or' behavior
+as described below.
+
+For bounded recursion, remove any OR clauses consisting of
 `recurs' forms for which recursion has bottomed out. (See
-`rxx-parse-recurs' and `defrxxrecurse')."
+`rxx-parse-recurs' and `defrxxrecurse').  Formally, these `recurs'
+forms represent never-matching expressions when they bottom out;
+but simply removing them leads to a more compact result.
+
+Also, keep track of the current path through the OR clauses.
+This lets us disable particular OR clauses, for the purpose of
+splitting up a large regexp into an OR of more manageable chunks.
+
+Also, force each clause of the OR, as well as the whole expression,
+to be wrapped in shy groups; this can prevent unexpected behaviors.
+"
+  (if (not (in-rxx)) ad-do-it
+    
+    )
+  
   (unless (or (not (boundp 'rxx-env))
 	      (and (boundp 'rxx-recurs-depth) (> rxx-recurs-depth 0))
 	      (<= (length form) 2))
@@ -652,9 +673,7 @@ Used for bottoming out bounded recursion (see `rxx-process-recurse').")
 		(lambda (elem)
 		  (or (eq (car-safe elem) 'recurse)
 		      (and (eq (car-safe elem) 'named-grp)
-			   (eq (car-safe (car-safe
-					  (cdr-safe
-					   (cdr-safe elem)))) 'recurse))))
+			   (eq (elu-caaddr-safe elem) 'recurse))))
 			  form)))
   ad-do-it
   (when (boundp 'rxx-env)
@@ -802,8 +821,7 @@ For detailed description, see `rxx'.
 	  (rxx-info (make-rxx-info
 		     :form form :parser (or parser
 					    'identity)
-		     :env rxx-env :descr descr :regexp regexp
-		     )))
+		     :env rxx-env :descr descr)))
      (put-rxx-info regexp rxx-info)
      (setq regexp (rxx-replace-posix regexp))
      (assert (= rxx-num-grps (regexp-opt-depth regexp)))
