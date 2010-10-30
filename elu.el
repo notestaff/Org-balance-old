@@ -595,8 +595,8 @@ for the replacement function definition."
 	      bindings))
        ,@body)))
 
-(defmacro elu-safe-val (x)
-  "If X is bound then return the value of X, else return nil."
+(defmacro elu-when-bound (x)
+  "If the symbol X is bound then return the value of X, else return nil."
   `(when (boundp (quote ,x)) ,x))
 
 (defun elu-assoc-val (key alist &optional error-message)
