@@ -198,6 +198,10 @@ kill any backrefs!  Adapted from `regexp-opt-depth'."
 		(rxx-subregexp-context-p regexp (match-beginning 0)))
       (setq regexp (replace-match "?:" 'fixedcase 'literal regexp 1))))
     (rxx-check-regexp-valid regexp)))
+
+(defun rxx-group-if (regexp)
+  ""
+  )
       
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -241,7 +245,10 @@ Fields:
   form parser descr env num)
 
 
-(defstruct rxx regexp info)
+(defstruct rxx
+  "An annotated regexp: the combination of regexp string and information about
+how it was constructed (`rxx-info')."
+  regexp info)
 
 (defun get-rxx-info (aregexp)
   "Extract rxx-info from regexp string AREGEXP,
@@ -250,9 +257,13 @@ if there, otherwise return nil."
     (rxx-info aregexp)))
 
 (defun rxx-regexp-string (aregexp)
+  "If AREGEXP is a plain string regexp, return that; if it is
+an `rxx' structure, return the regexp within that."
   (if (rxx-p aregexp) (rxx-regexp aregexp) aregexp))
 
-(defun rxx-opt-depth (aregexp) (regexp-opt-depth aregexp))
+(defun rxx-opt-depth (aregexp)
+  "Return `regexp-opt-depth' of the regexp string in AREGEXP."
+  (regexp-opt-depth aregexp))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -341,7 +352,7 @@ passed in as AREGEXP or scoped in as RXX-AREGEXP. "
     grp-name
     (rxx-info-env
      (get-rxx-info
-      (or aregexp (when (boundp 'rxx-aregexp) rxx-aregexp)
+      (or aregexp (elu-when-bound rxx-aregexp)
 	  (error "The annotated regexp must be either passed in explicitly, or scoped in as `rxx-aregexp'")))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -373,7 +384,7 @@ to `match-string', `match-beginning' or `match-end'."
   (declare (special grp-name object aregexp rxx-object rxx-aregexp rxx-env))
   (save-match-data
     (let* ((rxx-env
-	    (if (boundp 'rxx-env) rxx-env
+	    (or (elu-when-bound rxx-env)
 	      (let ((aregexp (or aregexp (when (boundp 'rxx-aregexp) rxx-aregexp))))
 		(rxx-info-env
 		 (or
@@ -384,10 +395,12 @@ to `match-string', `match-beginning' or `match-end'."
 	    (delq nil
 		  (mapcar
 		   (lambda (grp-info)
-		     (let ((match (match-string (rxx-info-num grp-info)
-						(or object
-						    (when (boundp 'rxx-object) rxx-object)))))
-		       (when match (cons match grp-info))))
+		     (let ((grp-num (rxx-info-num grp-info)))
+		       (when grp-num
+			 (let ((match (match-string grp-num
+						    (or object
+							(elu-when-bound rxx-object)))))
+			   (when match (cons match grp-info))))))
 		   grp-infos))))
       (when matches-here
 	(unless (= (length matches-here) 1) (error "More than one match to group %s: %s" grp-name matches-here))
@@ -474,7 +487,7 @@ without module name prefix."
 end with -regexp or -re, return the full name of the symbol (prefix-SYMBOL-regexp).
 If NO-REGEXP is non-nil, do not append the -regexp part and just prepend the prefix."
   (let ((prefix (or (elu-assoc-val symbol rxx-imports 'nil-ok)
-		    (elu-safe-val rxx-prefix))))
+		    (elu-when-bound rxx-prefix))))
     (if (and prefix
 	     (not (elu-ends-with (symbol-name symbol) "-regexp"))
 	     (not (elu-ends-with (symbol-name symbol) "-re")))
@@ -586,7 +599,7 @@ number to which it corresponds."
 (defadvice rx-regexp (after rxx-regexp first (form) activate compile)
   "Update our count of non-shy subgroups to include any subgroups of the
 regexp inserted here."
-  (when (boundp 'rxx-num-grps) (incf rxx-num-grps (regexp-opt-depth (second form)))))
+  (when (boundp 'rxx-num-grps) (incf rxx-num-grps (rxx-opt-depth (second form)))))
 
 (defun rxx-process-sep-by (form)
   "Process the sep-by form, which looks like (sep-by separator ....)"
@@ -659,21 +672,24 @@ Also, force each clause of the OR, as well as the whole expression,
 to be wrapped in shy groups; this can prevent unexpected behaviors.
 "
   (if (not (in-rxx)) ad-do-it
-    
+    (let (clause-results)
+      (elu-do-seq (clause i (cdr form))
+	  (let ((rxx-or-branch (cons rxx-or-num rxx-or-branch))
+		(rxx-or-child (cons i rxx-or-child)))
+	    (push (rx-group-if (rx-form clause '|) '*) clause-results)
+			       ))
     )
   
-  (unless (or (not (boundp 'rxx-env))
-	      (and (boundp 'rxx-recurs-depth) (> rxx-recurs-depth 0))
-	      (<= (length form) 2))
-    (setq form (elu-remove-if
-		(lambda (elem)
-		  (or (eq (car-safe elem) 'recurse)
-		      (and (eq (car-safe elem) 'named-grp)
-			   (eq (elu-caaddr-safe elem) 'recurse))))
-			  form)))
-  ad-do-it
-  (when (boundp 'rxx-env)
-    (setq ad-return-value (rx-group-if ad-return-value '*))))
+  ;; (unless (or (not (boundp 'rxx-env))
+  ;; 	      (and (boundp 'rxx-recurs-depth) (> rxx-recurs-depth 0))
+  ;; 	      (<= (length form) 2))
+  ;;   (setq form (elu-remove-if
+  ;; 		(lambda (elem)
+  ;; 		  (or (eq (car-safe elem) 'recurse)
+  ;; 		      (and (eq (car-safe elem) 'named-grp)
+  ;; 			   (eq (elu-caaddr-safe elem) 'recurse))))
+  ;; 			  form)))
+  ))
 
 (defvar rx-greedy-flag)
 
@@ -700,8 +716,8 @@ return the list of parsed numbers, omitting the blanks.   See also
 	  (memq (first form) '(optional opt zero-or-one ? ??)))
       ad-do-it
     (let* ((wrap-grp-num (when (boundp 'rxx-num-grps) (incf rxx-num-grps)))
-	   (rxx-num-grps (when (boundp 'rxx-num-grps) rxx-num-grps))
-	   (parent-rxx-env (when (boundp 'rxx-env) rxx-env))
+	   (rxx-num-grps (elu-when-bound rxx-num-grps))
+	   (parent-rxx-env (elu-when-bound rxx-env))
 	   (rxx-env (rxx-new-env parent-rxx-env))
 	   (sep-by-form (when (eq (car-safe (cdr-safe form)) :sep-by) (third form)))
 	   (have-sep-by (not (null sep-by-form)))
@@ -742,7 +758,7 @@ return the list of parsed numbers, omitting the blanks.   See also
 	  (elu-dbg grp-name rxx-infos)
 	  (let ((new-parser
 		 `(lambda (match-str)
-		    (let ((rxx-prefix ,(when (boundp 'rxx-prefix) rxx-prefix)))
+		    (let ((rxx-prefix ,(elu-when-bound rxx-prefix)))
 		      (elu-dbg match-str)
 		      (let ((repeat-form '(seq)) repeat-grp-names parse-result )
 			(while (not parse-result)
@@ -760,10 +776,9 @@ return the list of parsed numbers, omitting the blanks.   See also
 						    ,`(lambda (match-str)
 							(mapcar (lambda (repeat-grp-name)
 								  (rxx-match-val (list repeat-grp-name (quote ,grp-name))))
-								(when (boundp 'repeat-grp-names) repeat-grp-names))))
+								(elu-when-bound repeat-grp-names))))
 				     match-str
-				     (not 'partial-ok) 'error-ok
-				     )))))
+				     (not 'partial-ok) 'error-ok)))))
 		      parse-result)))))
 	    (rxx-env-bind (intern (concat (symbol-name grp-name) "-list"))
 			  (make-rxx-info :parser new-parser :env (rxx-new-env) :num wrap-grp-num)
@@ -820,8 +835,7 @@ For detailed description, see `rxx'.
 		    :env rxx-env :descr descr)))
     (assert (= rxx-num-grps (regexp-opt-depth regexp)))
     (rxx-check-regexp-valid regexp)
-    (make-rxx :regexp regexp :info rxx-info)
-    ))
+    (make-rxx :regexp regexp :info rxx-info)))
 
 (defun in-rxx ()
   "Test if we're in rxx, i.e. if we got here through a call
@@ -984,7 +998,7 @@ for a fuller explanation."
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defvar rxx-longest-match nil
+(defvar rxx-longest-match-p nil
   "When non-nil, make extra efforts to find the longest match rather than
 just any match.  Affects `rxx-parse', etc.  See also `posix-search-forward'.")
 
@@ -1005,7 +1019,7 @@ the parsed result in case of match, or nil in case of mismatch."
 	;;   -- if full match, then parse and be done.
 	;;   -- if no match, go to the next.
 	;; if partial match ok, longer partial match is generally better.
-	;; so, possibly, match each string.  (or only when rxx-longest-match is true?)
+	;; so, possibly, match each string.  (or only when rxx-longest-match-p is true?)
 	
       (if (not (string-match (rxx-regexp aregexp) s))
 	  (unless error-ok (error "%s: No match" error-msg))
