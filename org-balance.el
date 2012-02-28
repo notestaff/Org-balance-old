@@ -502,24 +502,33 @@ Parsed as a cons of the start and end times."
   (cons from to))
 
 (defun org-balance-clock-sum-add-interval (intervals totals tmin tmax)
-  "Add the time in the interval [TSTART,TEND) to the TOTALS.  Used by `org-balance-clock-sum'."
+  "For each time interval in INTERVALS that overlap [TMIN,TMAX], add the length of the overlap
+to the corresponding element of the vector TOTALS.  Used by `org-balance-clock-sum'."
   (do-org-balance-intervals-overlapping-interval intervals tmin tmax i tstart tend
     (incf (aref totals i) (- tend tstart))))
 
 (defun org-balance-clock-sum (intervals)
-  "Return the total clock time in the current file restriction. Adapted from `org-clock-sum'"
-  (let ((total-seconds (make-vector (org-balance-intervals-n intervals) 0)))
+  "For each time interval in INTERVALS, return the total clocked time intersecting that interval, in the current file restriction.
+Adapted from `org-clock-sum'"
+  (let (; var: total-seconds - for each interval in INTERVALS, the total number of seconds of clocked time overlapping that interval
+	;      in the current file restriction.
+	(total-seconds (make-vector (org-balance-intervals-n intervals) 0)))
+    ; Add the running clock, if there is one
     (when (and
 	   org-clock-report-include-clocking-task
 	   (equal (org-clocking-buffer) (current-buffer))
 	   (<= (point-min) (marker-position org-clock-hd-marker))
 	   (<= (marker-position org-clock-hd-marker) (point-max)))
       (org-balance-clock-sum-add-interval intervals total-seconds (org-float-time org-clock-start-time) (org-float-time)))
+    ; Loop over the clock records in the restriction; for each, find the intervals in INTERVALS overlapping that clock record,
+    ; and add the length of the overlap to the corresponding TOTAL-SECONDS entry
     (save-excursion
       (save-match-data
 	(goto-char (point-min))
 	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
 	  (org-balance-clock-sum-add-interval intervals total-seconds (car clock-interval) (cdr clock-interval)))))
+    ; Convert TOTAL-SECONDS (array of floating-point interval lengths in seconds) to a vector of org-valus with seconds as the unit,
+    ; and return.
     (let ((result (make-vector (length total-seconds) nil)))
       (dotimes (i (length total-seconds) result)
 	(aset result i (new-org-valu (aref total-seconds i) 'seconds))))))
@@ -592,7 +601,9 @@ The sum will be represented in unit UNIT.  The sum is computed within the curren
 
 
 (defun org-balance-sum-property (prop intervals unit prop-default-val)
-  "For each interval in INTERVALS, compute the sum of property PROP for that time interval."
+  "For each time interval in INTERVALS, compute the sum of property PROP over the current subtree
+for that time interval.  The computation is done as follows.  If property is the special
+property 'clockedtime',  "
   (let ((result 
 	 (cond ((string= prop "clockedtime")
 		(org-balance-clock-sum intervals))
@@ -634,14 +645,15 @@ Parsed as the structure `org-balance-archive-loc'."
 
 
 (defun org-balance-sum-property-with-archives (prop intervals unit)
-  "Sum a property in the specified period.  Include any entries that may have been archived from the current subtree."
+  "Sum a property within the current subtree, within each of a list of specified time intervals.
+Include any entries that may have been archived from the current subtree."
 
   ;; special-case for actualtime: do not go to archives.
 
   ;; if num and denom are for same subtree, go over the archives only once.
   ;; (and determine which closed items intersect this).
 
-  (let ((prop-sum (org-balance-sum-property prop intervals unit nil))
+  (let ((prop-sum (org-balance-sum-property prop intervals unit (not 'prop-default-val)))
 	(prop-default-val (org-entry-get nil (concat "default_" prop) 'inherit)))
     (when (not (string= prop "actualtime"))
       (let ((olpath-regexp (concat "^[ \t]+:ARCHIVE_OLPATH: " (mapconcat 'identity (org-get-outline-path) "/"))))
@@ -781,18 +793,31 @@ Adapted from `org-balance-clock-sum'.
 
 (defrxxconst org-balance-goal-todo-keyword "GOAL")
 
-;; struct: org-balance-goal-delta - information about how well one goal is being met.
-;;      `org-balance-compute-goal-deltas' gathers this information from various entries and
-;;      presents it in a list.
-(defstruct org-balance-goal-delta heading goal entry-buf entry-pos goal-pos actual delta-val delta-percent error-msg)
-
 (defrxx prop-name "A valid name of an Org entry property" (& alpha (0+ (any alnum "_-"))))
 (defrxx link "An Org link; we're only interested in links that point to a GOAL entry.
 Parsed as the buffer position of the start of the link."
   (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
-(defstruct org-balance-prop prop link matcher)
 
-(defrxx matcher "A tags and properties matcher"
+(defstruct org-balance-prop
+  "The name of a property to be summed for a subtree, and an optional restriction of
+which entries to consider when summing this property.  See defrxx prop below.
+
+Fields:
+
+   PROP - an Org property name, 'clockedtime', or 'actualtime'.
+        When summing the value of a property in a given subtree in a given time interval,
+        for an Org property name we get that property's value in matching entries;
+        for clockedtime we get the intersection of any clocked time in the matching entries
+        with the interval; and for actualtime we get the full length of the interval.
+
+   LINK - if not nil, follow this link to an Org entry and do the summing under that entry.
+   MATCHER - if not nil, only consider Org entries matching the matcher, as specified at
+      URL 'http://orgmode.org/manual/Matching-tags-and-properties.html#Matching-tags-and-properties'.
+"
+  prop link matcher)
+
+(defrxx matcher "A tags and properties matcher, as described at
+URL 'http://orgmode.org/manual/Matching-tags-and-properties.html#Matching-tags-and-properties'."
   (1+ nonl) org-make-tags-matcher)
 
 (defrxx prop
@@ -805,7 +830,10 @@ struct with fields for the property name and the link."
 (defrxx ratio-word "A word separating the numerator and denominator of a fraction."
   (or "per" "every" "each" "for every" "for each" "/" "a" "in a"))
 
-(defstruct org-balance-prop-ratio num denom)
+(defstruct org-balance-prop-ratio
+  "The ratio of two properties: for example, hours per week.  See defrxx prop-ratio below."
+  num denom)
+
 (defrxx prop-ratio
   "The ratio of two properties.   The denominator, if not given, defaults to 'actualtime'."
   (seq (prop num) (opt blanks? ratio-word blanks? (prop denom)))
@@ -815,11 +843,8 @@ struct with fields for the property name and the link."
   "A priority cookie on an Org headline.   Parsed as the entire cookie (e.g. [#A])."
   (seq "[#" (any upper digit) "]"))
 
-;; (defrxx goal-prefix
-;;   (seq bol (sep-by blanks (seq (1+ "*")) (eval org-balance-goal-todo-keyword) priority? prop-ratio)
-;;        blanks? ":" blanks?) prop-ratio)
-
 (defrxx goal-prefix
+  "The part of a GOAL line up to the goal name: the stars, the GOAL keyword, and optionally the priority. "
   (seq bol (sep-by blanks (seq (1+ "*")) (seq bow (eval org-balance-goal-todo-keyword) eow) priority?)))
 
 (defrxx tag-name (1+ (any alnum "_@#%")))
@@ -834,6 +859,8 @@ struct with fields for the property name and the link."
       (point))))
 
 (defun org-balance-compute-actual-prop (prop intervals unit)
+  "Computes the actual total value of the property PROP for the current subtree,
+expressed in units UNIT, for each of the given INTERVALS."
   (save-excursion
     (save-window-excursion
       (save-match-data
@@ -1018,8 +1045,9 @@ Usually done in preparation for generating a new record of how well each goal is
       (org-map-entries '(org-toggle-tag "goal_error" 'off) "+goal_error/!GOAL" 'file))))
 
 (defun* org-balance-compute-goal-deltas (&key intervals)
-  "For each goal, determine the difference between the actual and desired average daily expenditure of
-resource GOAL toward that goal in the period in each interval in INTERVALS.
+  "For each goal, determines the difference between the actual and desired average daily expenditure of
+resource GOAL toward that goal in the period in each interval in INTERVALS.  Stores the results as properties
+under each goal.
 "
   (declare (special goal-update-time))
   (unless intervals (error "org-balance-compute-goal-deltas: need intervals"))
@@ -1067,9 +1095,7 @@ resource GOAL toward that goal in the period in each interval in INTERVALS.
 				      (aref
 				       (org-balance-compute-delta
 					parsed-goal prop-ratio
-					(let ((actual-ratio (org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal)) )
-					  actual-ratio
-					  ))
+					(org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
 				       0)))))
 			  (let ((delta-val (car delta-val-and-percent))
 				(delta-percent (cdr delta-val-and-percent)))
@@ -1079,6 +1105,9 @@ resource GOAL toward that goal in the period in each interval in INTERVALS.
 			    (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
 			    (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
 			    ;; FIXME: include in goal_updated the period for which it was updated.
+			    ;; (org-entry-put (point) "goal_interval" (elu-format-seconds "%Y, %T, %W, %D%z"
+			    ;; 							       (- (org-balance-intervals-end intervals 0)
+			    ;; 								  (org-balance-intervals-start intervals 0))))
 			    (org-entry-put (point) "goal_updated"
 					   (format-time-string
 					    (org-time-stamp-format 'long 'inactive)
