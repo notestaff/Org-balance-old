@@ -92,7 +92,7 @@
   )
 
 (defcustom org-balance-default-margin-percent 5.0
-  "Report entries as neglected if they are neglected by at least percentage"
+  "Report entries as neglected if they are neglected by at least this percentage"
   :group 'org-balance
   :type 'float)
 
@@ -191,15 +191,13 @@ will be easy to remove."
 BEG and END are ignored.  If NOREMOVE is nil, remove this function
 from the `before-change-functions' in the current buffer."
   (interactive)
-  (if (or (not org-balance-overlays) org-inhibit-highlight-removal)
-      nil
-    (progn
-	(mapc 'delete-overlay org-balance-overlays)
-	(setq org-balance-overlays nil)
-	(unless noremove
-	  (remove-hook 'before-change-functions
-		       'org-clock-remove-overlays 'local))
-	t)))
+  (when (and org-balance-overlays (not org-inhibit-highlight-removal))
+    (mapc 'delete-overlay org-balance-overlays)
+    (setq org-balance-overlays nil)
+    (unless noremove
+      (remove-hook 'before-change-functions
+		   'org-clock-remove-overlays 'local))
+    t))
 
 (add-hook 'org-ctrl-c-ctrl-c-hook 'org-balance-remove-overlays)
 
@@ -700,10 +698,10 @@ Adapted from `org-balance-clock-sum'.
 	 (level 0)
 	 ts te dt
 	 time)
-    (if (stringp tstart) (setq tstart (org-time-string-to-seconds tstart)))
-    (if (stringp tend) (setq tend (org-time-string-to-seconds tend)))
-    (if (consp tstart) (setq tstart (org-float-time tstart)))
-    (if (consp tend) (setq tend (org-float-time tend)))
+    (when (stringp tstart) (setq tstart (org-time-string-to-seconds tstart)))
+    (when (stringp tend) (setq tend (org-time-string-to-seconds tend)))
+    (when (consp tstart) (setq tstart (org-float-time tstart)))
+    (when (consp tend) (setq tend (org-float-time tend)))
     (remove-text-properties (point-min) (point-max)
                             '(:org-clock-minutes t
                               :org-clock-force-headline-inclusion t))
@@ -749,21 +747,21 @@ Adapted from `org-balance-clock-sum'.
 	    (setq level (- (match-end 1) (match-beginning 1)))
 	    (when (or (> t1 0) (> (aref ltimes level) 0))
 	      (when (or headline-included headline-forced)
-                (if headline-included
+                (when headline-included
                     (loop for l from 0 to level do
                           (aset ltimes l (+ (aref ltimes l) t1))))
 		(setq time (aref ltimes level))
 		(goto-char (match-beginning 0))
 		(put-text-property (point) (point-at-eol) :org-clock-minutes time)
-                (if headline-filter
-                    (save-excursion
-                      (save-match-data
-                        (while
-                            (> (funcall outline-level) 1)
-                          (outline-up-heading 1 t)
-                          (put-text-property
-                           (point) (point-at-eol)
-                           :org-clock-force-headline-inclusion t))))))
+                (when headline-filter
+		  (save-excursion
+		    (save-match-data
+		      (while
+			  (> (funcall outline-level) 1)
+			(outline-up-heading 1 t)
+			(put-text-property
+			 (point) (point-at-eol)
+			 :org-clock-force-headline-inclusion t))))))
 	      (setq t1 0)
 	      (loop for l from level to (1- lmax) do
 		    (aset ltimes l 0)))))))
@@ -846,7 +844,6 @@ struct with fields for the property name and the link."
 
 (defun org-balance-compute-actual-prop-ratio (prop-ratio intervals parsed-goal)
   (elu-with 'org-balance-goal (aref parsed-goal 0) (numer-min denom)
-    (message "numer-min is %s denom is %s" numer-min denom)
     (let ((target-ratio (make-org-valu-ratio :num numer-min :denom denom)))
       (elu-map-vectors
        (lambda (a-num a-denom)
@@ -944,7 +941,6 @@ When called repeatedly, scroll the window that is displaying the buffer."
   text)
 
 (defun org-balance-scale-goal (factor goal)
-  (message "goal is %s" goal)
   (let ((result (copy-org-balance-goal goal)))
     (setf (org-balance-goal-numer-min result)
 	  (scale-org-valu factor (org-balance-goal-numer-min result)))
@@ -992,52 +988,27 @@ When called repeatedly, scroll the window that is displaying the buffer."
 (defrxx goal-or-link
   (& blanks? (| goal-link goal) blanks?)
   (if goal (make-vector (org-balance-intervals-n intervals) goal)
-      (save-excursion
-	(save-window-excursion
-	  (let ((org-link-search-must-match-exact-headline t))
-	    (goto-char (org-balance-goal-link-link goal-link))
-	    (org-open-at-point 'in-emacs))
-	  ;; move to where the parsed-goal is.
-	  ;; on the other hand, for "actual", here need to call to get the ratio.
-	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
-	      (error "No goal found at link taget"))
-	    (message "we are at %s" (point))
-	    (elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
-			     (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
-					    (org-balance-start-of-tags))))))) 
+    (save-excursion
+      (save-window-excursion
+	(let ((org-link-search-must-match-exact-headline t))
+	  (goto-char (org-balance-goal-link-link goal-link))
+	  (org-open-at-point 'in-emacs))
+	;; move to where the parsed-goal is.
+	;; on the other hand, for "actual", here need to call to get the ratio.
+	(unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
+	  (error "No goal found at link taget"))
+	(elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
+			 (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
+					(org-balance-start-of-tags)))))))
 
-(defrxx goal-or-link2
-  (& blanks? goal-link blanks?)
-  (progn
-      (save-excursion
-	(save-window-excursion
-	  (let ((org-link-search-must-match-exact-headline t))
-	    (goto-char (org-balance-goal-link-link goal-link))
-	    (org-open-at-point 'in-emacs))
-	  ;; move to where the parsed-goal is.
-	  ;; on the other hand, for "actual", here need to call to get the ratio.
-	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
-	      (error "No goal found at link taget"))
-	    (message "we are at %s" (point))
-	    (elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
-			     (rxx-parse-fwd (list org-balance-goal-prefix-with-spec2-regexp
-						  org-balance-goal-prefix-with-spec3-regexp)
-					    (org-balance-start-of-tags)))))))
-
-(defrxx goal-or-link3
-  (& blanks? goal blanks?)
-  (make-vector (org-balance-intervals-n intervals) goal))
 
 (defrxx goal-spec (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link) blanks? tags?) (cons prop-ratio goal-or-link))
 
-(defrxx goal-spec2 (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link2) blanks? tags?) (cons prop-ratio goal-or-link2))
-(defrxx goal-spec3 (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link3) blanks? tags?) (cons prop-ratio goal-or-link3))
-
 (defrxx goal-prefix-with-spec (& blanks? goal-spec) (cdr goal-spec))
-(defrxx goal-prefix-with-spec2 (& blanks? goal-spec2) (cdr goal-spec2))
-(defrxx goal-prefix-with-spec3 (& blanks? goal-spec3) (cdr goal-spec3))
 
 (defun org-balance-remove-props ()
+  "Remove from each GOAL in the file, any previous record of how well this goal is being met.
+Usually done in preparation for generating a new record of how well each goal is being met."
   (interactive)
   (save-excursion
     (save-restriction
@@ -1046,28 +1017,39 @@ When called repeatedly, scroll the window that is displaying the buffer."
 	(org-delete-property-globally prop))
       (org-map-entries '(org-toggle-tag "goal_error" 'off) "+goal_error/!GOAL" 'file))))
 
-(defun* org-balance-compute-goal-deltas2 (&key goals intervals)
+(defun* org-balance-compute-goal-deltas (&key intervals)
   "For each goal, determine the difference between the actual and desired average daily expenditure of
-resource GOAL toward that goal in the period in each interval in INTERVALS.  Call the callback with the value.
+resource GOAL toward that goal in the period in each interval in INTERVALS.
 "
   (declare (special goal-update-time))
-  (let ((num-errors 0) (num-under 0) (num-met 0) (num-over 0))
+  (unless intervals (error "org-balance-compute-goal-deltas: need intervals"))
+  (let ((num-errors 0)  ; number of errors (such as malformed goals) encountered
+	(num-under 0)   ; number of goals where actual expenditure < goal
+	(num-met 0)     ; number of goals where actual expenditure meets goal
+	(num-over 0))   ; number of goals where actual expenditure > goal
     (save-excursion
       (goto-char (point-min))
       (save-restriction
 	(save-match-data
-	    ;; FIXOPT if goals specified, make regexp for them
+	  ;; FIXOPT if goals specified, make regexp for them
+
+	  ;; Loop over all goals defined in the org file
 	  (rxx-do-search-fwd org-balance-goal-prefix-regexp nil
 	    (save-match-data
 	      (save-restriction
 		(save-excursion
 		  (condition-case err
-		      (let* ((goal-spec (rxx-parse-fwd (list org-balance-goal-spec2-regexp
-							     org-balance-goal-spec3-regexp) (org-balance-start-of-tags)))
+		      (let* (; var: goal-spec - the parsed specification of this goal, e.g. "clockedtime: one hour per week"
+			     ;   or "done: two times per day"
+			     (goal-spec (rxx-parse-fwd org-balance-goal-spec-regexp (org-balance-start-of-tags)))
 			     (prop-ratio (car goal-spec))
 			     (parsed-goal (cdr goal-spec)))
-			
+
+			; Some goal specs we encounter in the org file may be malformed (since they're user-typed).
+			; We tag such goal entries with the goal_error tag, so that the user can quickly find them.
+			; Initially, turn this tag off since we haven't found a problem with this goal spec yet.
 			(save-match-data (org-toggle-tag "goal_error" 'off))
+			
 			;;
 			;; Compute the actual usage under this subtree, and convert to the same
 			;; units as the goal, so we can compare them.
@@ -1085,7 +1067,9 @@ resource GOAL toward that goal in the period in each interval in INTERVALS.  Cal
 				      (aref
 				       (org-balance-compute-delta
 					parsed-goal prop-ratio
-					(org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
+					(let ((actual-ratio (org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal)) )
+					  actual-ratio
+					  ))
 				       0)))))
 			  (let ((delta-val (car delta-val-and-percent))
 				(delta-percent (cdr delta-val-and-percent)))
@@ -1114,10 +1098,6 @@ resource GOAL toward that goal in the period in each interval in INTERVALS.  Cal
 					 (if (boundp 'goal-update-time) goal-update-time (current-time))))))
 		     nil)))))))))
     (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
-
-(defun org-balance-do () (interactive)
-  (message "--------------------------------")
-  (org-balance-compute-goal-deltas2))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1211,7 +1191,7 @@ resource GOAL toward that goal in the period in each interval in INTERVALS.  Cal
 		  (org-mode)
 		  (org-balance-remove-props)
 		  (let ((goal-update-time (fourth regtest)))
-		    (org-balance-compute-goal-deltas2
+		    (org-balance-compute-goal-deltas
 		     :intervals (make-org-balance-intervals :from (second regtest) :n 1 :width
 							    (- (third regtest) (second regtest)) :shift 0)))
 		  (save-buffer)
