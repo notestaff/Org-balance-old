@@ -1078,7 +1078,9 @@ the parsed result in case of match, or nil in case of mismatch."
 	    (rxx-call-parser rxx-info (match-string 0))))))
 
 (defmacro rxx-do-search-fwd (aregexp var &rest forms)
-  "Search forward while matches"
+  "Searches forward from point for matches to rxx AREGEXP, and evalutes FORMS
+at each match after parsing the match into variable VAR.  If VAR is nil, 
+creates a dummy var."
   (declare (indent 2))
   (unless var (setq var (make-symbol "dummy-var")))
   `(let (,var) (while (setq ,var (rxx-search-fwd ,(rxx-symbol aregexp) (not 'boundary) 'no-error))
