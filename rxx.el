@@ -1169,8 +1169,4 @@ the parsed result in case of match, or nil in case of mismatch."
 
 (provide 'rxx)
 
-
-
-(provide 'rxx)
-
 ;;; rxx.el ends here
