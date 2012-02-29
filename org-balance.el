@@ -714,10 +714,14 @@ to the agenda line.
 	(goto-char (marker-position orig-entry))
 	(let ((org-balance-delta-val (string-to-number (or (org-entry-get (point) "goal_delta_val") "0")))
 	      (org-balance-delta-percent (string-to-number (or (org-entry-get (point) "goal_delta_percent") "0")))
-	      )
-	  (progn
+	      (heading
+	       (save-excursion
+		 (outline-up-heading 1 'invisible-ok)
+		 (when (string= (upcase (org-get-heading)) "GOALS")
+		   (outline-up-heading 1 'invisible-ok))
+		 (org-get-heading 'no-tags 'no-todo))))
 	    (put-text-property 0 1 :org-balance-delta org-balance-delta-val agenda-line)
-	    (concat agenda-line "::: " (number-to-string org-balance-delta-val))))))))
+	    (concat agenda-line "::: " heading " ::: " (number-to-string org-balance-delta-val)))))))
 
 (defun org-balance-cmp (a b)
   "Compare agenda entries by the amount of neglect, with the most-neglected at the top."
