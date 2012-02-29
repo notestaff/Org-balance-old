@@ -126,10 +126,73 @@ Org-Balance Documentation
 
 *** points to make
 
-***** simple examples
+***** examples of usage
+
+		"check on mary at least once a month"
+		(set priorities, tags, organize goals into subtrees... )
+
+		"spend 3 hours per week doing open-source.  of whatever actual time i do spend,
+		spend at least half on project A and at least a third on project B."
+
+		"spend at most $100 / month on gifts"
+
+		"do at least one unpleasant-but-necessary thing a week"
+
+		"hike at least once every three weekends"
+
+		"eat out at most once a week"
+		"watch tv at most 1 hour per day"
+
+		
+		reward yourself: "complete at least three projects a week"; "eat out at most once for each time you actually complete
+		a project."
+		    [ for the "actual", does the target need to be a goal?  if the link specifies property name, there
+			 does not need to be a goal there.]
+
+		"spend on entertainment at most .2 of what you spend on work"  etc.
+
+		"burn at least 2000 calories per week through exercise"
+
+		"eat at most 2000 calories per day"
+		"of the calories you eat, eat at most .3 from carbs"
+
+		"do at least one unpleasant-but-needed thing a week"
+
+***** comparison to Habits
+
+******* not just for repeated tasks
+
+********* can include one-off todos that contribute towards a goal
+********* can assign different values to them
+
+*********** eg money, calories, etc.
+
+******* can set goals for time spent
+
+******* can specify dependencies for goals
+
+		  for either goal or actual thing -- e.g. of whatever actual calories i eat, i want 30% to be from carbs.
+
+
+******* can even things out over time -- you can be a weekend warrior if you have to, the goal is only for the average.
+
+		  how you meet it, is up to you.
+
+******* goals can be high-level, so they themselves need not be todo items (though we hijack todo keyword mechanism to represent them).
+
+******* there can be multiple dimensions
+
+		  e.g. by unpleasantness ("eat a frog each week").
+		  can represent using tags, etc.
+
+***** comparison to clockreport
+
+******* also supports measuring closed items, in a uniform system
+		  
 ***** that for a given wall-time period, we have length of that period and clockedtime sum and
 		weighted sum of closed/done items in that period; and we can then check these ratios against any goals.
   	 	
+
 * Installation
 
   Download the files =org-balance.el= and =rxx.el=; put them into your =load-path=.   Put =(require 'org-balance)= in your
@@ -150,13 +213,15 @@ Org-Balance Documentation
 
   Put all these vars into the additional group, org-balance-vars?
 
+*** make sure .org mode is automatically enabled for .org files
+
+	 including in xemacs
+  	 
 *** Possibly relevant org vars
 
 	 
 ***** org-global-properties
 ***** org-file-properties
-
-
 		
 ***** org-todo-keywords
 		
@@ -167,10 +232,16 @@ Org-Balance Documentation
 		and other things in org-clock.el
 		
   	 	
-  	 	
+* things to mention
 
-  	 	
+*** rename to Orb?  or at least use orb as prefix?
+  	 
+*** because goals are just regular headlines, you can define subsets of goals e.g. using tags or properties.
 
-  	 	
-  	 	
-  	 	
+	 
+
+  	 
+
+  	 
+  	 
+  	 
