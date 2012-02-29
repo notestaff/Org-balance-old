@@ -2,6 +2,260 @@
 ;; Random bits of code -- not meant to be evaluatable as a buffer.
 ;;
 
+(defun org-balance-detailed-sum (prop-name &optional tstart tend headline-filter)
+  "Sum the specified property PROP-NAME for each subtree.
+Puts the resulting valu's as a text property on each headline.
+TSTART and TEND can mark a time range to be considered.  HEADLINE-FILTER is a
+zero-arg function that, if specified, is called for each headline in the time
+range with point at the headline.  Headlines for which HEADLINE-FILTER returns
+nil are excluded from the clock summation.
+
+Adapted from `org-balance-clock-sum'.
+"
+  (interactive)
+  (let* ((bmp (buffer-modified-p))
+	 (re (concat "^\\(\\*+\\)[ \t]\\|^[ \t]*"
+		     org-clock-string
+		     "[ \t]*\\(?:\\(\\[.*?\\]\\)-+\\(\\[.*?\\]\\)\\|=>[ \t]+\\([0-9]+\\):\\([0-9]+\\)\\)"))
+	 (lmax 30)
+	 (ltimes (make-vector lmax 0))
+	 (t1 0)
+	 (level 0)
+	 ts te dt
+	 time)
+    (when (stringp tstart) (setq tstart (org-time-string-to-seconds tstart)))
+    (when (stringp tend) (setq tend (org-time-string-to-seconds tend)))
+    (when (consp tstart) (setq tstart (org-float-time tstart)))
+    (when (consp tend) (setq tend (org-float-time tend)))
+    (remove-text-properties (point-min) (point-max)
+                            '(:org-clock-minutes t
+                              :org-clock-force-headline-inclusion t))
+    (save-excursion
+      (goto-char (point-max))
+      (while (re-search-backward re nil t)
+	(cond
+	 ((match-end 2)
+	  ;; Two time stamps
+	  (setq ts (match-string 2)
+		te (match-string 3)
+		ts (org-float-time
+		    (apply 'encode-time (org-parse-time-string ts)))
+		te (org-float-time
+		    (apply 'encode-time (org-parse-time-string te)))
+		ts (if tstart (max ts tstart) ts)
+		te (if tend (min te tend) te)
+		dt (- te ts)
+		t1 (if (> dt 0) (+ t1 (floor (/ dt 60))) t1)))
+	 ((match-end 4)
+	  ;; A naked time
+	  (setq t1 (+ t1 (string-to-number (match-string 5))
+		      (* 60 (string-to-number (match-string 4))))))
+	 (t ;; A headline
+	  ;; Add the currently clocking item time to the total
+	  (when (and org-clock-report-include-clocking-task
+		     (equal (org-clocking-buffer) (current-buffer))
+		     (equal (marker-position org-clock-hd-marker) (point))
+		     tstart
+		     tend
+		     (>= (org-float-time org-clock-start-time) tstart)
+		     (<= (org-float-time org-clock-start-time) tend))
+	    (let ((time (floor (- (org-float-time)
+				  (org-float-time org-clock-start-time)) 60)))
+	      (setq t1 (+ t1 time))))
+	  (let* ((headline-forced
+		  (get-text-property (point)
+                                     :org-clock-force-headline-inclusion))
+                 (headline-included
+                  (or (null headline-filter)
+                      (save-excursion
+                        (save-match-data (funcall headline-filter))))))
+	    (setq level (- (match-end 1) (match-beginning 1)))
+	    (when (or (> t1 0) (> (aref ltimes level) 0))
+	      (when (or headline-included headline-forced)
+                (when headline-included
+                    (loop for l from 0 to level do
+                          (aset ltimes l (+ (aref ltimes l) t1))))
+		(setq time (aref ltimes level))
+		(goto-char (match-beginning 0))
+		(put-text-property (point) (point-at-eol) :org-clock-minutes time)
+                (when headline-filter
+		  (save-excursion
+		    (save-match-data
+		      (while
+			  (> (funcall outline-level) 1)
+			(outline-up-heading 1 t)
+			(put-text-property
+			 (point) (point-at-eol)
+			 :org-clock-force-headline-inclusion t))))))
+	      (setq t1 0)
+	      (loop for l from level to (1- lmax) do
+		    (aset ltimes l 0)))))))
+      (setq org-clock-file-total-minutes (aref ltimes 0)))
+    (set-buffer-modified-p bmp)))
+
+(defun org-clock-sum-current-item (&optional tstart)
+  "Return time, clocked on current item in total."
+  (save-excursion
+    (save-restriction
+      (org-narrow-to-subtree)
+      (org-clock-sum tstart)
+      org-clock-file-total-minutes)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Section: org-balance overlays
+;; 
+;; Code for managing org-balance overlays
+;;
+;; Aadapted from org-clock.el; it might make sense to
+;; make a generic overlay facility for use by various org-modules.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defvar org-balance-overlays nil
+  "We use overlays to display summary information about how much got done
+under each category.  Modeled on org-clock-overalys.")
+(make-variable-buffer-local 'org-balance-overlays)
+
+(defun org-balance-put-overlay (txt &optional error)
+  "Put an overlay on the current line, displaying TXT.
+This creates a new overlay and stores it in `org-balance-overlays', so that it
+will be easy to remove."
+  (unless (listp txt) (setq txt (list txt)))
+  (let* ((c 60)    ;; column in which the overlay starts 
+	 (off 0)
+	 ov tx)
+    (org-move-to-column c)
+    (unless (eolp) (skip-chars-backward "^ \t"))
+    (skip-chars-backward " \t")
+    (setq ov (make-overlay (1- (point)) (point-at-eol))
+	  tx (concat (buffer-substring (1- (point)) (point))
+		     (make-string (+ off (max 0 (- c (current-column)))) ?.)
+		     (org-add-props (first txt)
+			 (list 'face (if error 'org-balance-malformed-goal 'org-clock-overlay)))
+		     (mapconcat (lambda (tx)
+				  (let* ((result (copy-sequence tx))
+					 (dummy (org-add-props result
+						    (list 'face 'org-clock-overlay))))
+				    (concat "\n" (make-string c (string-to-char " ")) result)))
+				(cdr txt)
+				"")
+		     ""))
+    (if (not (featurep 'xemacs))
+	(overlay-put ov 'display tx)
+      (overlay-put ov 'invisible t)
+      (overlay-put ov 'end-glyph (make-glyph tx)))
+    (push ov org-balance-overlays)))
+
+(defun org-balance-remove-overlays (&optional beg end noremove)
+  "Remove the occur highlights from the buffer.
+BEG and END are ignored.  If NOREMOVE is nil, remove this function
+from the `before-change-functions' in the current buffer."
+  (interactive)
+  (when (and org-balance-overlays (not org-inhibit-highlight-removal))
+    (mapc 'delete-overlay org-balance-overlays)
+    (setq org-balance-overlays nil)
+    (unless noremove
+      (remove-hook 'before-change-functions
+		   'org-clock-remove-overlays 'local))
+    t))
+
+(add-hook 'org-ctrl-c-ctrl-c-hook 'org-balance-remove-overlays)
+
+(defun org-balance-unload-function ()
+  "Remove any hooks pointing to org-balance functions"
+  (remove-hook 'org-ctrl-c-ctrl-c-hook 'org-balance-remove-overlays))
+
+(defun org-balance-reset-overlays ()
+  "Reset org-balance overlays if present, preparing to put on new ones"
+  (org-overview)
+  (org-balance-remove-overlays)
+  (org-unhighlight)
+  (when org-remove-highlights-with-change
+    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
+		  nil 'local)))
+
+(defun org-balance-unhighlight ()
+  (interactive)
+  (org-unhighlight))
+
+
+(defun org-balance-let (varlist body)
+  "Assign vars that are not null"
+  (append (list 'let
+		(org-remove-if
+		 (lambda (var-assignment)
+		   (null (car-safe var-assignment)))
+		 varlist))
+	  body))
+
+
+(defun org-balance-display (&optional intervals total-only)
+  "Show subtree times in the entire buffer.
+If TOTAL-ONLY is non-nil, only show the total time for the entire file
+in the echo area."
+  (interactive)
+  ;(unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
+  ;(unless tend (setq tend (org-float-time (org-current-time))))
+  (let ((prop (read-string "Property"))
+	(unit (intern (read-string "Unit"))))
+    (org-balance-remove-overlays)
+    (org-balance-sum-property-with-archives prop intervals unit)
+    (let (time h m p)
+      (unless total-only
+	(save-excursion
+	  (goto-char (point-min))
+	  (while (or (and (equal (setq p (point)) (point-min))
+			  (get-text-property p :org-balance-minutes))
+		     (setq p (next-single-property-change
+			      (point) :org-balance-minutes)))
+	    (goto-char p)
+	    (when (setq time (get-text-property p :org-balance-minutes))
+	      (org-balance-put-overlay time (funcall outline-level))))
+	  ;;(setq h (/ org-balance-file-total-minutes 60)
+		;;m (- org-balance-file-total-minutes (* 60 h)))
+	  ;; Arrange to remove the overlays upon next change.
+	  (when org-remove-highlights-with-change
+	    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
+			  nil 'local))))
+      (if org-time-clocksum-use-fractional
+	  (message (concat "Total file time: " org-time-clocksum-fractional-format
+			   " (%d hours and %d minutes)")
+		   (/ (+ (* h 60.0) m) 60.0) h m)
+	(message (concat "Total file time: " org-time-clocksum-format
+			 " (%d hours and %d minutes)") h m h m)))))
+
+
+
+
+
+(defrxx goal-or-link2
+  (& blanks? goal-link blanks?)
+  (progn
+      (save-excursion
+	(save-window-excursion
+	  (let ((org-link-search-must-match-exact-headline t))
+	    (goto-char (org-balance-goal-link-link goal-link))
+	    (org-open-at-point 'in-emacs))
+	  ;; move to where the parsed-goal is.
+	  ;; on the other hand, for "actual", here need to call to get the ratio.
+	    (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
+	      (error "No goal found at link taget"))
+	    (elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
+			     (rxx-parse-fwd (list org-balance-goal-prefix-with-spec2-regexp
+						  org-balance-goal-prefix-with-spec3-regexp)
+					    (org-balance-start-of-tags)))))))
+
+(defrxx goal-or-link3
+  (& blanks? goal blanks?)
+  (make-vector (org-balance-intervals-n intervals) goal))
+
+(defrxx goal-spec2 (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link2) blanks? tags?) (cons prop-ratio goal-or-link2))
+(defrxx goal-spec3 (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link3) blanks? tags?) (cons prop-ratio goal-or-link3))
+
+(defrxx goal-prefix-with-spec2 (& blanks? goal-spec2) (cdr goal-spec2))
+(defrxx goal-prefix-with-spec3 (& blanks? goal-spec3) (cdr goal-spec3))
+
 (defun org-balance-show-here ()
   (interactive)
   (let ((org-balance-neglect-val (get-text-property (point) :org-balance-neglect)))

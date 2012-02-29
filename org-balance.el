@@ -137,94 +137,24 @@ before today."
 	    (org-agenda-cmp-user-defined (quote org-balance-cmp))
 	    (org-agenda-before-sorting-filter-function (quote org-balance-save-amt-neglected))
 	    (org-show-hierarchy-above (quote ((agenda . t))))))
-	  ("bs" "Neglected goals in current file" tags-tree "goal_delta_val<0/!GOAL" nil)))
+	  ("bs" "Neglected goals in current file" tags-tree "goal_delta_val<0/!GOAL" nil)
+	  ("bk" "Ok items" tags "goal_delta_val>=0/!GOAL"
+	   ((org-agenda-overriding-header "Org-balance neglected items")
+	    (org-agenda-sorting-strategy (quote (priority-down
+						 category-keep
+						 user-defined-up)))
+	    (org-agenda-cmp-user-defined (quote org-balance-cmp))
+	    (org-agenda-before-sorting-filter-function (quote org-balance-save-amt-neglected))
+	    (org-show-hierarchy-above (quote ((agenda . t))))))
+	  ("bf" "Ok goals in current file" tags-tree "goal_delta_val>=0/!GOAL" nil)
+	  ))
   "Custom agenda commands for accessing org results")
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;; Section: org-balance overlays
-;; 
-;; Code for managing org-balance overlays
-;;
-;; Aadapted from org-clock.el; it might make sense to
-;; make a generic overlay facility for use by various org-modules.
-;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defvar org-balance-overlays nil
-  "We use overlays to display summary information about how much got done
-under each category.  Modeled on org-clock-overalys.")
-(make-variable-buffer-local 'org-balance-overlays)
-
-(defun org-balance-put-overlay (txt &optional error)
-  "Put an overlay on the current line, displaying TXT.
-This creates a new overlay and stores it in `org-balance-overlays', so that it
-will be easy to remove."
-  (unless (listp txt) (setq txt (list txt)))
-  (let* ((c 60)    ;; column in which the overlay starts 
-	 (off 0)
-	 ov tx)
-    (org-move-to-column c)
-    (unless (eolp) (skip-chars-backward "^ \t"))
-    (skip-chars-backward " \t")
-    (setq ov (make-overlay (1- (point)) (point-at-eol))
-	  tx (concat (buffer-substring (1- (point)) (point))
-		     (make-string (+ off (max 0 (- c (current-column)))) ?.)
-		     (org-add-props (first txt)
-			 (list 'face (if error 'org-balance-malformed-goal 'org-clock-overlay)))
-		     (mapconcat (lambda (tx)
-				  (let* ((result (copy-sequence tx))
-					 (dummy (org-add-props result
-						    (list 'face 'org-clock-overlay))))
-				    (concat "\n" (make-string c (string-to-char " ")) result)))
-				(cdr txt)
-				"")
-		     ""))
-    (if (not (featurep 'xemacs))
-	(overlay-put ov 'display tx)
-      (overlay-put ov 'invisible t)
-      (overlay-put ov 'end-glyph (make-glyph tx)))
-    (push ov org-balance-overlays)))
-
-(defun org-balance-remove-overlays (&optional beg end noremove)
-  "Remove the occur highlights from the buffer.
-BEG and END are ignored.  If NOREMOVE is nil, remove this function
-from the `before-change-functions' in the current buffer."
-  (interactive)
-  (when (and org-balance-overlays (not org-inhibit-highlight-removal))
-    (mapc 'delete-overlay org-balance-overlays)
-    (setq org-balance-overlays nil)
-    (unless noremove
-      (remove-hook 'before-change-functions
-		   'org-clock-remove-overlays 'local))
-    t))
-
-(add-hook 'org-ctrl-c-ctrl-c-hook 'org-balance-remove-overlays)
-
-(defun org-balance-unload-function ()
-  "Remove any hooks pointing to org-balance functions"
-  (remove-hook 'org-ctrl-c-ctrl-c-hook 'org-balance-remove-overlays))
-
-(defun org-balance-reset-overlays ()
-  "Reset org-balance overlays if present, preparing to put on new ones"
-  (org-overview)
-  (org-balance-remove-overlays)
-  (org-unhighlight)
-  (when org-remove-highlights-with-change
-    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
-		  nil 'local)))
-
-(defun org-balance-unhighlight ()
-  (interactive)
-  (org-unhighlight))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Section: Utils
 ;;
 ;; General-purpose utility routines used in org-balance module
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 (defun org-balance-get-property (prop &optional default-val)
   "Get the value of a property, represented either as text property or org property,
@@ -306,15 +236,6 @@ Fields:
   "Test if two half-open intervals [AMIN,AMAX) and [BIN,BMAX) intersect."
   (and (< bmin amax) (< amin bmax)))
 
-(defun org-balance-let (varlist body)
-  "Assign vars that are not null"
-  (append (list 'let
-		(org-remove-if
-		 (lambda (var-assignment)
-		   (null (car-safe var-assignment)))
-		 varlist))
-	  body))
-
 (defmacro do-org-balance-intervals-overlapping-interval (intervals pmin pmax i tstart tend &rest forms)
   "Iterate over intervals in INTERVALS which intersect the interval [pmin,pmax).   Assign interval
 number to I, interval start to TSTART and interval end to TEND for each interval, then execute FORMS"
@@ -372,42 +293,6 @@ Adapted from `org-closed-in-range' from org.el."
     ;; make tree, check each match with the callback
     (message "%s matches here" (org-occur "CLOSED: +\\[\\(.*?\\)\\]" nil callback))) )
 
-(defun org-balance-display (&optional intervals total-only)
-  "Show subtree times in the entire buffer.
-If TOTAL-ONLY is non-nil, only show the total time for the entire file
-in the echo area."
-  (interactive)
-  ;(unless tstart (setq tstart (org-float-time (org-read-date nil 'to-time nil "Interval start: "))))
-  ;(unless tend (setq tend (org-float-time (org-current-time))))
-  (let ((prop (read-string "Property"))
-	(unit (intern (read-string "Unit"))))
-    (org-balance-remove-overlays)
-    (org-balance-sum-property-with-archives prop intervals unit)
-    (let (time h m p)
-      (unless total-only
-	(save-excursion
-	  (goto-char (point-min))
-	  (while (or (and (equal (setq p (point)) (point-min))
-			  (get-text-property p :org-balance-minutes))
-		     (setq p (next-single-property-change
-			      (point) :org-balance-minutes)))
-	    (goto-char p)
-	    (when (setq time (get-text-property p :org-balance-minutes))
-	      (org-balance-put-overlay time (funcall outline-level))))
-	  ;;(setq h (/ org-balance-file-total-minutes 60)
-		;;m (- org-balance-file-total-minutes (* 60 h)))
-	  ;; Arrange to remove the overlays upon next change.
-	  (when org-remove-highlights-with-change
-	    (org-add-hook 'before-change-functions 'org-balance-remove-overlays
-			  nil 'local))))
-      (if org-time-clocksum-use-fractional
-	  (message (concat "Total file time: " org-time-clocksum-fractional-format
-			   " (%d hours and %d minutes)")
-		   (/ (+ (* h 60.0) m) 60.0) h m)
-	(message (concat "Total file time: " org-time-clocksum-format
-			 " (%d hours and %d minutes)") h m h m)))))
-
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -431,7 +316,7 @@ as you were doing it.
   (message "hours is %s ago is %s" hours ago)
 
   (let (target-pos (msg-extra ""))
-      ;; Clock in at which position?
+    ;; Clock in at which position?
     (setq target-pos
 	  (if (and (eobp) (not (org-on-heading-p)))
 	      (point-at-bol 0)
@@ -556,7 +441,7 @@ Originally adapted from `org-closed-in-range'.
 
 	  ;; first, if closed-time is completely outside our range of intervals, just skip.
 	  
-	  ;; then, if tags matcher is given, evaluate it and only count this headline if it says true.
+	  ;; FIXME: then, if tags matcher is given, evaluate it and only count this headline if it says true.
 	  
 	  (do-org-balance-intervals-overlapping-interval intervals closed-time closed-time i tstart tend
 	    (save-excursion
@@ -583,12 +468,6 @@ Originally adapted from `org-closed-in-range'.
 	prop-occurrences))))
 
 
-;; (defun org-balance-sum-org-property2 (prop tstart tend unit prop-default-val)
-;;   (org-balance-reduce (new-org-valu 0 unit)
-;; 		      (mapcar 'cdr (org-balance-gather-org-property
-;; 				    prop tstart tend unit prop-default-val))))
-
-
 (defun org-balance-sum-org-property (prop intervals unit prop-default-val)
   "For each interval in INTERVALS, compute the sum of values of Org property PROP from items closed in that interval.
 The sum will be represented in unit UNIT.  The sum is computed within the current restriction, if any."
@@ -602,16 +481,17 @@ The sum will be represented in unit UNIT.  The sum is computed within the curren
 
 (defun org-balance-sum-property (prop intervals unit prop-default-val)
   "For each time interval in INTERVALS, compute the sum of property PROP over the current subtree
-for that time interval.  The computation is done as follows.  If property is the special
-property 'clockedtime',  "
-  (let ((result 
-	 (cond ((string= prop "clockedtime")
-		(org-balance-clock-sum intervals))
-	       ((string= prop "actualtime")
-		(make-vector (org-balance-intervals-n intervals)
-			     (new-org-valu (org-balance-intervals-width intervals) 'seconds)))
-	       (t (org-balance-sum-org-property prop intervals unit prop-default-val)))))
-    result))
+for that time interval.  The value of the property for each entry is determined as follows.  If property is the special
+property 'clockedtime', then for each CLOCK line in the entry, we compute the intersection of that CLOCK line with
+the interval, and the value is the duration of that intersection.  If property is the special property 'actualtime',
+then the value is just the total length of the interval.  Otherwise, the property is an Org property; if the entry is
+closed during the interval, we add the value of the property in that entry to the total."
+  (cond ((string= prop "clockedtime")
+	 (org-balance-clock-sum intervals))
+	((string= prop "actualtime")
+	 (make-vector (org-balance-intervals-n intervals)
+		      (new-org-valu (org-balance-intervals-width intervals) 'seconds)))
+	(t (org-balance-sum-org-property prop intervals unit prop-default-val))))
 
 (defstruct
   (org-balance-archive-loc
@@ -688,105 +568,6 @@ Include any entries that may have been archived from the current subtree."
 				 (org-balance-sum-property prop intervals unit
 							   prop-default-val))))))))))))))
     prop-sum))
-
-(defun org-balance-detailed-sum (prop-name &optional tstart tend headline-filter)
-  "Sum the specified property PROP-NAME for each subtree.
-Puts the resulting valu's as a text property on each headline.
-TSTART and TEND can mark a time range to be considered.  HEADLINE-FILTER is a
-zero-arg function that, if specified, is called for each headline in the time
-range with point at the headline.  Headlines for which HEADLINE-FILTER returns
-nil are excluded from the clock summation.
-
-Adapted from `org-balance-clock-sum'.
-"
-  (interactive)
-  (let* ((bmp (buffer-modified-p))
-	 (re (concat "^\\(\\*+\\)[ \t]\\|^[ \t]*"
-		     org-clock-string
-		     "[ \t]*\\(?:\\(\\[.*?\\]\\)-+\\(\\[.*?\\]\\)\\|=>[ \t]+\\([0-9]+\\):\\([0-9]+\\)\\)"))
-	 (lmax 30)
-	 (ltimes (make-vector lmax 0))
-	 (t1 0)
-	 (level 0)
-	 ts te dt
-	 time)
-    (when (stringp tstart) (setq tstart (org-time-string-to-seconds tstart)))
-    (when (stringp tend) (setq tend (org-time-string-to-seconds tend)))
-    (when (consp tstart) (setq tstart (org-float-time tstart)))
-    (when (consp tend) (setq tend (org-float-time tend)))
-    (remove-text-properties (point-min) (point-max)
-                            '(:org-clock-minutes t
-                              :org-clock-force-headline-inclusion t))
-    (save-excursion
-      (goto-char (point-max))
-      (while (re-search-backward re nil t)
-	(cond
-	 ((match-end 2)
-	  ;; Two time stamps
-	  (setq ts (match-string 2)
-		te (match-string 3)
-		ts (org-float-time
-		    (apply 'encode-time (org-parse-time-string ts)))
-		te (org-float-time
-		    (apply 'encode-time (org-parse-time-string te)))
-		ts (if tstart (max ts tstart) ts)
-		te (if tend (min te tend) te)
-		dt (- te ts)
-		t1 (if (> dt 0) (+ t1 (floor (/ dt 60))) t1)))
-	 ((match-end 4)
-	  ;; A naked time
-	  (setq t1 (+ t1 (string-to-number (match-string 5))
-		      (* 60 (string-to-number (match-string 4))))))
-	 (t ;; A headline
-	  ;; Add the currently clocking item time to the total
-	  (when (and org-clock-report-include-clocking-task
-		     (equal (org-clocking-buffer) (current-buffer))
-		     (equal (marker-position org-clock-hd-marker) (point))
-		     tstart
-		     tend
-		     (>= (org-float-time org-clock-start-time) tstart)
-		     (<= (org-float-time org-clock-start-time) tend))
-	    (let ((time (floor (- (org-float-time)
-				  (org-float-time org-clock-start-time)) 60)))
-	      (setq t1 (+ t1 time))))
-	  (let* ((headline-forced
-		  (get-text-property (point)
-                                     :org-clock-force-headline-inclusion))
-                 (headline-included
-                  (or (null headline-filter)
-                      (save-excursion
-                        (save-match-data (funcall headline-filter))))))
-	    (setq level (- (match-end 1) (match-beginning 1)))
-	    (when (or (> t1 0) (> (aref ltimes level) 0))
-	      (when (or headline-included headline-forced)
-                (when headline-included
-                    (loop for l from 0 to level do
-                          (aset ltimes l (+ (aref ltimes l) t1))))
-		(setq time (aref ltimes level))
-		(goto-char (match-beginning 0))
-		(put-text-property (point) (point-at-eol) :org-clock-minutes time)
-                (when headline-filter
-		  (save-excursion
-		    (save-match-data
-		      (while
-			  (> (funcall outline-level) 1)
-			(outline-up-heading 1 t)
-			(put-text-property
-			 (point) (point-at-eol)
-			 :org-clock-force-headline-inclusion t))))))
-	      (setq t1 0)
-	      (loop for l from level to (1- lmax) do
-		    (aset ltimes l 0)))))))
-      (setq org-clock-file-total-minutes (aref ltimes 0)))
-    (set-buffer-modified-p bmp)))
-
-(defun org-clock-sum-current-item (&optional tstart)
-  "Return time, clocked on current item in total."
-  (save-excursion
-    (save-restriction
-      (org-narrow-to-subtree)
-      (org-clock-sum tstart)
-      org-clock-file-total-minutes)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -870,6 +651,8 @@ expressed in units UNIT, for each of the given INTERVALS."
 	(org-balance-sum-property-with-archives (org-balance-prop-prop prop) intervals unit)))))
 
 (defun org-balance-compute-actual-prop-ratio (prop-ratio intervals parsed-goal)
+  "For each interval in INTERVALS, compute the ratio of the actual value of the property to the
+goal value of the property."
   (elu-with 'org-balance-goal (aref parsed-goal 0) (numer-min denom)
     (let ((target-ratio (make-org-valu-ratio :num numer-min :denom denom)))
       (elu-map-vectors
@@ -881,6 +664,7 @@ expressed in units UNIT, for each of the given INTERVALS."
 					(org-valu-unit denom))))))
 
 (defun org-balance-compute-delta (parsed-goals prop-ratio actuals)
+  ""
   (elu-gen-vector i (length parsed-goals)
     (let ((parsed-goal (aref parsed-goals i))
 	  (actual (aref actuals i)))
@@ -1007,12 +791,23 @@ When called repeatedly, scroll the window that is displaying the buffer."
      :ratio-word ratio-word))
   "value ratio goal")
 
-;(defrxxstruct goal-link (sep-by blanks (number factor) "of" (opt (named-grp actual "actual")) link))
-(defstruct org-balance-goal-link factor actual link)
+(defstruct org-balance-goal-link
+  "Definition of one goal in terms of another goal.  See defrxx goal-link below.
+Fields:
+
+   LINK - the link to the target goal
+   ACTUAL - if nil, use the goal's target value; if non-nil, use the actual amount in the relevant
+     interval.
+   FACTOR - multiply the actual or target amount of the goal at link, by this factor.
+ "
+  factor actual link)
+
 (defrxx goal-link (sep-by blanks (number factor) "of" (opt (named-grp actual "actual")) link)
+  "Definition of one goal in terms of another goal."  
   (make-org-balance-goal-link :factor factor :actual actual :link link))
 
 (defrxx goal-or-link
+  "Definition of a goal -- either directly specified, or in terms of another goal."
   (& blanks? (| goal-link goal) blanks?)
   (if goal (make-vector (org-balance-intervals-n intervals) goal)
     (save-excursion
@@ -1029,7 +824,29 @@ When called repeatedly, scroll the window that is displaying the buffer."
 					(org-balance-start-of-tags)))))))
 
 
-(defrxx goal-spec (& blanks? (sep-by blanks? prop-ratio ":" goal-or-link) blanks? tags?) (cons prop-ratio goal-or-link))
+
+  
+
+(defrxx goal-spec
+  "A goal definition.  What follows a GOAL keyword.  Parses as ( prop-ratio . goal )
+Examples:
+   at least once per week  --> parsed as 
+   at least three hours per week
+   at most $50 a month
+ "
+  (& blanks? (sep-by blanks? (opt prop-ratio ":" ) goal-or-link) blanks? tags?)
+  (cons
+   (or prop-ratio
+       (let ((goal-dim (org-valu-unit2dim (org-valu-unit (org-balance-goal-numer-min (aref goal-or-link 0))))))
+	 (make-org-balance-prop-ratio
+	  :num
+	  (make-org-balance-prop
+	   :prop 
+	   (cond ((eq goal-dim 'time) "clockedtime")
+		 ((eq goal-dim 'count) "done")
+		 (t (error "Can only omit property name if it's clockedtime or done"))))
+	  :denom (make-org-balance-prop :prop "actualtime"))))
+   goal-or-link))
 
 (defrxx goal-prefix-with-spec (& blanks? goal-spec) (cdr goal-spec))
 
