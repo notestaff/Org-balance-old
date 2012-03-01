@@ -103,7 +103,7 @@ before today."
   :type 'string)   ;; todo: add a validation function to make sure this can be parsed as a duration.
 
 
-(defcustom org-balance-default-polarity (quote ((clockedtime . atleast) (done . atleast) (spend . atmost)))
+(defcustom org-balance-default-polarity (quote (("clockedtime" . atleast) ("done" . atleast) ("spend" . atmost)))
   "Default polarity to use for specific properties"
   :group 'org-balance
   :type '(alist :key-type string :value-type (radio (const :tag "at least" atleast)
@@ -421,7 +421,10 @@ Adapted from `org-clock-sum'"
 (defrxx closed
   "An Org-mode line indicating when an entry was closed.
 Parsed as the floating-point time."
-  (sep-by blanks bol (eval org-closed-string) (inactive-timestamp closed-time))
+  (sep-by blanks bol (or (eval org-closed-string) "- State \"DONE\"       from \"NEXT\"      ") (inactive-timestamp closed-time))
+  ;; FIXME: support state logging.  for now, assume the default format.
+  ;; so, if it goes as - State from   etc -- we take the timestamp.  but only if it was the done state!
+  ;; figure out how to customize this in case the user's thing has been customized.
   closed-time)
 
 (defun org-balance-gather-org-property (prop intervals prop-default-val)
@@ -669,9 +672,10 @@ goal value of the property."
     (let ((parsed-goal (aref parsed-goals i))
 	  (actual (aref actuals i)))
       (let* ((polarity (or (org-balance-goal-polarity parsed-goal)
-			   (cdr (assoc (intern (org-balance-prop-prop
-						(org-balance-prop-ratio-num  prop-ratio)))
+			   (cdr (assoc (org-balance-prop-prop
+					(org-balance-prop-ratio-num  prop-ratio))
 				       org-balance-default-polarity))))
+	     (dummy (assert polarity))
 	     (margin (or (org-balance-goal-margin parsed-goal)
 			 org-balance-default-margin-percent))
 	     (goal-min (org-valu-val (org-balance-goal-numer-min parsed-goal)))
@@ -949,6 +953,13 @@ under each goal.
 		     nil)))))))))
     (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
+
+(defun org-balance-setup ()
+  "Do the initial configuration needed for org-balance"
+  ;; add (type "|" "GOAL") to org-todo-keywords, if not there already
+  ;; set org-log-done to at least time
+  )
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defconst org-balance-regtest-dir "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/regtests/")
@@ -960,6 +971,7 @@ under each goal.
   '((inactive-timestamp "[2010-09-28 Tue 16:11]" 1285704660.0)
     (clock "		 CLOCK: [2010-09-07 Tue 21:07]--[2010-09-08 Wed 00:07] =>  3:00" (1283908020.0 . 1283918820.0))
     (closed "			 	CLOSED: [2009-08-27 Thu 11:58]" 1251388680.0)
+    (closed "		- State \"DONE\"       from \"NEXT\"       [2009-08-27 Thu 11:58]" 1251388680.0)
 ;    (archive-loc "	 :ARCHIVE:  %s_archive::work archive"
 ;		 [cl-struct-org-balance-archive-loc "/cvar/selection/sweep2/nsvn/Tools/org/sf/trunk/org-balance.el_archive"
 ;						    "work archive"])
