@@ -11,6 +11,12 @@
 ******* GOAL clockedtime: 5 hours per day
 		  CLOCK: [2010-09-27 Mon 02:35]--[2010-09-27 Mon 05:35] =>  3:00
 		  :PROPERTIES:
+
+
+
+
+
+
 		  :goal_delta_val: -4.70
 		  :goal_delta_percent: -94.0
 		  :goal_updated: [2010-09-27 Mon 17:47]
@@ -20,6 +26,12 @@
 
 ******* GOAL done: 3 per day
 		  :PROPERTIES:
+
+
+
+
+
+
 		  :goal_delta_val: -2.70
 		  :goal_delta_percent: -90.0
 		  :goal_updated: [2010-09-27 Mon 17:47]

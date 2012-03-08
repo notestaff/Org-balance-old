@@ -1,14 +1,237 @@
+#+TITLE:      Org-balance documentation
+#+AUTHOR:     Ilya Shlyakhter
+#+EMAIL:      ilya_shl AT alum DOT mit DOT edu
+#+INFOJS_OPT: view:info toc:nil
 
 Org-Balance Documentation
 
 * Introduction
 
-  org-balance is an extension of [[http://orgmode.org][Emacs Org mode]] for balancing your resources (time, money, etc) among your various
-  projects.  It will tell you when you spend too much or too little on some projects.  It is simple to use but
-  flexible.
+  Org-balance is an [[http://orgmode.org][Org mode]] extension that helps balance your resources (time/money/etc) among your various areas of life.
+  You set goals for how much to spend or how much to get done in a given area (i.e. subtree) per day/week/month, and Org-balance
+  tells you how you're keeping up.  You use Org mode's normal facilities for [[http://orgmode.org/manual/Clocking-work-time.html#Clocking-work-time][clocking work time]] and [[http://orgmode.org/manual/Closing-items.html#Closing-items][closing items]], and
+  Org-balance uses the resulting records to compute your actual expenditures/achievements and compare them to your goals.
 
-  It integrates with existing Org-mode facilities for [[http://orgmode.org/org.html#Clocking-work-time][clocking work time]], [[http://orgmode.org/org.html#Tracking-TODO-state-changes][tracking TODO state changes]], [[http://orgmode.org/org.html#Closing-items][closing items]], and
-  [[http://orgmode.org/org.html#Properties-and-Columns][assigning values to items]].  The only new thing you need to do is set, on some subtrees, /goals/ of the form "spend at
+  For example, suppose you have an Org file that looks like this:
+  
+  and now more text.
+
+  And BEFORE.
+
+#+BEGIN_SRC org :exports both :results replace html
+  
+  ,* my life
+  ,*** work
+  ,***** GOAL 60-80 hours/week
+  ,***** Current projects
+  ,******* find new funding
+  ,********* GOAL 10% of [[file:orgb-docs.org::*60-80%20hours/week][60-80 hours/week]]
+  ,******* supervise students
+  ,********* Mike
+  ,********* Jill
+  ,******* solve problem N
+  ,***** Longer-term projects
+  ,******* prove P != NP
+  ,*** hobbies
+  ,***** GOAL 5 hrs/week
+  ,***** remodel kitchen
+  ,***** learn pottery
+  ,***** hack open-source projects
+  ,******* org
+  ,******* gimp
+  ,          
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_HTML
+<div id="outline-container-1" class="outline-2">
+<h2 id="sec-1">my life</h2>
+<div class="outline-text-2" id="text-1">
+
+
+</div>
+
+<div id="outline-container-1-1" class="outline-3">
+<h3 id="sec-1-1">work</h3>
+<div class="outline-text-3" id="text-1-1">
+
+
+</div>
+
+<div id="outline-container-1-1-1" class="outline-4">
+<h4 id="sec-1-1-1"><span class="done GOAL"> GOAL</span> 60-80 hours/week</h4>
+<div class="outline-text-4" id="text-1-1-1">
+
+</div>
+
+</div>
+
+<div id="outline-container-1-1-2" class="outline-4">
+<h4 id="sec-1-1-2">Current projects</h4>
+<div class="outline-text-4" id="text-1-1-2">
+
+<ul>
+<li id="sec-1-1-2-1">find new funding<br/>
+<ul>
+<li id="sec-1-1-2-1-1"><span class="done GOAL"> GOAL</span> 10% of <a href="orgb-docs.html">60-80 hours/week</a><br/>
+</li>
+</ul>
+</li>
+</ul>
+<ul>
+<li id="sec-1-1-2-2">supervise students<br/>
+<ul>
+<li id="sec-1-1-2-2-1">Mike<br/>
+</li>
+</ul>
+<ul>
+<li id="sec-1-1-2-2-2">Jill<br/>
+</li>
+</ul>
+</li>
+</ul>
+<ul>
+<li id="sec-1-1-2-3">solve problem N<br/>
+</li>
+</ul>
+</div>
+
+</div>
+
+<div id="outline-container-1-1-3" class="outline-4">
+<h4 id="sec-1-1-3">Longer-term projects</h4>
+<div class="outline-text-4" id="text-1-1-3">
+
+<ul>
+<li id="sec-1-1-3-1">prove P != NP<br/>
+</li>
+</ul>
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-1-2" class="outline-3">
+<h3 id="sec-1-2">hobbies</h3>
+<div class="outline-text-3" id="text-1-2">
+
+
+</div>
+
+<div id="outline-container-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1"><span class="done GOAL"> GOAL</span> 5 hrs/week</h4>
+<div class="outline-text-4" id="text-1-2-1">
+
+</div>
+
+</div>
+
+<div id="outline-container-1-2-2" class="outline-4">
+<h4 id="sec-1-2-2">remodel kitchen</h4>
+<div class="outline-text-4" id="text-1-2-2">
+
+</div>
+
+</div>
+
+<div id="outline-container-1-2-3" class="outline-4">
+<h4 id="sec-1-2-3">learn pottery</h4>
+<div class="outline-text-4" id="text-1-2-3">
+
+</div>
+
+</div>
+
+<div id="outline-container-1-2-4" class="outline-4">
+<h4 id="sec-1-2-4">hack open-source projects</h4>
+<div class="outline-text-4" id="text-1-2-4">
+
+<ul>
+<li id="sec-1-2-4-1">org<br/>
+</li>
+</ul>
+<ul>
+<li id="sec-1-2-4-2">gimp<br/>
+
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+#+END_HTML
+
+
+  And AFTER.
+  
+  Then here are some goals you can set:
+     - spend at least 10 hours/day on work
+		   - make sure that includes at least 5 hours/week on project B
+	  - complete at least one task every three days under project C
+	  
+	  - don't let yourself spend more than 10 hours/week hacking orgmode (it draws you in...)
+	  
+	  - spend at most $N on gifts
+	  
+	  - complete at least one annoying but necessary task a week
+	  
+	  - give yourself at most one gift for each annoying task completed.
+	  
+	( alternative is to give the syntax and then explain what it means ).  
+
+  and some more notes afterwards.
+  
+*** notes
+
+  -- calories example.
+
+
+  -- from simple ones like "spend at least two hours per day on project A" or
+  "complete at least one task per week on project B" 
+
+
+  it uses the hierarchy.
+
+  
+
+  how much you spend or how much you get done under a
+  subtree, and track how well your meet them.   
+
+  It is simple to use but flexible.
+
+
+  
+
+  To use Org-balance, you set /goals/ for some of your subtrees stating how much of a resource you want 
+
+
+  [ so, "spend" is not the right term for "done".
+
+  maybe, org-goals would work better.
+
+  you can set goals for how much you want to spend , to receive, or to complete
+              targets  
+
+  ]
+
+  You can count things you spend or things you get.
+  
+  
+  To use Org-mode, you use Org-mode's standard facilities forand marking items as DONE.
+
+  ( include screenshots )
+
+  Some examples of goals that you can set and track:
+
+     - "spend at least three hours a week on project A"
+	  - "spend at most $100/month on entertainment"
+	  
+
+  Org-balance uses existing Org mode facilities for, [[http://orgmode.org/manual/Tracking-TODO-state-changes.html#Tracking-TODO-state-changes][tracking TODO state changes]],, and
+  [[http://orgmode.org/org.html#Properties-and-Columns][assigning values to items]].
+
+
+  The only new thing you need to do is set, on some subtrees, /goals/ of the form "spend at
   least 3 hours a week" or "complete at least one task per day" or "spend at most $100 per month".  Goals are set by adding
   a special child node to a subtree, like this:
 
@@ -45,7 +268,7 @@ Org-Balance Documentation
 
 	 A goal is specified as a child of a subtree root.   It specifies a goal for its parent.  In that sense, it is like a
 	 [[http://orgmode.org/org.html#Properties-and-Columns][property]] of the parent.  However, representing goals as full headlines lets you have multiple goals for a subtree
-	 (e.g. for time and for money spent), and let each goal have separate priorities and appear as separate entries
+	 (e.g. for at least/atmost, for time and for money spent), and let each goal have separate priorities and appear as separate entries
 	 in the agenda.
 
 ***** Basic syntax
@@ -149,6 +372,8 @@ Org-Balance Documentation
 		    [ for the "actual", does the target need to be a goal?  if the link specifies property name, there
 			 does not need to be a goal there.]
 
+		 "watch at most one hour of tv for each ten hours spend working" 
+
 		"spend on entertainment at most .2 of what you spend on work"  etc.
 
 		"burn at least 2000 calories per week through exercise"
@@ -188,7 +413,9 @@ Org-Balance Documentation
 ***** comparison to clockreport
 
 ******* also supports measuring closed items, in a uniform system
-		  
+
+***** comparison to [[http://ShouldDo.org][ShouldDo]]
+		
 ***** that for a given wall-time period, we have length of that period and clockedtime sum and
 		weighted sum of closed/done items in that period; and we can then check these ratios against any goals.
   	 	
@@ -231,12 +458,16 @@ Org-Balance Documentation
 ***** org-clock-out-when-done
 		and other things in org-clock.el
 		
-  	 	
+
+* Design decisions
+		
 * things to mention
 
 *** rename to Orb?  or at least use orb as prefix?
   	 
 *** because goals are just regular headlines, you can define subsets of goals e.g. using tags or properties.
+
+	 
 
 	 
 
