@@ -979,15 +979,15 @@ for a fuller explanation."
     (put 'defrxxconst 'doc-string-elt 3)
     (put 'defrxx 'doc-string-elt 4)
     (put 'defrxxrecurse 'doc-string-elt 5)
-	 (when (fboundp 'font-lock-add-keywords)
-		(font-lock-add-keywords
-		 nil
-		 `((,(rx (seq bow (group (or "defrxx" "defrxxconst" "defrxxcustom" "defrxxstruct"))
-						  (1+ blank) (group (1+ (not space))))) .
-						  ((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
-			(,(rx (seq bow (group "defrxxrecurse") (1+ blank) (1+ digit) (1+ blank) (group (1+ (not space))))) .
-			 ((1 font-lock-keyword-face) (2 font-lock-variable-name-face))))))))
-  
+    (when (fboundp 'font-lock-add-keywords)
+      (font-lock-add-keywords
+       nil
+       `((,(rx (seq bow (group (or "defrxx" "defrxxconst" "defrxxcustom" "defrxxstruct"))
+		    (1+ blank) (group (1+ (not space))))) .
+		    ((1 font-lock-keyword-face) (2 font-lock-variable-name-face)))
+	 (,(rx (seq bow (group "defrxxrecurse") (1+ blank) (1+ digit) (1+ blank) (group (1+ (not space))))) .
+	  ((1 font-lock-keyword-face) (2 font-lock-variable-name-face))))))))
+
 (add-hook 'emacs-lisp-mode-hook 'rxx-add-font-lock-keywords)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
