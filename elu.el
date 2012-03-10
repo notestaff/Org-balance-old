@@ -706,11 +706,13 @@ yet).
 		  (elu-save-recurs (cdr saves))))))
     (elu-save-recurs saves)))
 
-(font-lock-add-keywords 'emacs-lisp-mode
-			'(("elu-save" . font-lock-keyword-face)))
+(defun elu-add-font-lock-keywords()
+  (when (and (featurep 'font-lock)
+	     (fboundp 'font-lock-add-keywords))
+    (font-lock-add-keywords 'emacs-lisp-mode
+			    '(("elu-save" . font-lock-keyword-face)))))
 
-  
-
+(add-hook 'emacs-lisp-mode-hook 'elu-add-font-lock-keywords)
 
 (defmacro elu-require (&rest modules)
   "Shorthand for requiring many modules in one command"
