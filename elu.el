@@ -410,12 +410,6 @@ remaining fields taking values from STRUCT.   CLAUSES has the form :field1 val1 
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; (eval-and-compile
-;   (defun elu-make-seq (x)
-;     "Return X if X is a list, otherwise return (list X).
-; Used for iterating over arguments that can be a list or a singleton value."
-;     (if (listp x) x (list x))))
-
 (defmacro* elu-do-seq ((var i seq &optional result) &rest body)
   "For each element of SEQ, assign it to VAR and its index in SEQ to I and execute
 BODY; at the end, return RESULT.  Same as `dolist', but gives access to the index
@@ -570,8 +564,9 @@ passed as LST.  See also `push'."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defmacro elu-flet (bindings &rest body)
-  "Temporarily replace functions, making previous definitions available.  Also, lets you use a function symbol
-for the replacement function definition."
+  "Temporarily replace functions like `flet', but bind the original definition of
+each function F to F-orig so it can be called from the replacement definition.
+Also, lets you use a function symbol for the replacement function definition."
   (declare (indent 1))
   `(let 
        ,(mapcar (lambda (binding)
