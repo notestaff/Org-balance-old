@@ -400,11 +400,10 @@ Adapted from `org-clock-sum'"
       (org-balance-clock-sum-add-interval intervals total-seconds (org-float-time org-clock-start-time) (org-float-time)))
     ; Loop over the clock records in the restriction; for each, find the intervals in INTERVALS overlapping that clock record,
     ; and add the length of the overlap to the corresponding TOTAL-SECONDS entry
-    (save-excursion
-      (save-match-data
-	(goto-char (point-min))
-	(rxx-do-search-fwd org-balance-clock-regexp clock-interval
-	  (org-balance-clock-sum-add-interval intervals total-seconds (car clock-interval) (cdr clock-interval)))))
+    (elu-save (excursion match-data)
+      (goto-char (point-min))
+      (rxx-do-search-fwd org-balance-clock-regexp clock-interval
+	(org-balance-clock-sum-add-interval intervals total-seconds (car clock-interval) (cdr clock-interval))))
     ; Convert TOTAL-SECONDS (array of floating-point interval lengths in seconds) to a vector of org-valus with seconds as the unit,
     ; and return.
     (let ((result (make-vector (length total-seconds) nil)))
@@ -429,40 +428,38 @@ Originally adapted from `org-closed-in-range'.
   ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (declare (special org-balance-num-warnings))
-  (save-excursion
-    (save-match-data
-      (goto-char (point-min))
-      (let ((prop-occurrences (make-vector (org-balance-intervals-n intervals) nil))
-	    (prop-default (concat "default_" prop)))
-	(rxx-do-search-fwd org-balance-closed-regexp closed-time
-
-	  ;; first, if closed-time is completely outside our range of intervals, just skip.
-	  
-	  ;; FIXME: then, if tags matcher is given, evaluate it and only count this headline if it says true.
-	  
-	  (do-org-balance-intervals-overlapping-interval intervals closed-time closed-time i tstart tend
-	    (save-excursion
-	      (save-match-data
-		(org-back-to-heading 'invis-ok)
-		(let*
-		    ((pos-here (point))
-		     (prop-here
-		      (or (org-entry-get nil prop)
-			  (org-entry-get nil prop-default 'inherit)
-			  prop-default-val
-			  "1"))
-		     (prop-valu-here
-		      (condition-case err
-			  (parse-org-valu prop-here)
-			(error
-			 (message
-			  "Warning: at line %d of file %s, could not add %s to list for goal %s; list-so-far is %s"
-			  (line-number-at-pos (point)) (buffer-file-name (current-buffer)) prop-here prop prop-occurrences)
-			 (incf org-balance-num-warnings)
-			 nil))))
-		  (when (and prop-valu-here (not (zerop (org-valu-val prop-valu-here))))
-		    (push (cons pos-here prop-valu-here) (aref prop-occurrences i))))))))
-	prop-occurrences))))
+  (elu-save (excursion match-data)
+    (goto-char (point-min))
+    (let ((prop-occurrences (make-vector (org-balance-intervals-n intervals) nil))
+	  (prop-default (concat "default_" prop)))
+      (rxx-do-search-fwd org-balance-closed-regexp closed-time
+	
+	;; first, if closed-time is completely outside our range of intervals, just skip.
+	
+	;; FIXME: then, if tags matcher is given, evaluate it and only count this headline if it says true.
+	
+	(do-org-balance-intervals-overlapping-interval intervals closed-time closed-time i tstart tend
+	  (elu-save (excursion match-data)
+	    (org-back-to-heading 'invis-ok)
+	    (let*
+		((pos-here (point))
+		 (prop-here
+		  (or (org-entry-get nil prop)
+		      (org-entry-get nil prop-default 'inherit)
+		      prop-default-val
+		      "1"))
+		 (prop-valu-here
+		  (condition-case err
+		      (parse-org-valu prop-here)
+		    (error
+		     (message
+		      "Warning: at line %d of file %s, could not add %s to list for goal %s; list-so-far is %s"
+		      (line-number-at-pos (point)) (buffer-file-name (current-buffer)) prop-here prop prop-occurrences)
+		     (incf org-balance-num-warnings)
+		     nil))))
+	      (when (and prop-valu-here (not (zerop (org-valu-val prop-valu-here))))
+		(push (cons pos-here prop-valu-here) (aref prop-occurrences i)))))))
+      prop-occurrences)))
 
 
 (defun org-balance-sum-org-property (prop intervals unit prop-default-val)
@@ -511,14 +508,12 @@ Parsed as the structure `org-balance-archive-loc'."
 
 (defun org-balance-find-all-archive-targets ()
   "Find all the places where an entry from the current subtree could have been archived."
-  (save-excursion
-    (save-window-excursion
-      (save-restriction
-	(let ((archive-locs (list (create-org-balance-archive-loc (org-get-local-archive-location)))))
-	  (org-narrow-to-subtree)
-	  (rxx-do-search-fwd org-balance-archive-loc-regexp loc
-	    (elu-add-to-list 'archive-locs loc))
-	  archive-locs)))))
+  (elu-save (excursion window-excursion restriction)
+    (let ((archive-locs (list (create-org-balance-archive-loc (org-get-local-archive-location)))))
+      (org-narrow-to-subtree)
+      (rxx-do-search-fwd org-balance-archive-loc-regexp loc
+	(elu-add-to-list 'archive-locs loc))
+      archive-locs)))
 
 
 (defun org-balance-sum-property-with-archives (prop intervals unit)
@@ -532,38 +527,33 @@ Include any entries that may have been archived from the current subtree."
 
   (let ((prop-sum (org-balance-sum-property prop intervals unit (not 'prop-default-val)))
 	(prop-default-val (org-entry-get nil (concat "default_" prop) 'inherit)))
-    (when (not (string= prop "actualtime"))
+    (unless (string= prop "actualtime")
       (let ((olpath-regexp (concat "^[ \t]+:ARCHIVE_OLPATH: " (mapconcat 'identity (org-get-outline-path) "/"))))
 	(dolist (loc (org-balance-find-all-archive-targets))
-	  (save-excursion
-	    (save-window-excursion
-	      (save-restriction
-		(save-match-data
-		  (when (org-balance-archive-loc-file loc)
-		    (find-file (org-balance-archive-loc-file loc)))
-		  (widen)
-		  (when (org-balance-archive-loc-heading loc)
-		    (save-match-data
-		      (when (re-search-forward
-			     (concat "^" (regexp-quote (org-balance-archive-loc-heading loc))
-				     (org-re "[ \t]*\\(:[[:alnum:]_@#%:]+:\\)?[ \t]*\\($\\|\r\\)"))
-			     nil t)
-			(progn
-			  (goto-char (match-beginning 0))
-			  (org-narrow-to-subtree)))))
-		  
-		  (goto-char (if org-archive-reversed-order (point-min) (point-max)))
-		  (while (funcall (if org-archive-reversed-order 're-search-forward 're-search-backward)
-				  olpath-regexp (not 'bounded) 'no-error)
-		    (save-excursion
-		      (save-restriction
-			(save-match-data
-			  (org-back-to-heading 'invisible-ok)
-			  (setq prop-sum
-				(add-org-valu-vec
-				 prop-sum
-				 (org-balance-sum-property prop intervals unit
-							   prop-default-val))))))))))))))
+	  (elu-save (excursion window-excursion restriction match-data)
+	    (when (org-balance-archive-loc-file loc)
+	      (find-file (org-balance-archive-loc-file loc)))
+	    (widen)
+	    (when (org-balance-archive-loc-heading loc)
+	      (save-match-data
+		(when (re-search-forward
+		       (concat "^" (regexp-quote (org-balance-archive-loc-heading loc))
+			       (org-re "[ \t]*\\(:[[:alnum:]_@#%:]+:\\)?[ \t]*\\($\\|\r\\)"))
+		       nil t)
+		  (progn
+		    (goto-char (match-beginning 0))
+		    (org-narrow-to-subtree)))))
+	    
+	    (goto-char (if org-archive-reversed-order (point-min) (point-max)))
+	    (while (funcall (if org-archive-reversed-order 're-search-forward 're-search-backward)
+			    olpath-regexp (not 'bounded) 'no-error)
+	      (elu-save (excursion restriction match-data)
+		(org-back-to-heading 'invisible-ok)
+		(setq prop-sum
+		      (add-org-valu-vec
+		       prop-sum
+		       (org-balance-sum-property prop intervals unit
+						 prop-default-val)))))))))
     prop-sum))
 
 
@@ -632,22 +622,19 @@ struct with fields for the property name and the link."
 
 (defun org-balance-start-of-tags ()
   "Return position where tags start on the current headline"
-  (save-match-data
-    (save-excursion
-      (goto-char (point-at-eol))
-      (rxx-search-bwd org-balance-tags-regexp (point-at-bol))
-      (point))))
+  (elu-save (match-data excursion)
+    (goto-char (point-at-eol))
+    (rxx-search-bwd org-balance-tags-regexp (point-at-bol))
+    (point)))
 
 (defun org-balance-compute-actual-prop (prop intervals unit)
   "Computes the actual total value of the property PROP for the current subtree,
 expressed in units UNIT, for each of the given INTERVALS."
-  (save-excursion
-    (save-window-excursion
-      (save-match-data
-	(when (org-balance-prop-link prop)
-	  (let ((org-link-search-must-match-exact-headline t))
-	    (org-open-at-point 'in-emacs)))
-	(org-balance-sum-property-with-archives (org-balance-prop-prop prop) intervals unit)))))
+  (elu-save (excursion window-excursion match-data)
+    (when (org-balance-prop-link prop)
+      (let ((org-link-search-must-match-exact-headline t))
+	(org-open-at-point 'in-emacs)))
+    (org-balance-sum-property-with-archives (org-balance-prop-prop prop) intervals unit)))
 
 (defun org-balance-compute-actual-prop-ratio (prop-ratio intervals parsed-goal)
   "For each interval in INTERVALS, compute the ratio of the actual value of the property to the
@@ -814,19 +801,18 @@ Fields:
   "Definition of a goal -- either directly specified, or in terms of another goal."
   (& blanks? (| goal-link goal) blanks?)
   (if goal (make-vector (org-balance-intervals-n intervals) goal)
-    (save-excursion
-      (save-window-excursion
-	(let ((org-link-search-must-match-exact-headline t))
-	  (goto-char (org-balance-goal-link-link goal-link))
-	  (org-open-at-point 'in-emacs))
-	;; move to where the parsed-goal is.
-	;; on the other hand, for "actual", here need to call to get the ratio.
-	;; FIXME
-	(unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
-	  (error "No goal found at link taget"))
-	(elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
-			 (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
-					(org-balance-start-of-tags)))))))
+    (elu-save (excursion window-excursion)
+      (let ((org-link-search-must-match-exact-headline t))
+	(goto-char (org-balance-goal-link-link goal-link))
+	(org-open-at-point 'in-emacs))
+      ;; move to where the parsed-goal is.
+      ;; on the other hand, for "actual", here need to call to get the ratio.
+      ;; FIXME
+      (unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
+	(error "No goal found at link taget"))
+      (elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
+		       (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
+				      (org-balance-start-of-tags))))))
 
 
 
@@ -859,12 +845,11 @@ Examples:
   "Remove from each GOAL in the file, any previous record of how well this goal is being met.
 Usually done in preparation for generating a new record of how well each goal is being met."
   (interactive)
-  (save-excursion
-    (save-restriction
-      (widen)
-      (dolist (prop '("goal_delta_val" "goal_delta_percent" "goal_updated"))
-	(org-delete-property-globally prop))
-      (org-map-entries '(org-toggle-tag "goal_error" 'off) "+goal_error/!GOAL" 'file))))
+  (elu-save (excursion restriction)
+    (widen)
+    (dolist (prop '("goal_delta_val" "goal_delta_percent" "goal_updated"))
+      (org-delete-property-globally prop))
+    (org-map-entries '(org-toggle-tag "goal_error" 'off) "+goal_error/!GOAL" 'file)))
 
 (defun* org-balance-compute-goal-deltas (&key intervals)
   "For each goal, determines the difference between the actual and desired average daily expenditure of
@@ -885,69 +870,65 @@ under each goal.
 
 	  ;; Loop over all goals defined in the org file
 	  (rxx-do-search-fwd org-balance-goal-prefix-regexp nil
-	    (save-match-data
-	      (save-restriction
-		(save-excursion
-		  (condition-case err
-		      (let* (; var: goal-spec - the parsed specification of this goal, e.g. "clockedtime: one hour per week"
-			     ;   or "done: two times per day"
-			     (goal-spec (rxx-parse-fwd org-balance-goal-spec-regexp (org-balance-start-of-tags)))
-			     (prop-ratio (car goal-spec))
-			     (parsed-goal (cdr goal-spec)))
-
-			; Some goal specs we encounter in the org file may be malformed (since they're user-typed).
-			; We tag such goal entries with the goal_error tag, so that the user can quickly find them.
-			; Initially, turn this tag off since we haven't found a problem with this goal spec yet.
-			(save-match-data (org-toggle-tag "goal_error" 'off))
-			
-			;;
-			;; Compute the actual usage under this subtree, and convert to the same
-			;; units as the goal, so we can compare them.
-			;;
-			(let (delta-val-and-percent)
-			  (save-match-data
-			    (save-excursion
-			      (save-restriction
-				(outline-up-heading 1 'invisible-ok)
-				(when (string= (upcase (org-get-heading)) "GOALS")
-				  (outline-up-heading 1 'invisible-ok))
-				(org-narrow-to-subtree)
-				(goto-char (point-min))
-				(setq delta-val-and-percent
-				      (aref
-				       (org-balance-compute-delta
-					parsed-goal prop-ratio
-					(org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
-				       0)))))
-			  (let ((delta-val (car delta-val-and-percent))
-				(delta-percent (cdr delta-val-and-percent)))
-			    (cond ((< delta-val 0) (incf num-under))
-				  ((> delta-val 0) (incf num-over))
-				  ((= delta-val 0) (incf num-met)))
-			    (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
-			    (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
-			    ;; FIXME: include in goal_updated the period for which it was updated.
-			    ;; (org-entry-put (point) "goal_interval" (elu-format-seconds "%Y, %T, %W, %D%z"
-			    ;; 							       (- (org-balance-intervals-end intervals 0)
-			    ;; 								  (org-balance-intervals-start intervals 0))))
-			    (org-entry-put (point) "goal_updated"
-					   (format-time-string
-					    (org-time-stamp-format 'long 'inactive)
-					    (if (boundp 'goal-update-time) goal-update-time (current-time)))))))
-		    (error
-		     (unless (string= (upcase (org-get-heading)) "GOALS")
-		       (incf num-errors)
-		       (message "At %s: Error processing %s : %s " (point) (buffer-substring (point) (point-at-eol))
-				err)
-		       (save-match-data
-			 (org-toggle-tag "goal_error" 'on)
-			 (org-entry-delete nil "goal_delta_val")
-			 (org-entry-delete nil "goal_delta_percent")
-			 (org-entry-put (point) "goal_updated"
-					(format-time-string
-					 (org-time-stamp-format 'long 'inactive)
-					 (if (boundp 'goal-update-time) goal-update-time (current-time))))))
-		     nil)))))))))
+	    (elu-save (match-data restriction excursion)
+	      (condition-case err
+		  (let* (; var: goal-spec - the parsed specification of this goal, e.g. "clockedtime: one hour per week"
+					;   or "done: two times per day"
+			 (goal-spec (rxx-parse-fwd org-balance-goal-spec-regexp (org-balance-start-of-tags)))
+			 (prop-ratio (car goal-spec))
+			 (parsed-goal (cdr goal-spec)))
+		    
+					; Some goal specs we encounter in the org file may be malformed (since they're user-typed).
+					; We tag such goal entries with the goal_error tag, so that the user can quickly find them.
+					; Initially, turn this tag off since we haven't found a problem with this goal spec yet.
+		    (save-match-data (org-toggle-tag "goal_error" 'off))
+		    
+		    ;;
+		    ;; Compute the actual usage under this subtree, and convert to the same
+		    ;; units as the goal, so we can compare them.
+		    ;;
+		    (let (delta-val-and-percent)
+		      (elu-save (match-data excursion restriction)
+			(outline-up-heading 1 'invisible-ok)
+			(when (string= (upcase (org-get-heading)) "GOALS")
+			  (outline-up-heading 1 'invisible-ok))
+			(org-narrow-to-subtree)
+			(goto-char (point-min))
+			(setq delta-val-and-percent
+			      (aref
+			       (org-balance-compute-delta
+				parsed-goal prop-ratio
+				(org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
+			       0)))
+		      (let ((delta-val (car delta-val-and-percent))
+			    (delta-percent (cdr delta-val-and-percent)))
+			(cond ((< delta-val 0) (incf num-under))
+			      ((> delta-val 0) (incf num-over))
+			      ((= delta-val 0) (incf num-met)))
+			(org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
+			(org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
+			;; FIXME: include in goal_updated the period for which it was updated.
+			;; (org-entry-put (point) "goal_interval" (elu-format-seconds "%Y, %T, %W, %D%z"
+			;; 							       (- (org-balance-intervals-end intervals 0)
+			;; 								  (org-balance-intervals-start intervals 0))))
+			(org-entry-put (point) "goal_updated"
+				       (format-time-string
+					(org-time-stamp-format 'long 'inactive)
+					(if (boundp 'goal-update-time) goal-update-time (current-time)))))))
+		(error
+		 (unless (string= (upcase (org-get-heading)) "GOALS")
+		   (incf num-errors)
+		   (message "At %s: Error processing %s : %s " (point) (buffer-substring (point) (point-at-eol))
+			    err)
+		   (save-match-data
+		     (org-toggle-tag "goal_error" 'on)
+		     (org-entry-delete nil "goal_delta_val")
+		     (org-entry-delete nil "goal_delta_percent")
+		     (org-entry-put (point) "goal_updated"
+				    (format-time-string
+				     (org-time-stamp-format 'long 'inactive)
+				     (if (boundp 'goal-update-time) goal-update-time (current-time))))))
+		 nil)))))))
     (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
 
 
@@ -1032,41 +1013,38 @@ under each goal.
   (interactive)
   (message "====================== org-balance regtests ===========================")
   (org-balance-test-parsing)
-  (save-excursion
-    (save-window-excursion
-      (save-restriction
-	(save-match-data
-	  (let ((num-ok 0) (num-failed 0))
-	    (dolist (regtest org-balance-regtest-defs)
-	      (let* ((test-file (concat org-balance-regtest-dir (first regtest)))
-		     (ref-file (concat (file-name-sans-extension test-file) "_ref.org")))
-		(if (not (and (file-readable-p test-file) (file-readable-p ref-file)))
-		    (progn
-		      (incf num-failed)
-		      (message "Could not read test file %s or reference file %s" test-file ref-file))
-		  (find-file test-file)
-		  (widen)
-		  (goto-char (point-min))
-		  (org-mode)
-		  (org-balance-remove-props)
-		  (let ((goal-update-time (fourth regtest)))
-		    (org-balance-compute-goal-deltas
-		     :intervals (make-org-balance-intervals :from (second regtest) :n 1 :width
-							    (- (third regtest) (second regtest)) :shift 0)))
-		  (save-buffer)
-		  (if (zerop (call-process "diff" (not 'infile) (not 'destination) (not 'display)
-					   "-bBE" test-file ref-file))
-		      (progn
-			(incf num-ok)
-			(kill-buffer (current-buffer)))
-		    (incf num-failed)
-		    (message "Failed test on %s" test-file)
-		    (show-all)
-		    (find-file ref-file)
-		    (show-all)
-		    (find-file test-file)
-		    (ediff-files test-file ref-file))))
-	      (message "%s tests ok, %s tests failed" num-ok num-failed))))))))
+  (elu-save (excursion window-excursion restriction match-data)
+    (let ((num-ok 0) (num-failed 0))
+      (dolist (regtest org-balance-regtest-defs)
+	(let* ((test-file (concat org-balance-regtest-dir (first regtest)))
+	       (ref-file (concat (file-name-sans-extension test-file) "_ref.org")))
+	  (if (not (and (file-readable-p test-file) (file-readable-p ref-file)))
+	      (progn
+		(incf num-failed)
+		(message "Could not read test file %s or reference file %s" test-file ref-file))
+	    (find-file test-file)
+	    (widen)
+	    (goto-char (point-min))
+	    (org-mode)
+	    (org-balance-remove-props)
+	    (let ((goal-update-time (fourth regtest)))
+	      (org-balance-compute-goal-deltas
+	       :intervals (make-org-balance-intervals :from (second regtest) :n 1 :width
+						      (- (third regtest) (second regtest)) :shift 0)))
+	    (save-buffer)
+	    (if (zerop (call-process "diff" (not 'infile) (not 'destination) (not 'display)
+				     "-bBE" test-file ref-file))
+		(progn
+		  (incf num-ok)
+		  (kill-buffer (current-buffer)))
+	      (incf num-failed)
+	      (message "Failed test on %s" test-file)
+	      (show-all)
+	      (find-file ref-file)
+	      (show-all)
+	      (find-file test-file)
+	      (ediff-files test-file ref-file))))
+	(message "%s tests ok, %s tests failed" num-ok num-failed)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
