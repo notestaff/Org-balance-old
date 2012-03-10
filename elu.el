@@ -696,6 +696,21 @@ yet).
                  t t string))))))
   (replace-regexp-in-string "%%" "%" string))
 
+(defmacro elu-save (saves &rest forms)
+  "Shorthand for nesting requests such as save-excursion, save-restriction etc"
+  (declare (indent 1))
+  (flet ((elu-save-recurs
+	  (saves)
+	  (if (not saves) (cons 'progn forms)
+	    (list (intern (concat "save-" (symbol-name (car saves))))
+		  (elu-save-recurs (cdr saves))))))
+    (elu-save-recurs saves)))
+
+(font-lock-add-keywords 'emacs-lisp-mode
+			'(("elu-save" . font-lock-keyword-face)))
+
+  
+
 
 (defmacro elu-require (&rest modules)
   "Shorthand for requiring many modules in one command"
