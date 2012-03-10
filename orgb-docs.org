@@ -6,6 +6,9 @@
 Org-Balance Documentation
 
 * Introduction
+  :PROPERTIES:
+  :ID:       5a717ccc-df94-4a08-b42f-aecd09e74666
+  :END:
 
   Org-balance is an [[http://orgmode.org][Org mode]] extension that helps balance your resources (time/money/etc) among your various areas of life.
   You set goals for how much to spend or how much to get done in a given area (i.e. subtree) per day/week/month, and Org-balance
@@ -163,6 +166,8 @@ Org-Balance Documentation
 
 
   And AFTER.
+
+  a link from here: [[id:5a717ccc-df94-4a08-b42f-aecd09e74666][Introduction]]
   
   Then here are some goals you can set:
      - spend at least 10 hours/day on work
@@ -444,21 +449,22 @@ Org-Balance Documentation
 
 	 including in xemacs
   	 
-*** Possibly relevant org vars
-
+*** Possibly relevant/related org vars
 	 
-***** org-global-properties
 ***** org-file-properties
 		
 ***** org-todo-keywords
 		
 ***** org-log-done-with-time
-***** org-log-done
+***** [[file:/cvar/selection/sweep2/nsvn/Tools/org/devel2/org-mode/lisp/org.el::defcustom%20org-log-done][User variable: org-log-done]]
+***** [[file:/cvar/selection/sweep2/nsvn/Tools/org/devel2/org-mode/lisp/org-faces.el::defcustom%20org-todo-keyword-faces][User variable: org-todo-keyword-faces]]
+***** [[file:/cvar/selection/sweep2/nsvn/Tools/org/devel2/org-mode/lisp/org.el::defcustom%20org-global-properties][User variable: org-global-properties]]
 		
 ***** org-clock-out-when-done
 		and other things in org-clock.el
 		
-
+***** org-link-to-org-use-id
+		
 * Design decisions
 		
 * things to mention
