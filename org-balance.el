@@ -129,8 +129,9 @@
 						 user-defined-up)))
 	    (org-agenda-cmp-user-defined (quote org-balance-cmp))
 	    (org-agenda-before-sorting-filter-function (quote org-balance-save-amt-neglected))
-	    (org-show-hierarchy-above (quote ((agenda . t))))))
-	  ("bs" "Neglected goals in current file" tags-tree "goal_delta_val<0/!GOAL" nil)
+	    (org-show-hierarchy-above (quote ((agenda . t))))
+	    (org-not-done-keywords (list "GOAL"))))
+	  ("bs" "Neglected goals in current file" tags-tree "goal_delta_val<0/!GOAL" ((org-not-done-keywords (list "GOAL"))))
 	  ("bk" "Ok items" tags "goal_delta_val>=0/!GOAL"
 	   ((org-agenda-overriding-header "Org-balance neglected items")
 	    (org-agenda-sorting-strategy (quote (priority-down
@@ -138,8 +139,9 @@
 						 user-defined-up)))
 	    (org-agenda-cmp-user-defined (quote org-balance-cmp))
 	    (org-agenda-before-sorting-filter-function (quote org-balance-save-amt-neglected))
-	    (org-show-hierarchy-above (quote ((agenda . t))))))
-	  ("bf" "Ok goals in current file" tags-tree "goal_delta_val>=0/!GOAL" nil)
+	    (org-show-hierarchy-above (quote ((agenda . t))))
+	    (org-not-done-keywords (list "GOAL"))))
+	  ("bf" "Ok goals in current file" tags-tree "goal_delta_val>=0/!GOAL" ((org-not-done-keywords (list "GOAL"))))
 	  ))
   "Custom agenda commands for accessing org results")
 
@@ -400,7 +402,7 @@ Adapted from `org-clock-sum'"
       (org-balance-clock-sum-add-interval intervals total-seconds (org-float-time org-clock-start-time) (org-float-time)))
     ; Loop over the clock records in the restriction; for each, find the intervals in INTERVALS overlapping that clock record,
     ; and add the length of the overlap to the corresponding TOTAL-SECONDS entry
-    (elu-save (excursion match-data)
+    (elu-save excursion match-data
       (goto-char (point-min))
       (rxx-do-search-fwd org-balance-clock-regexp clock-interval
 	(org-balance-clock-sum-add-interval intervals total-seconds (car clock-interval) (cdr clock-interval))))
@@ -428,7 +430,7 @@ Originally adapted from `org-closed-in-range'.
   ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (declare (special org-balance-num-warnings))
-  (elu-save (excursion match-data)
+  (elu-save excursion match-data
     (goto-char (point-min))
     (let ((prop-occurrences (make-vector (org-balance-intervals-n intervals) nil))
 	  (prop-default (concat "default_" prop)))
@@ -439,7 +441,7 @@ Originally adapted from `org-closed-in-range'.
 	;; FIXME: then, if tags matcher is given, evaluate it and only count this headline if it says true.
 	
 	(do-org-balance-intervals-overlapping-interval intervals closed-time closed-time i tstart tend
-	  (elu-save (excursion match-data)
+	  (elu-save excursion match-data
 	    (org-back-to-heading 'invis-ok)
 	    (let*
 		((pos-here (point))
@@ -508,7 +510,7 @@ Parsed as the structure `org-balance-archive-loc'."
 
 (defun org-balance-find-all-archive-targets ()
   "Find all the places where an entry from the current subtree could have been archived."
-  (elu-save (excursion window-excursion restriction)
+  (elu-save excursion window-excursion restriction
     (let ((archive-locs (list (create-org-balance-archive-loc (org-get-local-archive-location)))))
       (org-narrow-to-subtree)
       (rxx-do-search-fwd org-balance-archive-loc-regexp loc
@@ -530,7 +532,7 @@ Include any entries that may have been archived from the current subtree."
     (unless (string= prop "actualtime")
       (let ((olpath-regexp (concat "^[ \t]+:ARCHIVE_OLPATH: " (mapconcat 'identity (org-get-outline-path) "/"))))
 	(dolist (loc (org-balance-find-all-archive-targets))
-	  (elu-save (excursion window-excursion restriction match-data)
+	  (elu-save excursion window-excursion restriction match-data
 	    (when (org-balance-archive-loc-file loc)
 	      (find-file (org-balance-archive-loc-file loc)))
 	    (widen)
@@ -547,7 +549,7 @@ Include any entries that may have been archived from the current subtree."
 	    (goto-char (if org-archive-reversed-order (point-min) (point-max)))
 	    (while (funcall (if org-archive-reversed-order 're-search-forward 're-search-backward)
 			    olpath-regexp (not 'bounded) 'no-error)
-	      (elu-save (excursion restriction match-data)
+	      (elu-save excursion restriction match-data
 		(org-back-to-heading 'invisible-ok)
 		(setq prop-sum
 		      (add-org-valu-vec
@@ -622,22 +624,24 @@ struct with fields for the property name and the link."
 
 (defun org-balance-start-of-tags ()
   "Return position where tags start on the current headline"
-  (elu-save (match-data excursion)
+  (elu-save match-data excursion
     (goto-char (point-at-eol))
     (rxx-search-bwd org-balance-tags-regexp (point-at-bol))
     (point)))
 
+(defun org-balance-open-at-point ()
+  "Open link at point, silently"
+  
+  (elu-ignoring org-show-context org-remove-occur-highlights org-offer-links-in-entry
+    (let ((org-link-search-must-match-exact-headline t))
+      (org-open-at-point 'in-emacs))))
+
 (defun org-balance-compute-actual-prop (prop intervals unit)
   "Computes the actual total value of the property PROP for the current subtree,
 expressed in units UNIT, for each of the given INTERVALS."
-  (elu-save (excursion window-excursion match-data)
+  (elu-save excursion window-excursion match-data
     (when (org-balance-prop-link prop)
-      (let ((org-link-search-must-match-exact-headline t)
-	    (org-show-hierarchy-above '((default . nil)))
-	    (org-show-following-heading '((default . nil)))
-	    (org-show-entry-below '((default . nil)))
-	    (org-show-siblings '((default . nil))))
-	(org-open-at-point 'in-emacs)))
+	(org-balance-open-at-point))
     (org-balance-sum-property-with-archives (org-balance-prop-prop prop) intervals unit)))
 
 (defun org-balance-compute-actual-prop-ratio (prop-ratio intervals parsed-goal)
@@ -805,14 +809,9 @@ Fields:
   "Definition of a goal -- either directly specified, or in terms of another goal."
   (& blanks? (| goal-link goal) blanks?)
   (if goal (make-vector (org-balance-intervals-n intervals) goal)
-    (elu-save (excursion window-excursion)
-      (let ((org-link-search-must-match-exact-headline t)
-	    (org-show-hierarchy-above '((default . nil)))
-	    (org-show-following-heading '((default . nil)))
-	    (org-show-entry-below '((default . nil)))
-	    (org-show-siblings '((default . nil))))
-	(goto-char (org-balance-goal-link-link goal-link))
-	(org-open-at-point 'in-emacs))
+    (elu-save excursion window-excursion
+      (goto-char (org-balance-goal-link-link goal-link))
+      (org-balance-open-at-point)
       ;; move to where the parsed-goal is.
       ;; on the other hand, for "actual", here need to call to get the ratio.
       ;; FIXME
@@ -822,9 +821,6 @@ Fields:
 		       (rxx-parse-fwd org-balance-goal-prefix-with-spec-regexp
 				      (org-balance-start-of-tags))))))
 
-
-
-  
 
 (defrxx goal-spec
   "A goal definition.  What follows a GOAL keyword.  Parses as ( prop-ratio . goal )
@@ -853,7 +849,7 @@ Examples:
   "Remove from each GOAL in the file, any previous record of how well this goal is being met.
 Usually done in preparation for generating a new record of how well each goal is being met."
   (interactive)
-  (elu-save (excursion restriction)
+  (elu-save excursion restriction
     (widen)
     (dolist (prop '("goal_delta_val" "goal_delta_percent" "goal_updated"))
       (org-delete-property-globally prop))
@@ -882,7 +878,7 @@ under each goal.
 	    
 	    ;; Loop over all goals defined in the org file
 	    (rxx-do-search-fwd org-balance-goal-prefix-regexp nil
-	      (elu-save (match-data restriction excursion)
+	      (elu-save match-data restriction excursion
 		(condition-case err
 		    (let* (; var: goal-spec - the parsed specification of this goal, e.g. "clockedtime: one hour per week"
 					;   or "done: two times per day"
@@ -900,7 +896,7 @@ under each goal.
 		      ;; units as the goal, so we can compare them.
 		      ;;
 		      (let (delta-val-and-percent)
-			(elu-save (match-data excursion restriction)
+			(elu-save match-data excursion restriction
 			  (outline-up-heading 1 'invisible-ok)
 			  (when (string= (upcase (org-get-heading)) "GOALS")
 			    (outline-up-heading 1 'invisible-ok))
@@ -947,7 +943,7 @@ under each goal.
 (defun org-balance-deltas-week ()
   "Compute deltas for the preceding week"
   (interactive)
-  (flet ((org-show-context (arg) nil))
+  (elu-ignoring org-show-context
     (let* ((secs-per-min 60)
 	   (mins-per-hour 60)
 	   (hours-per-day 24)
@@ -1038,7 +1034,7 @@ under each goal.
   (interactive)
   (message "====================== org-balance regtests ===========================")
   (org-balance-test-parsing)
-  (elu-save (excursion window-excursion restriction match-data)
+  (elu-save excursion window-excursion restriction match-data
     (let ((num-ok 0) (num-failed 0))
       (dolist (regtest org-balance-regtest-defs)
 	(let* ((test-file (concat org-balance-regtest-dir (first regtest)))

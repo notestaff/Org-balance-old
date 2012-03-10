@@ -696,21 +696,45 @@ yet).
                  t t string))))))
   (replace-regexp-in-string "%%" "%" string))
 
-(defmacro elu-save (saves &rest forms)
-  "Shorthand for nesting requests such as save-excursion, save-restriction etc"
-  (declare (indent 1))
+(defmacro elu-save (&rest saves-then-forms)
+  "Shorthand for nesting requests such as save-excursion, save-restriction etc.
+Instead of (save-excursion (save-window-excursion (save-restriction form1 form2)))
+use (elu-save (excursion window-excursion restriction) form1 form2).
+SAVES is the list of save- forms to call, without the save- prefix;
+FORMS is the list of forms to wrap in these save calls.
+"
+  (declare (indent defun))
   (flet ((elu-save-recurs
-	  (saves)
-	  (if (not saves) (cons 'progn forms)
-	    (list (intern (concat "save-" (symbol-name (car saves))))
-		  (elu-save-recurs (cdr saves))))))
-    (elu-save-recurs saves)))
+	  (&rest saves-then-forms)
+	  (let ((first-save (car-safe saves-then-forms)))
+	    (if (not (memq first-save '(excursion window-excursion restriction match-data)))
+		(cons 'progn saves-then-forms)
+	      (list (intern (concat "save-" (symbol-name first-save)))
+		    (apply 'elu-save-recurs (cdr saves-then-forms)))))))
+    (apply 'elu-save-recurs saves-then-forms)))
+
+(defmacro elu-ignoring (&rest ignore-funcs-then-forms)
+  "Temporarily bind function symbols at the head of the list
+IGNORE_FUNCS_THEN_FORMS to `ignore', and execute the remaining
+forms in this list.  See caveats re: limitations of flet at
+URL http://www.gnu.org/software/emacs/manual/html_node/cl/Function-Bindings.html#Function-Bindings
+"
+  (declare (indent defun))
+  (flet ((elu-ignoring-recurs
+	  (&rest ignore-funcs-then-forms)
+	  (let ((first-ignore (car-safe ignore-funcs-then-forms)))
+	    (if (not (symbolp first-ignore))
+		(cons 'progn ignore-funcs-then-forms)
+	      `(flet ((,first-ignore (&rest args) nil))
+		 ,(apply 'elu-ignoring-recurs (cdr ignore-funcs-then-forms)))))))
+    (apply 'elu-ignoring-recurs ignore-funcs-then-forms)))
 
 (defun elu-add-font-lock-keywords()
   (when (and (featurep 'font-lock)
 	     (fboundp 'font-lock-add-keywords))
     (font-lock-add-keywords 'emacs-lisp-mode
-			    '(("elu-save" . font-lock-keyword-face)))))
+			    '(("elu-save" . font-lock-keyword-face)
+			      ("elu-ignoring" . font-lock-keyword-face)))))
 
 (add-hook 'emacs-lisp-mode-hook 'elu-add-font-lock-keywords)
 
@@ -719,6 +743,9 @@ yet).
   (cons 'progn
 	(mapcar (lambda (module) `(require (quote ,module)))
 		modules)))
+
+
+; add elu-protect to do (let ((a a)) ((b b)) ...forms...)
 
 (provide 'elu)
 
