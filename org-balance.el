@@ -96,13 +96,6 @@
   :group 'org-balance
   :type 'float)
 
-(defcustom org-balance-default-interval "1 week"
-  "By default, report goal compliance averaged over this time interval
-before today."
-  :group 'org-balance
-  :type 'string)   ;; todo: add a validation function to make sure this can be parsed as a duration.
-
-
 (defcustom org-balance-default-polarity (quote (("clockedtime" . atleast) ("done" . atleast) ("spend" . atmost)))
   "Default polarity to use for specific properties"
   :group 'org-balance
@@ -211,7 +204,7 @@ is not set (and is removed if it was set before and CLEAR-WHEN_DEFAULT is non-ni
   "A set of intervals, with operations for quickly finding
 intervals intersecting a given point or interval.
 
-Currently works only for a set of same-size, regularly spaced intervals.
+Currently works only for a set of same-size, contiguous, regularly spaced intervals.
 
 Fields:
 
@@ -428,10 +421,11 @@ Parsed as the floating-point time."
   closed-time)
 
 (defun org-balance-gather-org-property (prop intervals prop-default-val)
-  "For each interval in INTERVALS, compute the list of values of Org property PROP from items closed in that interval.
+  "For each interval in INTERVALS, for todo items in the current buffer or restriction that were
+closed within that interval, compute the list of values of Org property PROP from these items.
+The value of the property at an item 
 Originally adapted from `org-closed-in-range'.
 "
-  
   ;; FIXOPT: if prop-default is zero then the regexp for that subtree should be, org-closed-string _and_ the prop is explicitly set _in that entry_.  (1+ (bol) (opt (not (any ?*))) (0+ nonl) (eol))
   ;; FIXME: find also state changes to DONE, or to any done state.
   (declare (special org-balance-num-warnings))
@@ -472,7 +466,7 @@ Originally adapted from `org-closed-in-range'.
 
 
 (defun org-balance-sum-org-property (prop intervals unit prop-default-val)
-  "For each interval in INTERVALS, compute the sum of values of Org property PROP from items closed in that interval.
+  "For each interval in INTERVALS, compute the sum of values of Org property PROP from todo items closed in that interval.
 The sum will be represented in unit UNIT.  The sum is computed within the current restriction, if any."
   (elu-map-vectors
    (lambda (vals)
@@ -583,14 +577,15 @@ Parsed as the buffer position of the start of the link."
   (named-grp link (eval-regexp (rxx-make-shy org-any-link-re))) (rxx-match-beginning 'link))
 
 (defstruct org-balance-prop
-  "The name of a property to be summed for a subtree, and an optional restriction of
+  "The name of a property to be summed for a subtree for a given time interval, and an optional restriction of
 which entries to consider when summing this property.  See defrxx prop below.
 
 Fields:
 
    PROP - an Org property name, 'clockedtime', or 'actualtime'.
         When summing the value of a property in a given subtree in a given time interval,
-        for an Org property name we get that property's value in matching entries;
+        for an Org property name we get that property's value in matching TODO entries closed
+        in the time interval;
         for clockedtime we get the intersection of any clocked time in the matching entries
         with the interval; and for actualtime we get the full length of the interval.
 
@@ -605,7 +600,8 @@ URL 'http://orgmode.org/manual/Matching-tags-and-properties.html#Matching-tags-a
   (1+ nonl) org-make-tags-matcher)
 
 (defrxx prop
-  "The name of a property to be summed for a subtree, optionally followed by a link to the subtree.
+  "The name of a property to be summed for a subtree within a given time interval,
+optionally followed by a link to the subtree.
 The property can be an Org property name, 'clockedtime' or 'actualtime'.  Parsed as a 
 struct with fields for the property name and the link."
   (& prop-name (opt blanks "at" blanks link) (opt blanks "(" blanks? matcher blanks? ")") )
@@ -825,6 +821,7 @@ Fields:
 	  (org-open-at-point 'in-emacs))
 	;; move to where the parsed-goal is.
 	;; on the other hand, for "actual", here need to call to get the ratio.
+	;; FIXME
 	(unless (rxx-search-fwd org-balance-goal-prefix-regexp (point-at-eol))
 	  (error "No goal found at link taget"))
 	(elu-map-vectors (elu-apply-partially 'org-balance-scale-goal (org-balance-goal-link-factor goal-link))
