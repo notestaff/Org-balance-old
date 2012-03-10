@@ -632,7 +632,11 @@ struct with fields for the property name and the link."
 expressed in units UNIT, for each of the given INTERVALS."
   (elu-save (excursion window-excursion match-data)
     (when (org-balance-prop-link prop)
-      (let ((org-link-search-must-match-exact-headline t))
+      (let ((org-link-search-must-match-exact-headline t)
+	    (org-show-hierarchy-above '((default . nil)))
+	    (org-show-following-heading '((default . nil)))
+	    (org-show-entry-below '((default . nil)))
+	    (org-show-siblings '((default . nil))))
 	(org-open-at-point 'in-emacs)))
     (org-balance-sum-property-with-archives (org-balance-prop-prop prop) intervals unit)))
 
@@ -802,7 +806,11 @@ Fields:
   (& blanks? (| goal-link goal) blanks?)
   (if goal (make-vector (org-balance-intervals-n intervals) goal)
     (elu-save (excursion window-excursion)
-      (let ((org-link-search-must-match-exact-headline t))
+      (let ((org-link-search-must-match-exact-headline t)
+	    (org-show-hierarchy-above '((default . nil)))
+	    (org-show-following-heading '((default . nil)))
+	    (org-show-entry-below '((default . nil)))
+	    (org-show-siblings '((default . nil))))
 	(goto-char (org-balance-goal-link-link goal-link))
 	(org-open-at-point 'in-emacs))
       ;; move to where the parsed-goal is.
@@ -857,80 +865,97 @@ resource GOAL toward that goal in the period in each interval in INTERVALS.  Sto
 under each goal.
 "
   (declare (special goal-update-time))
-  (unless intervals (error "org-balance-compute-goal-deltas: need intervals"))
-  (let ((num-errors 0)  ; number of errors (such as malformed goals) encountered
-	(num-under 0)   ; number of goals where actual expenditure < goal
-	(num-met 0)     ; number of goals where actual expenditure meets goal
-	(num-over 0))   ; number of goals where actual expenditure > goal
-    (save-excursion
-      (goto-char (point-min))
-      (save-restriction
-	(save-match-data
-	  ;; FIXOPT if goals specified, make regexp for them
-
-	  ;; Loop over all goals defined in the org file
-	  (rxx-do-search-fwd org-balance-goal-prefix-regexp nil
-	    (elu-save (match-data restriction excursion)
-	      (condition-case err
-		  (let* (; var: goal-spec - the parsed specification of this goal, e.g. "clockedtime: one hour per week"
+  (let ((org-show-hierarchy-above '((default . nil)))
+	(org-show-following-heading '((default . nil)))
+	(org-show-entry-below '((default . nil)))
+	(org-show-siblings '((default . nil))))
+    (unless intervals (error "org-balance-compute-goal-deltas: need intervals"))
+    (let ((num-errors 0)  ; number of errors (such as malformed goals) encountered
+	  (num-under 0)   ; number of goals where actual expenditure < goal
+	  (num-met 0)     ; number of goals where actual expenditure meets goal
+	  (num-over 0))   ; number of goals where actual expenditure > goal
+      (save-excursion
+	(goto-char (point-min))
+	(save-restriction
+	  (save-match-data
+	    ;; FIXOPT if goals specified, make regexp for them
+	    
+	    ;; Loop over all goals defined in the org file
+	    (rxx-do-search-fwd org-balance-goal-prefix-regexp nil
+	      (elu-save (match-data restriction excursion)
+		(condition-case err
+		    (let* (; var: goal-spec - the parsed specification of this goal, e.g. "clockedtime: one hour per week"
 					;   or "done: two times per day"
-			 (goal-spec (rxx-parse-fwd org-balance-goal-spec-regexp (org-balance-start-of-tags)))
-			 (prop-ratio (car goal-spec))
-			 (parsed-goal (cdr goal-spec)))
-		    
+			   (goal-spec (rxx-parse-fwd org-balance-goal-spec-regexp (org-balance-start-of-tags)))
+			   (prop-ratio (car goal-spec))
+			   (parsed-goal (cdr goal-spec)))
+		      
 					; Some goal specs we encounter in the org file may be malformed (since they're user-typed).
 					; We tag such goal entries with the goal_error tag, so that the user can quickly find them.
 					; Initially, turn this tag off since we haven't found a problem with this goal spec yet.
-		    (save-match-data (org-toggle-tag "goal_error" 'off))
-		    
-		    ;;
-		    ;; Compute the actual usage under this subtree, and convert to the same
-		    ;; units as the goal, so we can compare them.
-		    ;;
-		    (let (delta-val-and-percent)
-		      (elu-save (match-data excursion restriction)
-			(outline-up-heading 1 'invisible-ok)
-			(when (string= (upcase (org-get-heading)) "GOALS")
-			  (outline-up-heading 1 'invisible-ok))
-			(org-narrow-to-subtree)
-			(goto-char (point-min))
-			(setq delta-val-and-percent
-			      (aref
-			       (org-balance-compute-delta
-				parsed-goal prop-ratio
-				(org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
-			       0)))
-		      (let ((delta-val (car delta-val-and-percent))
-			    (delta-percent (cdr delta-val-and-percent)))
-			(cond ((< delta-val 0) (incf num-under))
-			      ((> delta-val 0) (incf num-over))
-			      ((= delta-val 0) (incf num-met)))
-			(org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
-			(org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
-			;; FIXME: include in goal_updated the period for which it was updated.
-			;; (org-entry-put (point) "goal_interval" (elu-format-seconds "%Y, %T, %W, %D%z"
-			;; 							       (- (org-balance-intervals-end intervals 0)
-			;; 								  (org-balance-intervals-start intervals 0))))
-			(org-entry-put (point) "goal_updated"
-				       (format-time-string
-					(org-time-stamp-format 'long 'inactive)
-					(if (boundp 'goal-update-time) goal-update-time (current-time)))))))
-		(error
-		 (unless (string= (upcase (org-get-heading)) "GOALS")
-		   (incf num-errors)
-		   (message "At %s: Error processing %s : %s " (point) (buffer-substring (point) (point-at-eol))
-			    err)
-		   (save-match-data
-		     (org-toggle-tag "goal_error" 'on)
-		     (org-entry-delete nil "goal_delta_val")
-		     (org-entry-delete nil "goal_delta_percent")
-		     (org-entry-put (point) "goal_updated"
-				    (format-time-string
-				     (org-time-stamp-format 'long 'inactive)
-				     (if (boundp 'goal-update-time) goal-update-time (current-time))))))
-		 nil)))))))
-    (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over)))
-
+		      (save-match-data (org-toggle-tag "goal_error" 'off))
+		      
+		      ;;
+		      ;; Compute the actual usage under this subtree, and convert to the same
+		      ;; units as the goal, so we can compare them.
+		      ;;
+		      (let (delta-val-and-percent)
+			(elu-save (match-data excursion restriction)
+			  (outline-up-heading 1 'invisible-ok)
+			  (when (string= (upcase (org-get-heading)) "GOALS")
+			    (outline-up-heading 1 'invisible-ok))
+			  (org-narrow-to-subtree)
+			  (goto-char (point-min))
+			  (setq delta-val-and-percent
+				(aref
+				 (org-balance-compute-delta
+				  parsed-goal prop-ratio
+				  (org-balance-compute-actual-prop-ratio prop-ratio intervals parsed-goal))
+				 0)))
+			(let ((delta-val (car delta-val-and-percent))
+			      (delta-percent (cdr delta-val-and-percent)))
+			  (cond ((< delta-val 0) (incf num-under))
+				((> delta-val 0) (incf num-over))
+				((= delta-val 0) (incf num-met)))
+			  (org-entry-put (point) "goal_delta_val" (format "%.2f" delta-val))
+			  (org-entry-put (point) "goal_delta_percent" (format "%.1f" delta-percent))
+			  ;; FIXME: include in goal_updated the period for which it was updated.
+			  ;; (org-entry-put (point) "goal_interval" (elu-format-seconds "%Y, %T, %W, %D%z"
+			  ;; 							       (- (org-balance-intervals-end intervals 0)
+			  ;; 								  (org-balance-intervals-start intervals 0))))
+			  (org-entry-put (point) "goal_updated"
+					 (format-time-string
+					  (org-time-stamp-format 'long 'inactive)
+					  (if (boundp 'goal-update-time) goal-update-time (current-time)))))))
+		  (error
+		   (unless (string= (upcase (org-get-heading)) "GOALS")
+		     (incf num-errors)
+		     (message "At %s: Error processing %s : %s " (point) (buffer-substring (point) (point-at-eol))
+			      err)
+		     (save-match-data
+		       (org-toggle-tag "goal_error" 'on)
+		       (org-entry-delete nil "goal_delta_val")
+		       (org-entry-delete nil "goal_delta_percent")
+		       (org-entry-put (point) "goal_updated"
+				      (format-time-string
+				       (org-time-stamp-format 'long 'inactive)
+				       (if (boundp 'goal-update-time) goal-update-time (current-time))))))
+		   nil)))))))
+      (message "err %d under %d met %d over %d" num-errors num-under (+ num-met num-over) num-over))))
+  
+  
+(defun org-balance-deltas-week ()
+  "Compute deltas for the preceding week"
+  (interactive)
+  (flet ((org-show-context (arg) nil))
+    (let* ((secs-per-min 60)
+	   (mins-per-hour 60)
+	   (hours-per-day 24)
+	   (days-per-week 7)
+	   (secs-per-week (* secs-per-min mins-per-hour hours-per-day days-per-week))
+	   (cur-time (org-float-time))
+	   (week-ago (- cur-time secs-per-week)))
+      (org-balance-compute-goal-deltas :intervals (make-org-balance-intervals :from week-ago :n 1 :width (- cur-time week-ago) :shift 0)))))
 
 (defun org-balance-setup ()
   "Do the initial configuration needed for org-balance"
